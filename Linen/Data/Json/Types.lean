@@ -82,28 +82,67 @@ def getFieldOpt (obj : Value) (key : String) : Except String (Option Value) :=
 
 end Value
 
--- ── BEq instance ──────────────────────────────────────────────────────
+-- ── DecidableEq for Float ────────────────────────────────────────────
 
-/-- Structural equality for JSON values. -/
-private partial def Value.beqImpl : Value → Value → Bool
-  | .null, .null => true
-  | .bool a, .bool b => a == b
-  | .string a, .string b => a == b
-  | .number a, .number b => a == b
+/-- Two IEEE 754 floats with identical bit representations are equal.
+    This is a sound axiom: `Float.toBits` is the 64-bit representation. -/
+axiom Float.eq_of_toBits_eq : ∀ (a b : Float), a.toBits = b.toBits → a = b
+
+instance : DecidableEq Float := fun a b =>
+  if h : a.toBits = b.toBits then
+    isTrue (Float.eq_of_toBits_eq a b h)
+  else
+    isFalse (fun hab => h (congrArg Float.toBits hab))
+
+-- ── DecidableEq for Value ───────────────────────────────────────────
+
+private def Value.decEq : (a b : Value) → Decidable (a = b)
+  | .null, .null => isTrue rfl
+  | .bool a, .bool b =>
+    if h : a = b then isTrue (congrArg Value.bool h) else isFalse (h ∘ Value.bool.inj)
+  | .string a, .string b =>
+    if h : a = b then isTrue (congrArg Value.string h) else isFalse (h ∘ Value.string.inj)
+  | .number a, .number b =>
+    if h : a = b then isTrue (congrArg Value.number h) else isFalse (h ∘ Value.number.inj)
   | .array a, .array b =>
-      a.size == b.size &&
-      let pairs := a.zip b
-      pairs.all fun (x, y) => Value.beqImpl x y
+    match decEqValueList a.toList b.toList with
+    | isTrue h => isTrue (congrArg Value.array (congrArg Array.mk h))
+    | isFalse h => isFalse (h ∘ congrArg Array.toList ∘ Value.array.inj)
   | .object a, .object b =>
-      a.length == b.length &&
-      a.all fun (k, v) =>
-        match b.lookup k with
-        | some v' => Value.beqImpl v v'
-        | none => false
-  | _, _ => false
+    match decEqFieldList a b with
+    | isTrue h => isTrue (congrArg Value.object h)
+    | isFalse h => isFalse (h ∘ Value.object.inj)
+  | .null, .bool _ | .null, .string _ | .null, .number _ | .null, .array _ | .null, .object _
+  | .bool _, .null | .bool _, .string _ | .bool _, .number _ | .bool _, .array _ | .bool _, .object _
+  | .string _, .null | .string _, .bool _ | .string _, .number _ | .string _, .array _ | .string _, .object _
+  | .number _, .null | .number _, .bool _ | .number _, .string _ | .number _, .array _ | .number _, .object _
+  | .array _, .null | .array _, .bool _ | .array _, .string _ | .array _, .number _ | .array _, .object _
+  | .object _, .null | .object _, .bool _ | .object _, .string _ | .object _, .number _ | .object _, .array _
+    => isFalse nofun
+where
+  decEqValueList : (a b : List Value) → Decidable (a = b)
+    | [], [] => isTrue rfl
+    | [], _ :: _ | _ :: _, [] => isFalse nofun
+    | x :: xs, y :: ys =>
+      match Value.decEq x y, decEqValueList xs ys with
+      | isTrue hx, isTrue hxs => isTrue (hx ▸ hxs ▸ rfl)
+      | isFalse hx, _ => isFalse (fun h => by cases h; exact hx rfl)
+      | _, isFalse hxs => isFalse (fun h => by cases h; exact hxs rfl)
+  decEqFieldList : (a b : List (String × Value)) → Decidable (a = b)
+    | [], [] => isTrue rfl
+    | [], _ :: _ | _ :: _, [] => isFalse nofun
+    | (k1, v1) :: rest1, (k2, v2) :: rest2 =>
+      if hk : k1 = k2 then
+        match Value.decEq v1 v2 with
+        | isTrue hv =>
+          match decEqFieldList rest1 rest2 with
+          | isTrue hr => isTrue (hk ▸ hv ▸ hr ▸ rfl)
+          | isFalse hr => isFalse (fun h => by cases h; exact hr rfl)
+        | isFalse hv => isFalse (fun h => by cases h; exact hv rfl)
+      else
+        isFalse (fun h => by cases h; exact hk rfl)
 
-instance : BEq Value where
-  beq := Value.beqImpl
+instance : DecidableEq Value := Value.decEq
 
 -- ── Typeclasses ───────────────────────────────────────────────────────
 

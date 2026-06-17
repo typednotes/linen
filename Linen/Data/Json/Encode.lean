@@ -49,11 +49,8 @@ private def escapeChar (c : Char) : String :=
 
 /-- Escape a string for JSON output, wrapping in double quotes.
     $$\text{escapeString} : \text{String} \to \text{String}$$ -/
-def escapeString (s : String) : String := Id.run do
-  let mut result := "\""
-  for c in s.toList do
-    result := result ++ escapeChar c
-  return result ++ "\""
+def escapeString (s : String) : String :=
+  "\"" ++ String.join (s.toList.map escapeChar) ++ "\""
 
 -- ── Number rendering ──────────────────────────────────────────────────
 
@@ -83,22 +80,29 @@ def renderNumber (n : Float) : String :=
 
 /-- Encode a JSON `Value` as a `String`.
     $$\text{encode} : \text{Value} \to \text{String}$$ -/
-partial def encode : Value → String
+def encode : Value → String
   | .null => "null"
   | .bool true => "true"
   | .bool false => "false"
   | .string s => escapeString s
   | .number n => renderNumber n
   | .array elems =>
-    let inner := ",".intercalate (elems.toList.map encode)
-    "[" ++ inner ++ "]"
+    "[" ++ encodeArray elems.toList ++ "]"
   | .object fields =>
-    let inner := ",".intercalate (fields.map fun (k, v) =>
-      escapeString k ++ ":" ++ encode v)
-    "{" ++ inner ++ "}"
+    "{" ++ encodeFields fields ++ "}"
+where
+  encodeArray : List Value → String
+    | [] => ""
+    | [v] => encode v
+    | v :: vs => encode v ++ "," ++ encodeArray vs
+  encodeFields : List (String × Value) → String
+    | [] => ""
+    | [(k, v)] => escapeString k ++ ":" ++ encode v
+    | (k, v) :: rest =>
+      escapeString k ++ ":" ++ encode v ++ "," ++ encodeFields rest
 
 /-- Pretty-print helper: render a value with indentation at a given nesting level. -/
-private partial def encodePrettyGo (indent : Nat) (level : Nat) : Value → String
+private def encodePrettyGo (indent : Nat) (level : Nat) : Value → String
   | .null => "null"
   | .bool true => "true"
   | .bool false => "false"
@@ -109,18 +113,25 @@ private partial def encodePrettyGo (indent : Nat) (level : Nat) : Value → Stri
     else
       let pad := String.ofList (List.replicate ((level + 1) * indent) ' ')
       let padClose := String.ofList (List.replicate (level * indent) ' ')
-      let inner := (",\n").intercalate
-        (elems.toList.map fun e => pad ++ encodePrettyGo indent (level + 1) e)
-      "[\n" ++ inner ++ "\n" ++ padClose ++ "]"
+      "[\n" ++ prettyArray indent (level + 1) pad elems.toList ++ "\n" ++ padClose ++ "]"
   | .object fields =>
     if fields.isEmpty then "{}"
     else
       let pad := String.ofList (List.replicate ((level + 1) * indent) ' ')
       let padClose := String.ofList (List.replicate (level * indent) ' ')
-      let inner := (",\n").intercalate
-        (fields.map fun (k, v) =>
-          pad ++ escapeString k ++ ": " ++ encodePrettyGo indent (level + 1) v)
-      "{\n" ++ inner ++ "\n" ++ padClose ++ "}"
+      "{\n" ++ prettyFields indent (level + 1) pad fields ++ "\n" ++ padClose ++ "}"
+where
+  prettyArray (indent level : Nat) (pad : String) : List Value → String
+    | [] => ""
+    | [v] => pad ++ encodePrettyGo indent level v
+    | v :: vs =>
+      pad ++ encodePrettyGo indent level v ++ ",\n" ++ prettyArray indent level pad vs
+  prettyFields (indent level : Nat) (pad : String) : List (String × Value) → String
+    | [] => ""
+    | [(k, v)] => pad ++ escapeString k ++ ": " ++ encodePrettyGo indent level v
+    | (k, v) :: rest =>
+      pad ++ escapeString k ++ ": " ++ encodePrettyGo indent level v ++ ",\n" ++
+        prettyFields indent level pad rest
 
 /-- Pretty-print a JSON `Value` with indentation.
     $$\text{encodePretty} : \text{Value} \to \text{String}$$ -/
