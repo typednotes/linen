@@ -250,17 +250,17 @@ theorem Value.isArray_array (elems : Array Value) : Value.isArray (.array elems)
 /-- `String` roundtrips through `ToJSON`/`FromJSON`.
     $$\text{parseJSON}(\text{toJSON}(s)) = \text{ok}(s)$$ -/
 theorem roundtrip_string (s : String) : FromJSON.parseJSON (ToJSON.toJSON s) = .ok s := by
-  simp [FromJSON.parseJSON]
+  simp [ToJSON.toJSON, FromJSON.parseJSON]
 
 /-- `Bool` roundtrips through `ToJSON`/`FromJSON`.
     $$\text{parseJSON}(\text{toJSON}(b)) = \text{ok}(b)$$ -/
 theorem roundtrip_bool (b : Bool) : FromJSON.parseJSON (ToJSON.toJSON b) = .ok b := by
-  simp [FromJSON.parseJSON]
+  simp [ToJSON.toJSON, FromJSON.parseJSON]
 
 /-- `Float` roundtrips through `ToJSON`/`FromJSON`.
     $$\text{parseJSON}(\text{toJSON}(n)) = \text{ok}(n)$$ -/
 theorem roundtrip_float (n : Float) : FromJSON.parseJSON (ToJSON.toJSON n) = .ok n := by
-  simp [FromJSON.parseJSON]
+  simp [ToJSON.toJSON, FromJSON.parseJSON]
 
 /-- `Value` roundtrips through `ToJSON`/`FromJSON` (identity).
     $$\text{toJSON}(v) = v$$ -/
@@ -270,6 +270,6 @@ theorem toJSON_value_id (v : Value) : ToJSON.toJSON v = v := rfl
     $$\text{parseJSON}(\text{toJSON}(\text{none})) = \text{ok}(\text{none})$$ -/
 theorem roundtrip_option_none [FromJSON α] [ToJSON α] :
     @FromJSON.parseJSON (Option α) _ (ToJSON.toJSON (none : Option α)) = .ok none := by
-  simp [FromJSON.parseJSON]
+  simp [ToJSON.toJSON, FromJSON.parseJSON]
 
 end Data.Json
