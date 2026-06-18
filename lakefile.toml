@@ -5,6 +5,9 @@ defaultTargets = ["linen"]
 [[lean_lib]]
 name = "Linen"
 
+[[lean_lib]]
+name = "Tests"
+
 [[lean_exe]]
 name = "linen"
 root = "Main"
