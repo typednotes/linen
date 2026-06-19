@@ -2,15 +2,7 @@
   Functor utilities
 
   Constructions on functors and applicatives that are not in the Lean standard
-  library. The identity functor is omitted: Lean's `Id` already provides it
-  together with its `Functor`/`Applicative`/`Monad` instances.
-
-  Provided here:
-  - `Compose`        — composition of two functors / applicatives
-  - `Const`          — the constant functor
-  - `Product`        — the product of two functors
-  - `FunctorSum`     — the sum (coproduct) of two functors
-  - `Contravariant`  — contravariant functors, with `Predicate`/`Equivalence`
+  library.
 -/
 
 namespace Data.Functor
