@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <!-- Linen mark: two warp + two weft fibers, plain-weave over/under.
+       Transparent background, no frame. -->
+  <!-- warp fibers (vertical, beige) -->
+  <g fill="#c9b896">
+    <rect x="29" y="2" width="22" height="116" rx="11"/>
+    <rect x="69" y="2" width="22" height="116" rx="11"/>
+  </g>
+  <!-- weft fibers (horizontal, dirty white) woven over the warp -->
+  <g fill="#e8e1d0">
+    <rect x="2" y="29" width="116" height="22" rx="11"/>
+    <rect x="2" y="69" width="116" height="22" rx="11"/>
+  </g>
+  <!-- warp-over crossings restore the interlacing (top-left & bottom-right) -->
+  <g fill="#c9b896">
+    <rect x="29" y="27" width="22" height="26"/>
+    <rect x="69" y="67" width="22" height="26"/>
+  </g>
+</svg>

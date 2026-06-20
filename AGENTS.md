@@ -27,6 +27,14 @@ Guidance for working in the **linen** Lean library.
   For `Prop`-valued definitions that cannot be decided by `#guard`, use
   `example ... := rfl` (or an explicit proof) to illustrate the law.
 
+## Keeping the main page current
+
+`README.md` is the project's front page: the logo, badges, the feature list,
+the module table, and the headline counts (modules / theorems / `#guard`
+checks). **Whenever you add, remove, or substantially change a module, think
+about updating `README.md`** so its feature list, module table, and stats stay
+accurate.
+
 ## Importing external code
 
 When importing external code into the library — designated by a **local path**

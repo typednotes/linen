@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 612 120">
+  <!-- Linen logo (dark mode): a woven-linen swatch as a framed grid/tensor
+       operator (⊞/⊠), in beige / dirty-white / gray tones, + the wordmark
+       L i N ∃ N (E → ∃, I → the complex i, italic serif). -->
+
+  <!-- ── Mark: two warp + two weft fibers, plain-weave over/under ───── -->
+  <!-- warp fibers (vertical, beige) -->
+  <g fill="#c2b291">
+    <rect x="29" y="2" width="22" height="116" rx="11"/>
+    <rect x="69" y="2" width="22" height="116" rx="11"/>
+  </g>
+  <!-- weft fibers (horizontal, dirty white) woven over the warp -->
+  <g fill="#e7ddc8">
+    <rect x="2" y="29" width="116" height="22" rx="11"/>
+    <rect x="2" y="69" width="116" height="22" rx="11"/>
+  </g>
+  <!-- warp-over crossings restore the interlacing (top-left & bottom-right) -->
+  <g fill="#c2b291">
+    <rect x="29" y="27" width="22" height="26"/>
+    <rect x="69" y="67" width="22" height="26"/>
+  </g>
+
+  <!-- ── Wordmark: L i N ∃ N ────────────────────────────────────────── -->
+  <g fill="#ece4d2">
+    <!-- L -->
+    <path d="M165,0 H177 V108 H235 V120 H165 Z"/>
+
+    <!-- i — the complex i, italic serif -->
+    <text x="290" y="118" font-family="Georgia, 'Times New Roman', 'DejaVu Serif', serif"
+          font-style="italic" font-size="140" text-anchor="middle">i</text>
+
+    <!-- N -->
+    <path d="M345,0 h12 v120 h-12 Z"/>
+    <path d="M403,0 h12 v120 h-12 Z"/>
+    <path d="M345,0 H363 L415,120 H397 Z"/>
+
+    <!-- ∃ -->
+    <path d="M435,0 H505 V120 H435 V108 H493 V66 H452 V54 H493 V12 H435 Z"/>
+
+    <!-- N -->
+    <path d="M525,0 h12 v120 h-12 Z"/>
+    <path d="M583,0 h12 v120 h-12 Z"/>
+    <path d="M525,0 H543 L595,120 H577 Z"/>
+  </g>
+</svg>
