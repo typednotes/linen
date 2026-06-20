@@ -7,6 +7,7 @@
       lake build Tests
 -/
 import Tests.Linen.Control.ApplicativeTest
+import Tests.Linen.Control.AutoUpdateTest
 import Tests.Linen.Control.MonadTest
 import Tests.Linen.Data.FunctorTest
 import Tests.Linen.Data.Json.TypesTest
