@@ -2,11 +2,8 @@
 .lake/
 /.lake
 
-# docs
-docs/
-
 # Output files
-out/
+out/*
 
 # MacOS
 .DS_Store

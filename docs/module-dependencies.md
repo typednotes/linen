@@ -24,13 +24,13 @@ dot -Tsvg docs/module-dependencies.dot -o docs/module-dependencies.svg
 
 Each module is listed after all modules it imports. Within a dependency level, ordering is alphabetical.
 
-1. `Hale.Aeson.Data.Aeson.Types`
-2. `Hale.Aeson.Data.Aeson.Decode`
-3. `Hale.Aeson.Data.Aeson.Encode`
-4. `Hale.Aeson.Data.Aeson`
-5. `Hale.Aeson`
-6. `Hale.AnsiTerminal.System.Console.ANSI`
-7. `Hale.AnsiTerminal`
+<!-- 1. `Hale.Aeson.Data.Aeson.Types` -->
+<!-- 2. `Hale.Aeson.Data.Aeson.Decode` -->
+<!-- 3. `Hale.Aeson.Data.Aeson.Encode` -->
+<!-- 4. `Hale.Aeson.Data.Aeson` -->
+<!-- 5. `Hale.Aeson` -->
+<!-- 6. `Hale.AnsiTerminal.System.Console.ANSI` -->
+<!-- 7. `Hale.AnsiTerminal` -->
 8. `Hale.AutoUpdate.Control.AutoUpdate`
 9. `Hale.AutoUpdate`
 10. `Hale.Base.Control.Applicative`
