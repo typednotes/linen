@@ -31,8 +31,8 @@ Each module is listed after all modules it imports. Within a dependency level, o
 <!-- 5. `Hale.Aeson` -->
 <!-- 6. `Hale.AnsiTerminal.System.Console.ANSI` -->
 <!-- 7. `Hale.AnsiTerminal` -->
-8. `Hale.AutoUpdate.Control.AutoUpdate`
-9. `Hale.AutoUpdate`
+<!-- 8. `Hale.AutoUpdate.Control.AutoUpdate` -->
+<!-- 9. `Hale.AutoUpdate` -->
 10. `Hale.Base.Control.Applicative`
 11. `Hale.Base.Control.Category`
 12. `Hale.Base.Control.Concurrent.MVar`
