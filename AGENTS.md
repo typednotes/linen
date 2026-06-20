@@ -27,6 +27,26 @@ Guidance for working in the **linen** Lean library.
   For `Prop`-valued definitions that cannot be decided by `#guard`, use
   `example ... := rfl` (or an explicit proof) to illustrate the law.
 
+## Importing external code
+
+When importing external code into the library — designated by a **local path**
+or a **GitHub link** (e.g. a Haskell package, another Lean project, or a single
+module):
+
+- **Replace every concept that has a Lean standard-library equivalent** with that
+  equivalent, and adapt the surrounding code accordingly. Do not port a bespoke
+  copy of something the stdlib already provides. Examples: use `Id` for the
+  identity monad, `Option`/`Except` rather than re-declared `Maybe`/`Either`,
+  `· >=> ·` / `· <=< ·` for Kleisli composition, `List.foldlM` for `foldM`,
+  `Functor.discard` for `void`. Only keep what the stdlib genuinely lacks.
+- **Follow Lean standard-library principles for the module hierarchy and
+  namespaces.** Place modules and choose namespaces the way the Lean stdlib
+  would (e.g. `Data.…`, `Control.…`, `System.…`), not by mirroring the source
+  project's layout or naming. Adapt identifiers to Lean naming conventions.
+- After substitution, the result should read as idiomatic Lean built on the
+  standard library — and still satisfy every rule below (tests, no `partial`,
+  no `sorry`).
+
 ## Coding conventions
 
 - **No `partial def`.** All recursion must be structural or have a proven
