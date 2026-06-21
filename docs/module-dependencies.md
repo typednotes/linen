@@ -33,9 +33,9 @@ Each module is listed after all modules it imports. Within a dependency level, o
 <!-- 7. `Hale.AnsiTerminal` -->
 <!-- 8. `Hale.AutoUpdate.Control.AutoUpdate` -->
 <!-- 9. `Hale.AutoUpdate` -->
-10. `Hale.Base.Control.Applicative`
-11. `Hale.Base.Control.Category`
-12. `Hale.Base.Control.Concurrent.MVar`
+<!-- 10. `Hale.Base.Control.Applicative` -->
+<!-- 11. `Hale.Base.Control.Category` -->
+<!-- 12. `Hale.Base.Control.Concurrent.MVar` -->
 13. `Hale.Base.Control.Concurrent.Chan`
 14. `Hale.Base.Control.Concurrent.QSem`
 15. `Hale.Base.Control.Concurrent.QSemN`

@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>9 modules</strong> · <strong>30 compile-time theorems</strong> · <strong>199 <code>#guard</code> checks</strong>
+  <strong>12 modules</strong> · <strong>30 compile-time theorems</strong> · <strong>202 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -58,9 +58,15 @@ Three rules hold across the whole library:
 - `Control.Applicative.asum` — fold a list of alternatives with `<|>`.
 - `Control.Monad.join`, `replicateM`, `replicateM_` — flatten and repeat
   monadic actions (with the `join_pure` law).
+- `Control.Category` / `LawfulCategory` — categories with identity and
+  associative composition (`≫`, diagrammatic), with the lawful `Fun` instance.
 - `Control.AutoUpdate` — periodically refreshed cached values: a non-blocking
   getter backed by a dedicated OS thread and a `Std.CancellationToken` for clean
   shutdown.
+- `Control.Concurrent.MVar` — a promise-based synchronisation variable (empty or
+  full) with FIFO-fair waiters that are dormant tasks, not blocked OS threads.
+- `Control.Concurrent.Chan` — an unbounded FIFO channel with `dup` (broadcast to
+  independent readers); blocking reads are dormant promises, not blocked threads.
 
 ### `Data.Json` — a tiny JSON library
 
@@ -104,7 +110,10 @@ open Data.Functor Control.Monad
 | `Linen.Data.Functor` | `Compose`, `Const`, `Product`, `FunctorSum`, `Contravariant` |
 | `Linen.Control.Applicative` | `asum` |
 | `Linen.Control.Monad` | `join`, `replicateM`, `replicateM_` |
+| `Linen.Control.Category` | `Category`, `LawfulCategory`, `Fun`, the `≫` operator |
 | `Linen.Control.AutoUpdate` | periodically cached values on a dedicated thread |
+| `Linen.Control.Concurrent.MVar` | promise-based synchronisation variable (`take`/`put`/`swap`/…) |
+| `Linen.Control.Concurrent.Chan` | unbounded FIFO channel with `dup` (`write`/`read`/`tryRead`) |
 | `Linen.Data.Json` | JSON AST, `ToJSON`/`FromJSON`, encode/decode + roundtrip proofs |
 | `Linen.System.Console.Ansi` | ANSI terminal colors and styles |
 

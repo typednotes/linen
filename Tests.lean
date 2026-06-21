@@ -8,6 +8,9 @@
 -/
 import Tests.Linen.Control.ApplicativeTest
 import Tests.Linen.Control.AutoUpdateTest
+import Tests.Linen.Control.CategoryTest
+import Tests.Linen.Control.Concurrent.ChanTest
+import Tests.Linen.Control.Concurrent.MVarTest
 import Tests.Linen.Control.MonadTest
 import Tests.Linen.Data.FunctorTest
 import Tests.Linen.Data.Json.TypesTest
