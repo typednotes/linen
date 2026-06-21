@@ -40,7 +40,7 @@ Each module is listed after all modules it imports. Within a dependency level, o
 <!-- 14. `Hale.Base.Control.Concurrent.QSem` -->
 <!-- 15. `Hale.Base.Control.Concurrent.QSemN` -->
 <!-- 16. `Hale.Base.Control.Concurrent.Green` -->
-17. `Hale.Base.Control.Concurrent.Scheduler`
+<!-- 17. `Hale.Base.Control.Concurrent.Scheduler` -->
 18. `Hale.Base.Control.Concurrent`
 19. `Hale.Base.Control.Monad`
 20. `Hale.Base.Data.Bifunctor`
