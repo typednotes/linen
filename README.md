@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>12 modules</strong> · <strong>30 compile-time theorems</strong> · <strong>202 <code>#guard</code> checks</strong>
+  <strong>15 modules</strong> · <strong>30 compile-time theorems</strong> · <strong>202 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -67,6 +67,13 @@ Three rules hold across the whole library:
   full) with FIFO-fair waiters that are dormant tasks, not blocked OS threads.
 - `Control.Concurrent.Chan` — an unbounded FIFO channel with `dup` (broadcast to
   independent readers); blocking reads are dormant promises, not blocked threads.
+- `Control.Concurrent.QSem` — a quantity semaphore (`wait`/`signal`/`withSem`)
+  with a `Nat` count that can't underflow and FIFO-fair, promise-based waiters.
+- `Control.Concurrent.QSemN` — a generalised semaphore that acquires/releases
+  arbitrary quantities (`wait n`/`signal n`/`withSemN`), greedily waking waiters.
+- `Control.Concurrent.Green` — a fair green-thread monad: awaiting a `Task` frees
+  the pool thread (via `BaseIO.bindTask`, never `IO.wait`), with cancellation,
+  error handling, and `MVar`/`Chan`/`QSem` integration.
 
 ### `Data.Json` — a tiny JSON library
 
@@ -114,6 +121,9 @@ open Data.Functor Control.Monad
 | `Linen.Control.AutoUpdate` | periodically cached values on a dedicated thread |
 | `Linen.Control.Concurrent.MVar` | promise-based synchronisation variable (`take`/`put`/`swap`/…) |
 | `Linen.Control.Concurrent.Chan` | unbounded FIFO channel with `dup` (`write`/`read`/`tryRead`) |
+| `Linen.Control.Concurrent.QSem` | quantity semaphore (`wait`/`signal`/`withSem`) |
+| `Linen.Control.Concurrent.QSemN` | generalised semaphore over arbitrary quantities |
+| `Linen.Control.Concurrent.Green` | fair green-thread monad (non-blocking `await`, cancellation) |
 | `Linen.Data.Json` | JSON AST, `ToJSON`/`FromJSON`, encode/decode + roundtrip proofs |
 | `Linen.System.Console.Ansi` | ANSI terminal colors and styles |
 

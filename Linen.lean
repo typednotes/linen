@@ -4,7 +4,10 @@ import Linen.Control.Applicative
 import Linen.Control.AutoUpdate
 import Linen.Control.Category
 import Linen.Control.Concurrent.Chan
+import Linen.Control.Concurrent.Green
 import Linen.Control.Concurrent.MVar
+import Linen.Control.Concurrent.QSem
+import Linen.Control.Concurrent.QSemN
 import Linen.Control.Monad
 import Linen.Data.Functor
 import Linen.Data.Json
