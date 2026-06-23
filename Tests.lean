@@ -21,3 +21,7 @@ import Tests.Linen.Data.Json.TypesTest
 import Tests.Linen.Data.Json.EncodeTest
 import Tests.Linen.Data.Json.DecodeTest
 import Tests.Linen.System.Console.AnsiTest
+import Tests.Linen.Network.Socket.TypesTest
+import Tests.Linen.Network.Socket.FFITest
+import Tests.Linen.Network.SocketTest
+import Tests.Linen.Network.Socket.EventDispatcherTest

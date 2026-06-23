@@ -1,10 +1,44 @@
 #!/usr/bin/env python3
-import os, re
-from collections import defaultdict, deque
+import os, re, heapq
+from collections import defaultdict
 
 ROOT = "/Users/nicolas.grislain/Typednotes/hale"
 SRC = os.path.join(ROOT, "Hale")
 OUT_DIR = "/Users/nicolas.grislain/Typednotes/linen/docs"
+
+# Modules whose dependency closure should be pulled as early as possible in the
+# topological order, so we can implement them with the least prerequisite work.
+PRIORITIZE = [
+    "Hale.Network.Network.Socket.EventDispatcher",
+]
+
+# Modules already ported into `linen` (Linen/). They are emitted first (and
+# commented out) so the active TODO list starts right after them. Keep this in
+# sync as modules land; order within does not matter.
+DONE = {
+    "Hale.Aeson.Data.Aeson.Types",
+    "Hale.Aeson.Data.Aeson.Decode",
+    "Hale.Aeson.Data.Aeson.Encode",
+    "Hale.Aeson.Data.Aeson",
+    "Hale.Aeson",
+    "Hale.AnsiTerminal.System.Console.ANSI",
+    "Hale.AnsiTerminal",
+    "Hale.AutoUpdate.Control.AutoUpdate",
+    "Hale.AutoUpdate",
+    "Hale.Base.Control.Applicative",
+    "Hale.Base.Control.Category",
+    "Hale.Base.Control.Concurrent.MVar",
+    "Hale.Base.Control.Concurrent.Chan",
+    "Hale.Base.Control.Concurrent.QSem",
+    "Hale.Base.Control.Concurrent.QSemN",
+    "Hale.Base.Control.Concurrent.Green",
+    "Hale.Base.Control.Concurrent.Scheduler",
+    "Hale.Base.Control.Concurrent",
+    "Hale.Network.Network.Socket.Types",
+    "Hale.Network.Network.Socket.FFI",
+    "Hale.Network.Network.Socket",
+    "Hale.Network.Network.Socket.EventDispatcher",
+}
 
 
 def path_to_module(path):
@@ -70,19 +104,46 @@ for n, ds in deps_of.items():
     for d in ds:
         rdeps[d].add(n)
 
+# Transitive dependency closure of the prioritized targets (targets + all the
+# modules they transitively import).
+closure = set()
+stack = [t for t in PRIORITIZE if t in nodes]
+while stack:
+    n = stack.pop()
+    if n in closure:
+        continue
+    closure.add(n)
+    stack.extend(deps_of.get(n, ()))
+
+# Sanity check: DONE should be downward-closed (every dependency of a ported
+# module is also ported); otherwise the "done first" block can't stay contiguous.
+done_gaps = sorted(d for n in DONE if n in nodes for d in deps_of[n] if d not in DONE)
+if done_gaps:
+    print("WARNING: DONE modules import non-DONE modules:", done_gaps)
+
+# Priority tiers for the topological sort (lower = earlier):
+#   0 — already ported (DONE): emitted first, commented out.
+#   1 — remaining EventDispatcher closure: the shortest path to the target.
+#   2 — everything else.
+# `heapq` breaks ties alphabetically via the module name in the tuple.
+def tier(n):
+    if n in DONE:
+        return 0
+    if n in closure:
+        return 1
+    return 2
+
 remaining = {n: set(deps_of[n]) for n in nodes}
-ready = deque(sorted(n for n in nodes if not remaining[n]))
+heap = [(tier(n), n) for n in nodes if not remaining[n]]
+heapq.heapify(heap)
 order = []
-while ready:
-    n = ready.popleft()
+while heap:
+    _, n = heapq.heappop(heap)
     order.append(n)
-    newly = []
     for dependent in sorted(rdeps[n]):
         remaining[dependent].discard(n)
         if not remaining[dependent]:
-            newly.append(dependent)
-    if newly:
-        ready = deque(sorted(set(ready) | set(newly)))
+            heapq.heappush(heap, (tier(dependent), dependent))
 
 cycle_nodes = sorted(n for n in nodes if remaining[n])
 
@@ -143,10 +204,17 @@ with open(md_path, "w", encoding="utf-8") as fh:
     w("dot -Tsvg docs/module-dependencies.dot -o docs/module-dependencies.svg\n")
     w("```\n\n")
     w("## Topologically sorted modules\n\n")
-    w("Each module is listed after all modules it imports. Within a "
-      "dependency level, ordering is alphabetical.\n\n")
+    w("Each module is listed after all modules it imports. The order is "
+      "**prioritised to reach "
+      "`Hale.Network.Network.Socket.EventDispatcher` as early as possible**: "
+      "already-ported modules (commented out) come first, then "
+      "EventDispatcher's remaining dependency chain, then everything else. "
+      "Within a tier, ordering is alphabetical.\n\n")
     for i, m in enumerate(order, 1):
-        w(f"{i}. `{m}`\n")
+        if m in DONE:
+            w(f"<!-- {i}. `{m}` -->\n")
+        else:
+            w(f"{i}. `{m}`\n")
     w("\n")
     if cycle_nodes:
         w("## Modules in cycles (not sortable)\n\n")

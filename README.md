@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>16 modules</strong> · <strong>30 compile-time theorems</strong> · <strong>202 <code>#guard</code> checks</strong>
+  <strong>20 modules</strong> · <strong>46 compile-time theorems</strong> · <strong>232 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -91,6 +91,36 @@ Three rules hold across the whole library:
 - `Color` / `Intensity` enums and the ANSI escape-code builders
   (`setFg`, `setBg`, `colored`, `bold`, …).
 
+### `Network.Socket` — POSIX sockets & event multiplexing
+
+- `Network.Socket.Types` — the type layer for a phantom-typed socket API:
+  `Family` / `SocketType` / `ShutdownHow` enums with their FFI tag encodings, an
+  `EventType` readiness bitmask (kqueue/epoll), `SockAddr` / `AddrInfo`, and a
+  `Socket (state : SocketState)` handle whose POSIX lifecycle (`fresh → bound →
+  listening`, `connecting → connected`, `closed`) is **enforced at compile time**
+  (15 state-distinctness theorems; `close` carries a `state ≠ .closed` proof
+  obligation that makes double-close a type error). Non-blocking operations
+  return `Accept` / `Connect` / `Recv` / `Send` / `Poll` outcome sum types.
+- `Network.Socket.FFI` — `@[extern]` bindings to a portable C shim
+  (`ffi/network.c`): socket create / bind / listen / accept / connect, blocking
+  and non-blocking send / recv, UDP `sendto` / `recvfrom`, socket options,
+  `getAddrInfo`, a buffered `RecvBuffer`, and an event loop over **kqueue
+  (macOS) / epoll (Linux)**. The shim is compiled and linked by `lakefile.lean`
+  (`extern_lib linenffi`); the `Linen` library is `precompileModules`-enabled so
+  the bindings are callable from `#eval`.
+- `Network.Socket` — the safe, high-level API over the FFI: `socket → bind →
+  listen → accept` (and `connect`/`connectFinish`, `send`/`recv`) with each
+  transition's pre/post state in its signature, a `close` whose `state ≠ .closed`
+  proof obligation makes double-close a type error, `withSocket` / `withListenTCP`
+  / `withEventLoop` bracket helpers, `listenTCP`/`listenTCP6`, address
+  introspection, and an `EventLoop` (kqueue/epoll) wrapper.
+- `Network.Socket.EventDispatcher` — the bridge from socket readiness to the
+  green-thread model: a dedicated dispatch thread runs the kqueue/epoll loop and
+  resolves an `IO.Promise` when a socket is ready, so `waitReadable` /
+  `waitWritable` (and `recvGreen` / `sendAllGreen`) **suspend a `Green` thread as
+  a heap object instead of holding an OS thread**. This is what lets one worker
+  pool serve many thousands of IO-bound connections.
+
 ## Quick Start
 
 Add to your `lakefile.toml`:
@@ -131,6 +161,10 @@ open Data.Functor Control.Monad
 | `Linen.Control.Concurrent` | thread management (`forkIO`/`forkFinally`/`forkGreen`/`killThread`/`waitThread`) |
 | `Linen.Data.Json` | JSON AST, `ToJSON`/`FromJSON`, encode/decode + roundtrip proofs |
 | `Linen.System.Console.Ansi` | ANSI terminal colors and styles |
+| `Linen.Network.Socket.Types` | phantom-typed `Socket` lifecycle, `Family`/`SockAddr`/`EventType`, non-blocking outcome types |
+| `Linen.Network.Socket.FFI` | `@[extern]` C bindings: sockets, options, UDP, `getAddrInfo`, kqueue/epoll event loop |
+| `Linen.Network.Socket` | safe phantom-typed lifecycle API, `withSocket`/`listenTCP`/`withEventLoop`, `EventLoop` |
+| `Linen.Network.Socket.EventDispatcher` | kqueue/epoll → `Green` bridge: `waitReadable`/`waitWritable`/`recvGreen`/`sendAllGreen` |
 
 ## Build & Test
 

@@ -12,3 +12,7 @@ import Linen.Control.Concurrent.QSemN
 import Linen.Control.Monad
 import Linen.Data.Functor
 import Linen.Data.Json
+import Linen.Network.Socket.Types
+import Linen.Network.Socket.FFI
+import Linen.Network.Socket
+import Linen.Network.Socket.EventDispatcher
