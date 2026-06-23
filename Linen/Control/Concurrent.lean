@@ -1,15 +1,21 @@
 /-
-  Thread management primitives
+  Thread management — fair green threads
 
-  Provides `ThreadId`, `forkIO`, `forkFinally`, `threadDelay`, `yield`,
-  `killThread`, and the fair-green-thread `forkGreen`, modelled after Haskell's
+  Provides `ThreadId`, `forkIO`, `forkFinally`, `forkGreen`, `killThread`,
+  `threadDelay`, `yield`, and `waitThread`, modelled after Haskell's
   `Control.Concurrent`.
 
-  ## Design — green threads via M:N scheduling
+  ## One execution model: fair green threads
 
-  `forkIO` enqueues an action on Lean's thread pool (O(1), heap-only) through
-  `Scheduler.schedule`. A small fixed pool of OS worker threads dequeues and
-  executes green threads, inspired by GHC's capability model.
+  All forking goes through `Linen.Control.Concurrent.Green` — the fair
+  green-thread monad whose `await`s free the pool worker via `BaseIO.bindTask`
+  (M:N scheduling, inspired by GHC's capability model). `forkIO` simply lifts a
+  plain `IO Unit` into `Green` and forks it the same way.
+
+  A forked computation is always *started* on a pool worker, never run in the
+  caller: `spawn` bounces it onto a worker through an empty task before running
+  the `Green` chain there. A cancellation pre-check makes a thread that is
+  killed before it starts fail fast.
 
   ## Differences from GHC
 
@@ -17,8 +23,9 @@
     a CPU-bound thread that never checks the token will not be interrupted.
   * **No preemption.** Green threads run to completion or until they
     voluntarily yield/block.
-  * **No stack switching.** A green thread that calls `IO.wait` blocks its
-    worker OS thread (use `forkGreen` to suspend without blocking).
+  * **No stack switching.** A `forkIO` action that calls `IO.wait` blocks its
+    worker; use `forkGreen` with `Green.await`/`Green.takeMVar`/… to suspend
+    without blocking.
 
   ## Type-level guarantees
 
@@ -27,16 +34,29 @@
 -/
 
 import Linen.Control.Concurrent.MVar
-import Linen.Control.Concurrent.Scheduler
 import Linen.Control.Concurrent.Green
 import Std.Sync.CancellationToken
 
 namespace Control.Concurrent
 
+/-! ### PosNat -/
+
+/-- A positive natural number, used for `ThreadId.id` to encode at the type
+level that thread IDs are always $\ge 1$.
+
+$$\text{PosNat} := \{n : \mathbb{N} \mid n > 0\}$$ -/
+def PosNat := { n : Nat // n > 0 }
+
+instance : Nonempty PosNat := ⟨⟨1, by omega⟩⟩
+instance : BEq PosNat where beq a b := a.val == b.val
+instance : Hashable PosNat where hash p := hash p.val
+instance : ToString PosNat where toString p := toString p.val
+instance : Repr PosNat where reprPrec p n := reprPrec p.val n
+
 /-! ### ThreadId -/
 
 /-- Global monotonic counter for unique thread IDs. Starts at $1$. -/
-private initialize nextThreadId : IO.Ref Scheduler.PosNat ← IO.mkRef ⟨1, by omega⟩
+private initialize nextThreadId : IO.Ref PosNat ← IO.mkRef ⟨1, by omega⟩
 
 /-- A handle to a forked concurrent thread.
 
@@ -47,7 +67,7 @@ private initialize nextThreadId : IO.Ref Scheduler.PosNat ← IO.mkRef ⟨1, by 
 The `id` field is never reused within a process (monotonic counter). -/
 structure ThreadId where
   private mk ::
-  id : Scheduler.PosNat
+  id : PosNat
   private task : Task (Except IO.Error Unit)
   private cancelToken : Std.CancellationToken
 
@@ -59,17 +79,43 @@ instance : Repr ThreadId where reprPrec t _ := s!"ThreadId({t.id})"
 /-- Allocate a fresh unique thread ID (internal).
 
 Atomically increments the global counter and returns the previous value,
-which is $\ge 1$ since the counter starts at $1$ and only increases.
-
-$$\text{freshThreadId} : \text{BaseIO}\ \text{PosNat}$$ -/
-private def freshThreadId : BaseIO Scheduler.PosNat :=
+which is $\ge 1$ since the counter starts at $1$ and only increases. -/
+private def freshThreadId : BaseIO PosNat :=
   nextThreadId.modifyGet fun ⟨n, h⟩ => (⟨n, h⟩, ⟨n + 1, by omega⟩)
 
-/-! ### Forking -/
+/-! ### Forking — every thread runs as a fair green thread -/
 
-/-- Fork a new green thread. The action is submitted to Lean's thread pool
-via `IO.asTask` (default priority) — O(1), no dedicated OS thread spawned.
-Millions of green threads can be active simultaneously.
+/-- Start a `Green` computation on Lean's thread pool, returning the `Task` for
+its result.
+
+The work is *bounced* onto a pool worker via an empty task (`BaseIO.asTask`)
+so its synchronous prefix never runs in the caller. A cancellation pre-check
+makes a thread that is killed before it starts fail fast. `await`s inside
+`action` free the worker via `BaseIO.bindTask` (fair M:N scheduling). -/
+private def spawn (action : Green.Green Unit) (token : Std.CancellationToken)
+    : BaseIO (Task (Except IO.Error Unit)) := do
+  let starter ← BaseIO.asTask (pure ())
+  BaseIO.bindTask starter fun _ =>
+    Green.Green.run (do Green.Green.checkCancelled; action) token
+
+/-- Fork a fair green thread. The `Green` computation never blocks pool threads
+when awaiting — suspensions use `BaseIO.bindTask` to register continuations,
+freeing the pool thread for other work.
+
+$$\text{forkGreen} : \text{Green}\ \text{Unit} \to \text{IO}\ \text{ThreadId}$$
+
+Use `Green.await`, `Green.takeMVar`, etc. inside the action to suspend without
+blocking. See `Linen.Control.Concurrent.Green` for the termination, liveness,
+and fairness guarantees. -/
+def forkGreen (action : Green.Green Unit) : IO ThreadId := do
+  let tid ← freshThreadId
+  let token ← Std.CancellationToken.new
+  let task ← spawn action token
+  pure { id := tid, task := task, cancelToken := token }
+
+/-- Fork a new green thread running a plain `IO` action. The action is lifted
+into `Green` and forked via `forkGreen`, so it is started on a pool worker — no
+dedicated OS thread is spawned, and millions of green threads can be active.
 
 $$\text{forkIO} : \text{IO}\ \text{Unit} \to \text{IO}\ \text{ThreadId}$$
 
@@ -80,16 +126,8 @@ let tid ← forkIO do
 
 The returned `ThreadId` can be used with `killThread` for cooperative
 cancellation, or with `waitThread` to join. -/
-def forkIO (action : IO Unit) : IO ThreadId := do
-  let tid ← freshThreadId
-  let token ← Std.CancellationToken.new
-  let thread : Scheduler.GreenThread := {
-    id := tid
-    action := action
-    token := token
-  }
-  let task ← Scheduler.schedule thread
-  pure { id := tid, task := task, cancelToken := token }
+def forkIO (action : IO Unit) : IO ThreadId :=
+  forkGreen (liftM action)
 
 /-- Fork a green thread that calls `finally` with the outcome, whether the
 action succeeded or threw.
@@ -131,33 +169,16 @@ def threadDelay (μs : Nat) : BaseIO Unit :=
 $$\text{yield} : \text{BaseIO}\ \text{Unit}$$ -/
 def yield : BaseIO Unit := IO.sleep 0
 
-/-! ### Fair green threads -/
+/-! ### Waiting -/
 
-/-- Fork a fair green thread. The `Green` computation never blocks pool
-threads when awaiting — suspensions use `BaseIO.bindTask` to register
-continuations, freeing the pool thread for other work.
-
-$$\text{forkGreen} : \text{Green}\ \text{Unit} \to \text{IO}\ \text{ThreadId}$$
-
-Use `Green.await`, `Green.takeMVar`, etc. inside the action to suspend
-without blocking. See `Linen.Control.Concurrent.Green` for the termination,
-liveness, and fairness guarantees. -/
-def forkGreen (action : Green.Green Unit) : IO ThreadId := do
-  let tid ← freshThreadId
-  let token ← Std.CancellationToken.new
-  let task ← Green.Green.run action token
-  pure { id := tid, task := task, cancelToken := token }
-
-/-- Await a thread's completion inside a `Green` computation, without
-blocking the pool thread.
+/-- Await a thread's completion inside a `Green` computation, without blocking
+the pool thread.
 
 $$\text{waitThreadGreen} : \text{ThreadId} \to \text{Green.Green}\ \text{Unit}$$ -/
 def waitThreadGreen (tid : ThreadId) : Green.Green Unit :=
   Green.Green.await tid.task >>= fun
     | .ok ()   => pure ()
     | .error e => throw e
-
-/-! ### Waiting -/
 
 /-- Wait for a thread to finish and return its result. Re-throws if the
 thread threw an exception.

@@ -11,3 +11,7 @@ name = "Tests"
 [[lean_exe]]
 name = "linen"
 root = "Main"
+
+[[lean_exe]]
+name = "bench"
+root = "Bench"

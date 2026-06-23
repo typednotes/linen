@@ -51,4 +51,13 @@ namespace Tests.Control.Concurrent
   let tid ← forkGreen (pure () : Green.Green Unit)
   waitThread tid
 
+-- A Green computation suspends on an empty MVar and resumes once another
+-- thread fills it — the fair (non-blocking) model coordinating across threads.
+#eval show IO Unit from do
+  let tok ← Std.CancellationToken.new
+  let mv ← MVar.newEmpty Nat
+  let _ ← forkIO do mv.putSync 42
+  let v ← Green.Green.block (Green.Green.takeMVar mv) tok
+  unless v == 42 do throw (IO.userError s!"green takeMVar expected 42, got {v}")
+
 end Tests.Control.Concurrent

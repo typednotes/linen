@@ -15,7 +15,6 @@ import Tests.Linen.Control.Concurrent.GreenTest
 import Tests.Linen.Control.Concurrent.MVarTest
 import Tests.Linen.Control.Concurrent.QSemTest
 import Tests.Linen.Control.Concurrent.QSemNTest
-import Tests.Linen.Control.Concurrent.SchedulerTest
 import Tests.Linen.Control.MonadTest
 import Tests.Linen.Data.FunctorTest
 import Tests.Linen.Data.Json.TypesTest

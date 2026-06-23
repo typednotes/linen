@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>17 modules</strong> · <strong>30 compile-time theorems</strong> · <strong>206 <code>#guard</code> checks</strong>
+  <strong>16 modules</strong> · <strong>30 compile-time theorems</strong> · <strong>202 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -74,12 +74,10 @@ Three rules hold across the whole library:
 - `Control.Concurrent.Green` — a fair green-thread monad: awaiting a `Task` frees
   the pool thread (via `BaseIO.bindTask`, never `IO.wait`), with cancellation,
   error handling, and `MVar`/`Chan`/`QSem` integration.
-- `Control.Concurrent.Scheduler` — an M:N scheduler that multiplexes green
-  threads onto Lean's task thread pool (`schedule` via `IO.asTask`), with
-  cooperative cancellation.
-- `Control.Concurrent` — thread management on top of the above: `forkIO`,
-  `forkFinally`, `forkGreen`, `killThread` (cooperative), `waitThread`,
-  `threadDelay`, `yield`, and a monotonic `ThreadId`.
+- `Control.Concurrent` — thread management built entirely on the `Green` model:
+  `forkIO`, `forkFinally`, `forkGreen`, `killThread` (cooperative), `waitThread`,
+  `threadDelay`, `yield`, and a monotonic `ThreadId`. All forks run as fair green
+  threads started on Lean's task pool.
 
 ### `Data.Json` — a tiny JSON library
 
@@ -130,7 +128,6 @@ open Data.Functor Control.Monad
 | `Linen.Control.Concurrent.QSem` | quantity semaphore (`wait`/`signal`/`withSem`) |
 | `Linen.Control.Concurrent.QSemN` | generalised semaphore over arbitrary quantities |
 | `Linen.Control.Concurrent.Green` | fair green-thread monad (non-blocking `await`, cancellation) |
-| `Linen.Control.Concurrent.Scheduler` | M:N green-thread scheduler over Lean's task pool |
 | `Linen.Control.Concurrent` | thread management (`forkIO`/`forkFinally`/`forkGreen`/`killThread`/`waitThread`) |
 | `Linen.Data.Json` | JSON AST, `ToJSON`/`FromJSON`, encode/decode + roundtrip proofs |
 | `Linen.System.Console.Ansi` | ANSI terminal colors and styles |
