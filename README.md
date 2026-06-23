@@ -115,11 +115,12 @@ Three rules hold across the whole library:
   / `withEventLoop` bracket helpers, `listenTCP`/`listenTCP6`, address
   introspection, and an `EventLoop` (kqueue/epoll) wrapper.
 - `Network.Socket.EventDispatcher` — the bridge from socket readiness to the
-  green-thread model: a dedicated dispatch thread runs the kqueue/epoll loop and
-  resolves an `IO.Promise` when a socket is ready, so `waitReadable` /
-  `waitWritable` (and `recvGreen` / `sendAllGreen`) **suspend a `Green` thread as
-  a heap object instead of holding an OS thread**. This is what lets one worker
-  pool serve many thousands of IO-bound connections.
+  green-thread model: a **sharded** set of dispatch threads (fds partitioned by
+  `fd % N`, each shard its own kqueue/epoll loop + waiter map) resolves an
+  `IO.Promise` when a socket is ready, so `waitReadable` / `waitWritable` (and
+  `recvGreen` / `sendAllGreen`) **suspend a `Green` thread as a heap object
+  instead of holding an OS thread**. This is what lets one worker pool serve many
+  thousands of IO-bound connections.
 
 ## Quick Start
 
@@ -172,6 +173,25 @@ open Data.Functor Control.Monad
 lake build          # build the library
 lake build Tests    # run every #guard / #eval check
 ```
+
+## Examples
+
+Example programs live under [`Examples/`](Examples) and share one entrypoint,
+`lake exe examples <name> [args...]` (run with no name to list them):
+
+```bash
+lake exe examples                  # list the available examples
+lake exe examples echo             # green-threaded echo server — self-checking demo (exits 0)
+lake exe examples echo serve 9099  # run the echo server forever; then:  nc 127.0.0.1 9099
+lake exe examples bench            # network round-trips w/ a few-ms server delay: Green vs blocking pool (same #cores threads)
+```
+
+The `echo` example exercises the whole socket stack end-to-end — a green accept
+loop forks a green handler per connection, each suspending on
+`recvGreen`/`sendAllGreen` (via the kqueue/epoll `EventDispatcher`) instead of
+holding an OS thread, so one small worker pool serves many connections. Adding
+an example is a new module under `Examples/` plus one line in the registry in
+`Examples/Main.lean`.
 
 ## Documentation
 

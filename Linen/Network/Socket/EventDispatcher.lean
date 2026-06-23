@@ -3,31 +3,38 @@
 
   Routes kqueue/epoll readiness events to `IO.Promise`-based waiters, letting
   `Green` threads suspend **without blocking pool threads** while waiting for
-  socket I/O readiness. This is the payoff of the green-thread model: a thread
-  blocked on a socket is a heap object, not an OS thread.
+  socket I/O readiness. A thread blocked on a socket is a heap object, not an
+  OS thread.
 
-  ## Design
+  ## Design — a sharded dispatcher
 
-  A single dedicated OS thread runs the dispatch loop, calling `EventLoop.wait`
-  in a tight loop. When a socket becomes ready, the dispatcher resolves the
-  corresponding `IO.Promise`, which wakes the `Green` thread that was awaiting
-  it (via `Green.await`, i.e. `BaseIO.bindTask` — never `IO.wait`).
+  The dispatcher is split into `N` independent **shards**, each with its own
+  event loop (kqueue/epoll fd), its own waiter map, and its own dedicated
+  dispatch thread. A socket fd is assigned to shard `fd % N`, so registration
+  and dispatch for that fd always land on the same shard with no cross-shard
+  coordination. This removes the single-thread dispatch bottleneck: `N` threads
+  drain `kevent`/`epoll_wait` and resolve waiters in parallel, and the waiter
+  mutex is per-shard so registrations contend far less.
+
+  Each dispatch thread also processes a whole `kevent`/`epoll_wait` batch under
+  **one** lock acquisition (not one per event), and resolves the woken promises
+  *after* releasing it.
+
+  When a socket becomes ready the shard resolves the corresponding `IO.Promise`,
+  which wakes the `Green` thread that was awaiting it (via `Green.await`, i.e.
+  `BaseIO.bindTask` — never `IO.wait`).
 
   ## Guarantees (axiom-dependent on the FFI / `BaseIO.bindTask` contract)
 
-  - **No pool starvation:** Green threads that call `waitReadable`/`waitWritable`
-    free their pool thread via `Green.await`.
+  - **No pool starvation:** `waitReadable`/`waitWritable` free their pool thread.
   - **One-shot semantics:** each waiter is resolved exactly once and removed.
-  - **Thread safety:** the waiter map is protected by `Std.Mutex`; ready waiters
-    are collected under the lock and resolved *after* releasing it.
+  - **Thread safety:** each shard's waiter map is its own `Std.Mutex`.
 
-  ## Differences from the Haskell/`hale` source
+  ## No `partial`
 
-  - The dispatch loop and `sendAllGreen` are ordinary `def`s using `while`
-    (which delegates iteration to the standard library's `Loop.forIn`), so the
-    library keeps its **no-`partial`** invariant.
-  - Mutex access uses Lean's `Std.Mutex.atomically` + `get`/`set` state idiom
-    (as in `Linen.Control.Concurrent.MVar`).
+  The per-shard dispatch loop and `sendAllGreen` use `while` (which delegates
+  iteration to the standard library's `Loop.forIn`), so the module keeps the
+  library's no-`partial` invariant.
 -/
 
 import Linen.Network.Socket
@@ -44,35 +51,23 @@ private structure Waiter where
   promise : IO.Promise Unit
   events  : EventType
 
-/-- Event dispatcher: bridges kqueue/epoll events to Green thread suspensions.
-
-    Create with `EventDispatcher.create`, use `waitReadable`/`waitWritable`
-    to suspend Green threads, and `shutdown` to stop the dispatch loop.
-
-    The waiter map uses `Nat` keys (converted from `USize` fds) to avoid
-    compiled-mode ABI issues with scalar types in closures. -/
-structure EventDispatcher where
-  private mk ::
+/-- One dispatcher shard: an event loop, the waiters registered on it (keyed by
+fd), and a flag controlling its dispatch thread. -/
+private structure Shard where
   eventLoop : EventLoop
   waiters   : Std.Mutex (Std.HashMap Nat (List Waiter))
   running   : IO.Ref Bool
 
-namespace EventDispatcher
+/-- Event dispatcher: bridges kqueue/epoll events to Green thread suspensions,
+sharded across several event loops + dispatch threads for parallel throughput.
 
-/-- Register a waiter for a socket fd and add it to the event loop. Internal.
-    Takes `RawSocket` directly to avoid compiled-mode issues with phantom-
-    parameterized structure unwrapping. -/
-private def register (disp : EventDispatcher) (raw : RawSocket)
-    (evts : EventType) : IO (IO.Promise Unit) := do
-  let fdNat ← FFI.socketGetFd raw
-  let promise ← IO.Promise.new
-  let waiter : Waiter := { promise := promise, events := evts }
-  disp.waiters.atomically do
-    let ws ← get
-    set (ws.insert fdNat (waiter :: ws.getD fdNat []))
-  -- Register interest with the event loop
-  FFI.eventLoopAdd disp.eventLoop raw evts.flags
-  pure promise
+    Create with `EventDispatcher.create`, use `waitReadable`/`waitWritable` to
+    suspend Green threads, and `shutdown` to stop the dispatch loops. -/
+structure EventDispatcher where
+  private mk ::
+  shards : Array Shard
+
+namespace EventDispatcher
 
 /-- Check if an event matches what a waiter is waiting for. -/
 private def waiterMatches (evType : EventType) (w : Waiter) : Bool :=
@@ -80,44 +75,65 @@ private def waiterMatches (evType : EventType) (w : Waiter) : Bool :=
   (evType.hasWritable && w.events.hasWritable) ||
   evType.hasError
 
-/-- The dispatch loop. Runs on a dedicated OS thread until `running` is cleared.
-
-    For each ready event we collect the matching waiters and update the map
-    **under the mutex**, then resolve their promises **after** releasing it. -/
-private def dispatchLoop (disp : EventDispatcher) : IO Unit := do
-  while ← disp.running.get do
-    let events ← EventLoop.wait disp.eventLoop 1
-    for ev in events do
-      let fd : Nat := ev.socketFd
-      let evType := ev.events
-      let toResolve ← disp.waiters.atomically do
-        let ws ← get
-        match ws[fd]? with
-        | none => pure []
-        | some waiterList =>
-          let (toResolve, remaining) := waiterList.partition (waiterMatches evType)
-          if remaining.isEmpty then
-            set (ws.erase fd)
-          else
-            set (ws.insert fd remaining)
-          pure toResolve
+/-- The dispatch loop for one shard, on its own dedicated OS thread. Drains a
+whole `kevent`/`epoll_wait` batch, collects the matching waiters under a single
+lock, then resolves their promises after releasing it. -/
+private def dispatchShard (sh : Shard) : IO Unit := do
+  while ← sh.running.get do
+    let events ← EventLoop.wait sh.eventLoop 50
+    if !events.isEmpty then
+      let toResolve ← sh.waiters.atomically do
+        let mut acc : List Waiter := []
+        for ev in events do
+          let ws ← get
+          match ws[ev.socketFd]? with
+          | none => pure ()
+          | some waiterList =>
+            let (matched, remaining) := waiterList.partition (waiterMatches ev.events)
+            if remaining.isEmpty then
+              set (ws.erase ev.socketFd)
+            else
+              set (ws.insert ev.socketFd remaining)
+            acc := acc ++ matched
+        pure acc
       for w in toResolve do
         w.promise.resolve ()
 
-/-- Create a new EventDispatcher with a running dispatch loop. -/
-def create : IO EventDispatcher := do
-  let el ← EventLoop.create
-  let waiters ← Std.Mutex.new (∅ : Std.HashMap Nat (List Waiter))
-  let running ← IO.mkRef true
-  let disp : EventDispatcher := EventDispatcher.mk el waiters running
-  -- Start the dispatch loop on a dedicated OS thread
-  let _ ← IO.asTask (prio := .dedicated) (dispatchLoop disp)
-  pure disp
+/-- Register a waiter for a socket fd on its shard (`fd % N`) and add it to that
+shard's event loop. Internal. -/
+private def register (disp : EventDispatcher) (raw : RawSocket)
+    (evts : EventType) : IO (IO.Promise Unit) := do
+  let fdNat ← FFI.socketGetFd raw
+  let promise ← IO.Promise.new
+  let waiter : Waiter := { promise := promise, events := evts }
+  if h : 0 < disp.shards.size then
+    let sh := disp.shards[fdNat % disp.shards.size]'(Nat.mod_lt fdNat h)
+    sh.waiters.atomically do
+      let ws ← get
+      set (ws.insert fdNat (waiter :: ws.getD fdNat []))
+    FFI.eventLoopAdd sh.eventLoop raw evts.flags
+  pure promise
 
-/-- Stop the dispatch loop and close the event loop. -/
+/-- Create a new `EventDispatcher` with `shards` independent event loops and
+dispatch threads (default 4). -/
+def create (shards : Nat := 4) : IO EventDispatcher := do
+  let n := max 1 shards
+  let mut arr : Array Shard := Array.mkEmpty n
+  for _ in [0:n] do
+    let eventLoop ← EventLoop.create
+    let waiters ← Std.Mutex.new (∅ : Std.HashMap Nat (List Waiter))
+    let running ← IO.mkRef true
+    let sh : Shard := { eventLoop := eventLoop, waiters := waiters, running := running }
+    let _ ← IO.asTask (prio := .dedicated) (dispatchShard sh)
+    arr := arr.push sh
+  pure (EventDispatcher.mk arr)
+
+/-- Stop all dispatch loops and close every shard's event loop. -/
 def shutdown (disp : EventDispatcher) : IO Unit := do
-  disp.running.set false
-  EventLoop.close disp.eventLoop
+  for sh in disp.shards do
+    sh.running.set false
+  for sh in disp.shards do
+    EventLoop.close sh.eventLoop
 
 /-- Wait for a socket to become readable. Suspends the Green thread
     (frees the pool thread) and resumes when the socket is readable.

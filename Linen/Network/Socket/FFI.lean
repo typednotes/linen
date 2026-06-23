@@ -194,6 +194,20 @@ opaque getSockNamePort (sock : @& RawSocket) : IO UInt16
 @[extern "linen_getaddrinfo"]
 opaque getAddrInfo (node : @& String) (service : @& String) : IO (List (Nat × String × Nat))
 
+-- ── Resource limits ──
+
+/-- Best-effort raise of the process's soft open-file limit (`RLIMIT_NOFILE`)
+    toward `target`, clamped to the hard limit. Returns the resulting soft
+    limit (so callers can scale a workload to fit). Never throws.
+    $$\text{setFdLimit} : \text{USize} \to \text{IO Nat}$$ -/
+@[extern "linen_set_fd_limit"]
+opaque setFdLimit (target : USize) : IO Nat
+
+/-- Number of online CPUs (≈ Lean's default worker-pool size). At least 1.
+    $$\text{numCpus} : \text{IO Nat}$$ -/
+@[extern "linen_num_cpus"]
+opaque numCpus : IO Nat
+
 -- ── Non-blocking socket operations ──
 -- Return outcome sum types instead of throwing on EAGAIN/EWOULDBLOCK.
 

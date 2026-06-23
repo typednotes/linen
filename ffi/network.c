@@ -29,6 +29,7 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/select.h>
+#include <sys/resource.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -383,6 +384,44 @@ static int resolve_addr(const char *host, uint16_t port, int family_hint,
     *outlen = res->ai_addrlen;
     freeaddrinfo(res);
     return 0;
+}
+
+/* ================================================================
+ * RESOURCE LIMITS
+ * ================================================================ */
+
+/**
+ * Best-effort raise of the soft RLIMIT_NOFILE (open-file limit) toward
+ * `target`, clamped to the hard limit. Returns the resulting soft limit so a
+ * caller can scale its workload to fit. Never throws — on any failure it just
+ * reports the current soft limit.
+ */
+LEAN_EXPORT lean_obj_res linen_set_fd_limit(size_t target) {
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_NOFILE, &rl) != 0) {
+        return lean_io_result_mk_ok(lean_box((size_t)0));
+    }
+    rlim_t want = (rlim_t)target;
+    if (rl.rlim_max != RLIM_INFINITY && want > rl.rlim_max) want = rl.rlim_max;
+    struct rlimit nrl = rl;
+    nrl.rlim_cur = want;
+    if (setrlimit(RLIMIT_NOFILE, &nrl) != 0) {
+        /* macOS may reject values above kern.maxfilesperproc; try a cap */
+        nrl.rlim_cur = (want > 10240) ? 10240 : want;
+        setrlimit(RLIMIT_NOFILE, &nrl);
+    }
+    getrlimit(RLIMIT_NOFILE, &rl);
+    return lean_io_result_mk_ok(lean_box((size_t)rl.rlim_cur));
+}
+
+/**
+ * Number of online CPUs (≈ the size of Lean's default worker pool). Used to
+ * report the green side's OS-thread budget. Returns at least 1.
+ */
+LEAN_EXPORT lean_obj_res linen_num_cpus(void) {
+    long n = sysconf(_SC_NPROCESSORS_ONLN);
+    if (n < 1) n = 1;
+    return lean_io_result_mk_ok(lean_box((size_t)n));
 }
 
 /* ================================================================

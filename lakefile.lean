@@ -34,5 +34,10 @@ lean_lib Tests where
 lean_exe linen where
   root := `Main
 
-lean_exe bench where
-  root := `Bench
+-- Example programs live under `Examples/` and share one entrypoint:
+-- `lake exe examples <name> [args...]`.
+lean_lib Examples where
+  globs := #[.submodules `Examples]
+
+lean_exe examples where
+  root := `Examples.Main
