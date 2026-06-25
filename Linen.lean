@@ -10,6 +10,8 @@ import Linen.Control.Concurrent.MVar
 import Linen.Control.Concurrent.QSem
 import Linen.Control.Concurrent.QSemN
 import Linen.Control.Monad
+import Linen.Data.Bifunctor
+import Linen.Data.Bits
 import Linen.Data.Functor
 import Linen.Data.Json
 import Linen.Network.Socket.Types

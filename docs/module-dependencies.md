@@ -42,13 +42,13 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 16. `Hale.Base.Control.Concurrent.Green` -->
 <!-- 17. `Hale.Base.Control.Concurrent.Scheduler` -->
 <!-- 18. `Hale.Base.Control.Concurrent` -->
-<!-- 19. `Hale.Network.Network.Socket.Types` -->
-<!-- 20. `Hale.Network.Network.Socket.FFI` -->
-<!-- 21. `Hale.Network.Network.Socket` -->
-<!-- 22. `Hale.Network.Network.Socket.EventDispatcher` -->
-23. `Hale.Base.Control.Monad`
-24. `Hale.Base.Data.Bifunctor`
-25. `Hale.Base.Data.Bits`
+<!-- 19. `Hale.Base.Control.Monad` -->
+<!-- 20. `Hale.Base.Data.Bifunctor` -->
+<!-- 21. `Hale.Base.Data.Bits` -->
+<!-- 22. `Hale.Network.Network.Socket.Types` -->
+<!-- 23. `Hale.Network.Network.Socket.FFI` -->
+<!-- 24. `Hale.Network.Network.Socket` -->
+<!-- 25. `Hale.Network.Network.Socket.EventDispatcher` -->
 26. `Hale.Base.Data.Bool`
 27. `Hale.Base.Data.Char`
 28. `Hale.Base.Data.Complex`

@@ -2,7 +2,7 @@
   Tests for `Linen.Control.Monad`.
 
   Covers the monad combinators not already in Lean core: `join`,
-  `replicateM`, and `replicateM_`.
+  `replicateM`, `replicateM_`, `when`, and `unless`.
 -/
 import Linen.Control.Monad
 
@@ -26,5 +26,16 @@ namespace Tests.Control.Monad
 
 -- `join_pure` law holds for the `Id` monad (checked by reduction).
 example (x : Id Nat) : join (pure x) = x := join_pure x
+
+-- `when`/`unless` run the action only on true/false respectively; we use
+-- `Option` so the effect is observable (`none` action ⇒ `none` iff it ran).
+#guard («when» true  (none : Option Unit)).isNone
+#guard («when» false (none : Option Unit)).isSome
+#guard («unless» false (none : Option Unit)).isNone
+#guard («unless» true  (none : Option Unit)).isSome
+
+-- Reduction laws (checked at compile time).
+example (a : Id Unit) : «when» true a = a := when_true a
+example (a : Id Unit) : «unless» true a = pure () := unless_true a
 
 end Tests.Control.Monad

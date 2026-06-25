@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>20 modules</strong> · <strong>46 compile-time theorems</strong> · <strong>232 <code>#guard</code> checks</strong>
+  <strong>22 modules</strong> · <strong>50 compile-time theorems</strong> · <strong>268 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -52,11 +52,19 @@ Three rules hold across the whole library:
 - `Const α` — the constant (phantom) functor, the building block for `foldMap`.
 - `Contravariant` / `LawfulContravariant` — contravariant functors, with
   `Predicate` and `Equivalence` instances.
+- `Data.Bifunctor` / `LawfulBifunctor` — map over *both* type parameters
+  (`bimap`, `mapFst`, `mapSnd`), with `Prod` / `Sum` / `Except` instances and
+  verified identity & composition laws.
+- `Data.Bits` / `FiniteBits` — a Haskell-style bitwise typeclass over
+  `UInt8/16/32/64`: `and`/`or`/`xor`/`complement`/shifts, plus `testBit`, `bit`,
+  `popCount`, `setBit`/`clearBit`/`complementBit`, and width-bounded
+  `countLeadingZeros` / `countTrailingZeros` (carrying `≤ finiteBitSize` proofs).
 
 ### `Control` — applicative & monad combinators missing from core
 
 - `Control.Applicative.asum` — fold a list of alternatives with `<|>`.
-- `Control.Monad.join`, `replicateM`, `replicateM_` — flatten and repeat
+- `Control.Monad.join`, `replicateM`, `replicateM_`, `when`, `unless` — flatten,
+  repeat, and conditionally run
   monadic actions (with the `join_pure` law).
 - `Control.Category` / `LawfulCategory` — categories with identity and
   associative composition (`≫`, diagrammatic), with the lawful `Fun` instance.
@@ -150,8 +158,10 @@ open Data.Functor Control.Monad
 | Module | Description |
 |---|---|
 | `Linen.Data.Functor` | `Compose`, `Const`, `Product`, `FunctorSum`, `Contravariant` |
+| `Linen.Data.Bifunctor` | `Bifunctor`/`LawfulBifunctor`, `bimap`, `Prod`/`Sum`/`Except` instances |
+| `Linen.Data.Bits` | `Bits`/`FiniteBits` over `UInt8/16/32/64`: `popCount`, `testBit`, `setBit`, bounded clz/ctz |
 | `Linen.Control.Applicative` | `asum` |
-| `Linen.Control.Monad` | `join`, `replicateM`, `replicateM_` |
+| `Linen.Control.Monad` | `join`, `replicateM`, `replicateM_`, `when`, `unless` |
 | `Linen.Control.Category` | `Category`, `LawfulCategory`, `Fun`, the `≫` operator |
 | `Linen.Control.AutoUpdate` | periodically cached values on a dedicated thread |
 | `Linen.Control.Concurrent.MVar` | promise-based synchronisation variable (`take`/`put`/`swap`/…) |
