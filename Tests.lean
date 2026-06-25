@@ -9,6 +9,7 @@
 import Tests.Linen.Control.ApplicativeTest
 import Tests.Linen.Control.ArrowTest
 import Tests.Linen.Control.ConcurrentTest
+import Tests.Linen.Control.ExceptionTest
 import Tests.Linen.Control.AutoUpdateTest
 import Tests.Linen.Control.CategoryTest
 import Tests.Linen.Control.Concurrent.ChanTest
@@ -22,6 +23,7 @@ import Tests.Linen.Data.BitsTest
 import Tests.Linen.Data.BoolTest
 import Tests.Linen.Data.CharTest
 import Tests.Linen.Data.ComplexTest
+import Tests.Linen.Data.FunctionTest
 import Tests.Linen.Data.FunctorTest
 import Tests.Linen.Data.Json.TypesTest
 import Tests.Linen.Data.Json.EncodeTest

@@ -3,6 +3,7 @@
 import Linen.Control.Applicative
 import Linen.Control.Arrow
 import Linen.Control.Concurrent
+import Linen.Control.Exception
 import Linen.Control.AutoUpdate
 import Linen.Control.Category
 import Linen.Control.Concurrent.Chan
@@ -16,6 +17,7 @@ import Linen.Data.Bits
 import Linen.Data.Bool
 import Linen.Data.Char
 import Linen.Data.Complex
+import Linen.Data.Function
 import Linen.Data.Functor
 import Linen.Data.Json
 import Linen.Network.Socket.Types

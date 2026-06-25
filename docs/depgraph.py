@@ -30,11 +30,13 @@ DONE = {
     "Hale.Base.Control.Category",
     "Hale.Base.Control.Monad",
     "Hale.Base.Control.Arrow",
+    "Hale.Base.Control.Exception",
     "Hale.Base.Data.Bifunctor",
     "Hale.Base.Data.Bits",
     "Hale.Base.Data.Bool",
     "Hale.Base.Data.Char",
     "Hale.Base.Data.Complex",
+    "Hale.Base.Data.Function",
     "Hale.Base.Data.Either",   # covered by stdlib `Sum`/`Except` (+ `List.partitionMap`); no file
     "Hale.Base.Control.Concurrent.MVar",
     "Hale.Base.Control.Concurrent.Chan",

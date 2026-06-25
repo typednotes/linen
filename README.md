@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>26 modules</strong> · <strong>58 compile-time theorems</strong> · <strong>324 <code>#guard</code> checks</strong>
+  <strong>28 modules</strong> · <strong>60 compile-time theorems</strong> · <strong>332 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -68,6 +68,8 @@ Three rules hold across the whole library:
 - `Data.Complex α` — complex numbers over any numeric type: `Add`/`Sub`/`Mul`/`Neg`
   instances, `conjugate`, `magnitudeSquared`, with `conjugate`-involution and
   addition-commutativity proofs.
+- `Data.Function.on` / `applyTo` — the two `Data.Function` combinators core lacks
+  (`flip`/`const` already exist); `applyTo` is the function form of the `|>` pipe.
 
 ### `Control` — applicative & monad combinators missing from core
 
@@ -80,6 +82,9 @@ Three rules hold across the whole library:
 - `Control.Arrow` / `ArrowChoice` — arrows over a `Category`: `arr`, `first`,
   `second`, `split`, and (over `Sum`) `left`, `right`, `fanin`, with `Fun`
   instances.
+- `Control.Exception.bracket` / `onException` — the IO resource/cleanup patterns
+  core lacks as functions (`try`/`catch`/`finally` map to `IO.toBaseIO`/`tryCatch`/
+  `tryFinally`), built on `tryFinally` / `tryCatch`.
 - `Control.AutoUpdate` — periodically refreshed cached values: a non-blocking
   getter backed by a dedicated OS thread and a `Std.CancellationToken` for clean
   shutdown.
@@ -175,10 +180,12 @@ open Data.Functor Control.Monad
 | `Linen.Data.Bool` | `guard'` (list-valued guard; `bool` is already in Lean core) |
 | `Linen.Data.Char` | `Data.Char'` predicates (`isAscii`/`isControl`/…) + `digitToInt`/`intToDigit` |
 | `Linen.Data.Complex` | `Complex α` over any numeric type: arithmetic, `conjugate`, `magnitudeSquared` |
+| `Linen.Data.Function` | `on`, `applyTo` (the `Data.Function` combinators core lacks) |
 | `Linen.Control.Applicative` | `asum` |
 | `Linen.Control.Monad` | `join`, `replicateM`, `replicateM_`, `when`, `unless` |
 | `Linen.Control.Category` | `Category`, `LawfulCategory`, `Fun`, the `≫` operator |
 | `Linen.Control.Arrow` | `Arrow`/`ArrowChoice`: `arr`/`first`/`split`/`left`/`right`/`fanin`, `Fun` instances |
+| `Linen.Control.Exception` | IO `bracket` / `onException` (resource safety & failure cleanup) |
 | `Linen.Control.AutoUpdate` | periodically cached values on a dedicated thread |
 | `Linen.Control.Concurrent.MVar` | promise-based synchronisation variable (`take`/`put`/`swap`/…) |
 | `Linen.Control.Concurrent.Chan` | unbounded FIFO channel with `dup` (`write`/`read`/`tryRead`) |
