@@ -31,6 +31,7 @@ DONE = {
     "Hale.Base.Data.Bifunctor",
     "Hale.Base.Data.Bits",
     "Hale.Base.Data.Bool",
+    "Hale.Base.Data.Char",
     "Hale.Base.Control.Concurrent.MVar",
     "Hale.Base.Control.Concurrent.Chan",
     "Hale.Base.Control.Concurrent.QSem",

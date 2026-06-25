@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>23 modules</strong> · <strong>52 compile-time theorems</strong> · <strong>273 <code>#guard</code> checks</strong>
+  <strong>24 modules</strong> · <strong>56 compile-time theorems</strong> · <strong>303 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -61,6 +61,10 @@ Three rules hold across the whole library:
   `countLeadingZeros` / `countTrailingZeros` (carrying `≤ finiteBitSize` proofs).
 - `Data.Bool.guard'` — the list-valued guard (`[x]` / `[]`) that core lacks
   (`Data.Bool.bool` is already Lean core's `bool`, so it isn't re-ported).
+- `Data.Char'` — the Haskell `Data.Char` predicates core lacks (`isAscii`,
+  `isLatin1`, `isControl`, `isPrint`, `isOctDigit`, `isAsciiUpper`/`Lower`,
+  `isPunctuation`) plus `digitToInt` (proof-carrying `{n // n < 16}`) and
+  `intToDigit`, with a verified hex roundtrip.
 
 ### `Control` — applicative & monad combinators missing from core
 
@@ -163,6 +167,7 @@ open Data.Functor Control.Monad
 | `Linen.Data.Bifunctor` | `Bifunctor`/`LawfulBifunctor`, `bimap`, `Prod`/`Sum`/`Except` instances |
 | `Linen.Data.Bits` | `Bits`/`FiniteBits` over `UInt8/16/32/64`: `popCount`, `testBit`, `setBit`, bounded clz/ctz |
 | `Linen.Data.Bool` | `guard'` (list-valued guard; `bool` is already in Lean core) |
+| `Linen.Data.Char` | `Data.Char'` predicates (`isAscii`/`isControl`/…) + `digitToInt`/`intToDigit` |
 | `Linen.Control.Applicative` | `asum` |
 | `Linen.Control.Monad` | `join`, `replicateM`, `replicateM_`, `when`, `unless` |
 | `Linen.Control.Category` | `Category`, `LawfulCategory`, `Fun`, the `≫` operator |
