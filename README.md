@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>24 modules</strong> · <strong>56 compile-time theorems</strong> · <strong>303 <code>#guard</code> checks</strong>
+  <strong>25 modules</strong> · <strong>58 compile-time theorems</strong> · <strong>314 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -65,6 +65,9 @@ Three rules hold across the whole library:
   `isLatin1`, `isControl`, `isPrint`, `isOctDigit`, `isAsciiUpper`/`Lower`,
   `isPunctuation`) plus `digitToInt` (proof-carrying `{n // n < 16}`) and
   `intToDigit`, with a verified hex roundtrip.
+- `Data.Complex α` — complex numbers over any numeric type: `Add`/`Sub`/`Mul`/`Neg`
+  instances, `conjugate`, `magnitudeSquared`, with `conjugate`-involution and
+  addition-commutativity proofs.
 
 ### `Control` — applicative & monad combinators missing from core
 
@@ -168,6 +171,7 @@ open Data.Functor Control.Monad
 | `Linen.Data.Bits` | `Bits`/`FiniteBits` over `UInt8/16/32/64`: `popCount`, `testBit`, `setBit`, bounded clz/ctz |
 | `Linen.Data.Bool` | `guard'` (list-valued guard; `bool` is already in Lean core) |
 | `Linen.Data.Char` | `Data.Char'` predicates (`isAscii`/`isControl`/…) + `digitToInt`/`intToDigit` |
+| `Linen.Data.Complex` | `Complex α` over any numeric type: arithmetic, `conjugate`, `magnitudeSquared` |
 | `Linen.Control.Applicative` | `asum` |
 | `Linen.Control.Monad` | `join`, `replicateM`, `replicateM_`, `when`, `unless` |
 | `Linen.Control.Category` | `Category`, `LawfulCategory`, `Fun`, the `≫` operator |

@@ -32,6 +32,7 @@ DONE = {
     "Hale.Base.Data.Bits",
     "Hale.Base.Data.Bool",
     "Hale.Base.Data.Char",
+    "Hale.Base.Data.Complex",
     "Hale.Base.Control.Concurrent.MVar",
     "Hale.Base.Control.Concurrent.Chan",
     "Hale.Base.Control.Concurrent.QSem",

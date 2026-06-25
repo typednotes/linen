@@ -47,11 +47,11 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 21. `Hale.Base.Data.Bits` -->
 <!-- 22. `Hale.Base.Data.Bool` -->
 <!-- 23. `Hale.Base.Data.Char` -->
-<!-- 24. `Hale.Network.Network.Socket.Types` -->
-<!-- 25. `Hale.Network.Network.Socket.FFI` -->
-<!-- 26. `Hale.Network.Network.Socket` -->
-<!-- 27. `Hale.Network.Network.Socket.EventDispatcher` -->
-28. `Hale.Base.Data.Complex`
+<!-- 24. `Hale.Base.Data.Complex` -->
+<!-- 25. `Hale.Network.Network.Socket.Types` -->
+<!-- 26. `Hale.Network.Network.Socket.FFI` -->
+<!-- 27. `Hale.Network.Network.Socket` -->
+<!-- 28. `Hale.Network.Network.Socket.EventDispatcher` -->
 29. `Hale.Base.Data.Either`
 30. `Hale.Base.Control.Arrow`
 31. `Hale.Base.Control.Exception`

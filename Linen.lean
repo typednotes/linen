@@ -14,6 +14,7 @@ import Linen.Data.Bifunctor
 import Linen.Data.Bits
 import Linen.Data.Bool
 import Linen.Data.Char
+import Linen.Data.Complex
 import Linen.Data.Functor
 import Linen.Data.Json
 import Linen.Network.Socket.Types
