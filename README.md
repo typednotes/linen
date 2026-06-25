@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>22 modules</strong> · <strong>50 compile-time theorems</strong> · <strong>268 <code>#guard</code> checks</strong>
+  <strong>23 modules</strong> · <strong>52 compile-time theorems</strong> · <strong>273 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -59,6 +59,8 @@ Three rules hold across the whole library:
   `UInt8/16/32/64`: `and`/`or`/`xor`/`complement`/shifts, plus `testBit`, `bit`,
   `popCount`, `setBit`/`clearBit`/`complementBit`, and width-bounded
   `countLeadingZeros` / `countTrailingZeros` (carrying `≤ finiteBitSize` proofs).
+- `Data.Bool.guard'` — the list-valued guard (`[x]` / `[]`) that core lacks
+  (`Data.Bool.bool` is already Lean core's `bool`, so it isn't re-ported).
 
 ### `Control` — applicative & monad combinators missing from core
 
@@ -160,6 +162,7 @@ open Data.Functor Control.Monad
 | `Linen.Data.Functor` | `Compose`, `Const`, `Product`, `FunctorSum`, `Contravariant` |
 | `Linen.Data.Bifunctor` | `Bifunctor`/`LawfulBifunctor`, `bimap`, `Prod`/`Sum`/`Except` instances |
 | `Linen.Data.Bits` | `Bits`/`FiniteBits` over `UInt8/16/32/64`: `popCount`, `testBit`, `setBit`, bounded clz/ctz |
+| `Linen.Data.Bool` | `guard'` (list-valued guard; `bool` is already in Lean core) |
 | `Linen.Control.Applicative` | `asum` |
 | `Linen.Control.Monad` | `join`, `replicateM`, `replicateM_`, `when`, `unless` |
 | `Linen.Control.Category` | `Category`, `LawfulCategory`, `Fun`, the `≫` operator |

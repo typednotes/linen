@@ -18,6 +18,7 @@ import Tests.Linen.Control.Concurrent.QSemNTest
 import Tests.Linen.Control.MonadTest
 import Tests.Linen.Data.BifunctorTest
 import Tests.Linen.Data.BitsTest
+import Tests.Linen.Data.BoolTest
 import Tests.Linen.Data.FunctorTest
 import Tests.Linen.Data.Json.TypesTest
 import Tests.Linen.Data.Json.EncodeTest
