@@ -12,9 +12,10 @@ PRIORITIZE = [
     "Hale.Network.Network.Socket.EventDispatcher",
 ]
 
-# Modules already ported into `linen` (Linen/). They are emitted first (and
-# commented out) so the active TODO list starts right after them. Keep this in
-# sync as modules land; order within does not matter.
+# Modules that need no further work — either ported into `linen` (Linen/), or
+# covered entirely by the Lean standard library so nothing is re-declared (per
+# the import rules, e.g. `Either` → `Sum`/`Except`). Emitted first (commented
+# out) so the active TODO list starts right after them. Keep in sync.
 DONE = {
     "Hale.Aeson.Data.Aeson.Types",
     "Hale.Aeson.Data.Aeson.Decode",
@@ -28,11 +29,13 @@ DONE = {
     "Hale.Base.Control.Applicative",
     "Hale.Base.Control.Category",
     "Hale.Base.Control.Monad",
+    "Hale.Base.Control.Arrow",
     "Hale.Base.Data.Bifunctor",
     "Hale.Base.Data.Bits",
     "Hale.Base.Data.Bool",
     "Hale.Base.Data.Char",
     "Hale.Base.Data.Complex",
+    "Hale.Base.Data.Either",   # covered by stdlib `Sum`/`Except` (+ `List.partitionMap`); no file
     "Hale.Base.Control.Concurrent.MVar",
     "Hale.Base.Control.Concurrent.Chan",
     "Hale.Base.Control.Concurrent.QSem",

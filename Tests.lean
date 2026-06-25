@@ -7,6 +7,7 @@
       lake build Tests
 -/
 import Tests.Linen.Control.ApplicativeTest
+import Tests.Linen.Control.ArrowTest
 import Tests.Linen.Control.ConcurrentTest
 import Tests.Linen.Control.AutoUpdateTest
 import Tests.Linen.Control.CategoryTest
