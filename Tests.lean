@@ -27,7 +27,10 @@ import Tests.Linen.Data.ComplexTest
 import Tests.Linen.Data.FunctionTest
 import Tests.Linen.Data.FunctorTest
 import Tests.Linen.Data.IxTest
+import Tests.Linen.Data.ListTest
 import Tests.Linen.Data.List.NonEmptyTest
+import Tests.Linen.Data.NewtypeTest
+import Tests.Linen.Data.OrdTest
 import Tests.Linen.Data.Json.TypesTest
 import Tests.Linen.Data.Json.EncodeTest
 import Tests.Linen.Data.Json.DecodeTest

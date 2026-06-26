@@ -47,6 +47,10 @@ DONE = {
     "Hale.Base.Data.Ix",
     "Hale.Base.Data.List.NonEmpty",
     "Hale.Base.Data.Foldable",
+    "Hale.Base.Data.List",
+    "Hale.Base.Data.Maybe",   # = stdlib `Option`/`List` (elim/getD/get/filterMap/head?/toList); no file
+    "Hale.Base.Data.Newtype",
+    "Hale.Base.Data.Ord",
     "Hale.Base.Data.Either",   # covered by stdlib `Sum`/`Except` (+ `List.partitionMap`); no file
     "Hale.Base.Control.Concurrent.MVar",
     "Hale.Base.Control.Concurrent.Chan",

@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>31 modules</strong> · <strong>67 compile-time theorems</strong> · <strong>394 <code>#guard</code> checks</strong>
+  <strong>34 modules</strong> · <strong>81 compile-time theorems</strong> · <strong>435 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -76,9 +76,19 @@ Three rules hold across the whole library:
 - `Data.List.NonEmpty` — a non-empty list (`head`/`tail`) with total `head`/`last`,
   `length : {n // n ≥ 1}`, folds (`foldr1`/`foldl1`), and `Functor`/`Monad`
   instances; length-preservation proofs for `reverse`/`map`.
+- `Data.List'` — the `Data.List` operations core lacks: `transpose` (structural,
+  no fuel), `tails`/`inits` (as `NonEmpty`), `subsequences`, `permutations`,
+  `mapAccumL`/`mapAccumR`, `sortOn`, `maximumBy`/`minimumBy`, `unionBy`/
+  `intersectBy`, `insertBy`.
 - `Data.Foldable` — a `Foldable` typeclass (`foldr`/`foldl`/`toList`) with derived
   `foldMap`/`null`/`length`/`any`/`all`/`find?`/`elem`/`sum`/`product`/`minimum?`/
   `maximum?` and total `minimum1`/`maximum1`; instances for `List`/`Option`/`NonEmpty`/`Sum`.
+- `Data.Newtype` — the Haskell monoid/semigroup wrappers `Dual`, `Endo`, `First`,
+  `Last`, `Sum`, `Product`, `All`, `Any`, each with an `Append` instance and a
+  verified associativity law.
+- `Data.Ord` — `Down` (reversed `Ord`/`BEq`, for descending sorts) and a
+  proof-carrying `clamp` returning `{y // lo ≤ y ∧ y ≤ hi}` (`comparing` is core's
+  `compareOn`).
 
 ### `Control` — applicative & monad combinators missing from core
 
@@ -191,8 +201,11 @@ open Data.Functor Control.Monad
 | `Linen.Data.Complex` | `Complex α` over any numeric type: arithmetic, `conjugate`, `magnitudeSquared` |
 | `Linen.Data.Function` | `on`, `applyTo` (the `Data.Function` combinators core lacks) |
 | `Linen.Data.Ix` | `Ix` index class: `range`/`rangeSize`/`inRange` + proof-carrying `index`, `Nat`/`Int`/`Char`/`Bool`/product |
+| `Linen.Data.List` | `Data.List'` extras: `transpose`, `tails`/`inits`, `permutations`, `sortOn`, `maximumBy`, `unionBy`, … |
 | `Linen.Data.List.NonEmpty` | non-empty list: total `head`/`last`, `length ≥ 1`, `foldr1`/`foldl1`, `Functor`/`Monad` |
 | `Linen.Data.Foldable` | `Foldable` class + derived `sum`/`any`/`find?`/`minimum?`/…; `List`/`Option`/`NonEmpty`/`Sum` |
+| `Linen.Data.Newtype` | monoid wrappers `Dual`/`Endo`/`First`/`Last`/`Sum`/`Product`/`All`/`Any` (+ assoc laws) |
+| `Linen.Data.Ord` | `Down` (reversed ordering) + proof-carrying `clamp` |
 | `Linen.Control.Applicative` | `asum` |
 | `Linen.Control.Monad` | `join`, `replicateM`, `replicateM_`, `when`, `unless` |
 | `Linen.Control.Category` | `Category`, `LawfulCategory`, `Fun`, the `≫` operator |

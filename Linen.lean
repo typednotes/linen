@@ -22,7 +22,10 @@ import Linen.Data.Function
 import Linen.Data.Functor
 import Linen.Data.Ix
 import Linen.Data.Json
+import Linen.Data.List
 import Linen.Data.List.NonEmpty
+import Linen.Data.Newtype
+import Linen.Data.Ord
 import Linen.Network.Socket.Types
 import Linen.Network.Socket.FFI
 import Linen.Network.Socket
