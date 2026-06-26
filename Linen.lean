@@ -16,10 +16,13 @@ import Linen.Data.Bifunctor
 import Linen.Data.Bits
 import Linen.Data.Bool
 import Linen.Data.Char
+import Linen.Data.Foldable
 import Linen.Data.Complex
 import Linen.Data.Function
 import Linen.Data.Functor
+import Linen.Data.Ix
 import Linen.Data.Json
+import Linen.Data.List.NonEmpty
 import Linen.Network.Socket.Types
 import Linen.Network.Socket.FFI
 import Linen.Network.Socket

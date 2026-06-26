@@ -21,10 +21,13 @@ import Tests.Linen.Control.MonadTest
 import Tests.Linen.Data.BifunctorTest
 import Tests.Linen.Data.BitsTest
 import Tests.Linen.Data.BoolTest
+import Tests.Linen.Data.FoldableTest
 import Tests.Linen.Data.CharTest
 import Tests.Linen.Data.ComplexTest
 import Tests.Linen.Data.FunctionTest
 import Tests.Linen.Data.FunctorTest
+import Tests.Linen.Data.IxTest
+import Tests.Linen.Data.List.NonEmptyTest
 import Tests.Linen.Data.Json.TypesTest
 import Tests.Linen.Data.Json.EncodeTest
 import Tests.Linen.Data.Json.DecodeTest

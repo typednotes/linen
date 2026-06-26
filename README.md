@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>28 modules</strong> · <strong>60 compile-time theorems</strong> · <strong>332 <code>#guard</code> checks</strong>
+  <strong>31 modules</strong> · <strong>67 compile-time theorems</strong> · <strong>394 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -70,6 +70,15 @@ Three rules hold across the whole library:
   addition-commutativity proofs.
 - `Data.Function.on` / `applyTo` — the two `Data.Function` combinators core lacks
   (`flip`/`const` already exist); `applyTo` is the function form of the `|>` pipe.
+- `Data.Ix` — an index typeclass (Haskell `Data.Ix`): `range`, `rangeSize`,
+  `inRange`, and a proof-carrying `index` (`{n // n < rangeSize bounds}`), with
+  `Nat`/`Int`/`Char`/`Bool`/product instances.
+- `Data.List.NonEmpty` — a non-empty list (`head`/`tail`) with total `head`/`last`,
+  `length : {n // n ≥ 1}`, folds (`foldr1`/`foldl1`), and `Functor`/`Monad`
+  instances; length-preservation proofs for `reverse`/`map`.
+- `Data.Foldable` — a `Foldable` typeclass (`foldr`/`foldl`/`toList`) with derived
+  `foldMap`/`null`/`length`/`any`/`all`/`find?`/`elem`/`sum`/`product`/`minimum?`/
+  `maximum?` and total `minimum1`/`maximum1`; instances for `List`/`Option`/`NonEmpty`/`Sum`.
 
 ### `Control` — applicative & monad combinators missing from core
 
@@ -181,6 +190,9 @@ open Data.Functor Control.Monad
 | `Linen.Data.Char` | `Data.Char'` predicates (`isAscii`/`isControl`/…) + `digitToInt`/`intToDigit` |
 | `Linen.Data.Complex` | `Complex α` over any numeric type: arithmetic, `conjugate`, `magnitudeSquared` |
 | `Linen.Data.Function` | `on`, `applyTo` (the `Data.Function` combinators core lacks) |
+| `Linen.Data.Ix` | `Ix` index class: `range`/`rangeSize`/`inRange` + proof-carrying `index`, `Nat`/`Int`/`Char`/`Bool`/product |
+| `Linen.Data.List.NonEmpty` | non-empty list: total `head`/`last`, `length ≥ 1`, `foldr1`/`foldl1`, `Functor`/`Monad` |
+| `Linen.Data.Foldable` | `Foldable` class + derived `sum`/`any`/`find?`/`minimum?`/…; `List`/`Option`/`NonEmpty`/`Sum` |
 | `Linen.Control.Applicative` | `asum` |
 | `Linen.Control.Monad` | `join`, `replicateM`, `replicateM_`, `when`, `unless` |
 | `Linen.Control.Category` | `Category`, `LawfulCategory`, `Fun`, the `≫` operator |

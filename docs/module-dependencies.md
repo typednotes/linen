@@ -52,20 +52,20 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 26. `Hale.Base.Control.Arrow` -->
 <!-- 27. `Hale.Base.Control.Exception` -->
 <!-- 28. `Hale.Base.Data.Function` -->
-<!-- 29. `Hale.Network.Network.Socket.Types` -->
-<!-- 30. `Hale.Network.Network.Socket.FFI` -->
-<!-- 31. `Hale.Network.Network.Socket` -->
-<!-- 32. `Hale.Network.Network.Socket.EventDispatcher` -->
-33. `Hale.Base.Data.Functor.Compose`
-34. `Hale.Base.Data.Functor.Const`
-35. `Hale.Base.Data.Functor.Contravariant`
-36. `Hale.Base.Data.Functor.Identity`
-37. `Hale.Base.Data.Functor.Product`
-38. `Hale.Base.Data.Functor.Sum`
-39. `Hale.Base.Data.IORef`
-40. `Hale.Base.Data.Ix`
-41. `Hale.Base.Data.List.NonEmpty`
-42. `Hale.Base.Data.Foldable`
+<!-- 29. `Hale.Base.Data.Functor.Compose` -->
+<!-- 30. `Hale.Base.Data.Functor.Const` -->
+<!-- 31. `Hale.Base.Data.Functor.Contravariant` -->
+<!-- 32. `Hale.Base.Data.Functor.Identity` -->
+<!-- 33. `Hale.Base.Data.Functor.Product` -->
+<!-- 34. `Hale.Base.Data.Functor.Sum` -->
+<!-- 35. `Hale.Base.Data.IORef` -->
+<!-- 36. `Hale.Base.Data.Ix` -->
+<!-- 37. `Hale.Base.Data.List.NonEmpty` -->
+<!-- 38. `Hale.Base.Data.Foldable` -->
+<!-- 39. `Hale.Network.Network.Socket.Types` -->
+<!-- 40. `Hale.Network.Network.Socket.FFI` -->
+<!-- 41. `Hale.Network.Network.Socket` -->
+<!-- 42. `Hale.Network.Network.Socket.EventDispatcher` -->
 43. `Hale.Base.Data.List`
 44. `Hale.Base.Data.Maybe`
 45. `Hale.Base.Data.Newtype`

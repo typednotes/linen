@@ -37,6 +37,16 @@ DONE = {
     "Hale.Base.Data.Char",
     "Hale.Base.Data.Complex",
     "Hale.Base.Data.Function",
+    "Hale.Base.Data.Functor.Compose",
+    "Hale.Base.Data.Functor.Const",
+    "Hale.Base.Data.Functor.Contravariant",
+    "Hale.Base.Data.Functor.Identity",   # = Lean `Id`; no file
+    "Hale.Base.Data.Functor.Product",
+    "Hale.Base.Data.Functor.Sum",
+    "Hale.Base.Data.IORef",   # = stdlib `IO.Ref` (mkRef/get/set/modify/modifyGet); no file
+    "Hale.Base.Data.Ix",
+    "Hale.Base.Data.List.NonEmpty",
+    "Hale.Base.Data.Foldable",
     "Hale.Base.Data.Either",   # covered by stdlib `Sum`/`Except` (+ `List.partitionMap`); no file
     "Hale.Base.Control.Concurrent.MVar",
     "Hale.Base.Control.Concurrent.Chan",
