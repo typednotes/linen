@@ -18,6 +18,7 @@ import Linen.Data.Bool
 import Linen.Data.Char
 import Linen.Data.Foldable
 import Linen.Data.Complex
+import Linen.Data.Fixed
 import Linen.Data.Function
 import Linen.Data.Functor
 import Linen.Data.Ix
@@ -26,6 +27,8 @@ import Linen.Data.List
 import Linen.Data.List.NonEmpty
 import Linen.Data.Newtype
 import Linen.Data.Ord
+import Linen.Data.Proxy
+import Linen.Data.Rat
 import Linen.Network.Socket.Types
 import Linen.Network.Socket.FFI
 import Linen.Network.Socket

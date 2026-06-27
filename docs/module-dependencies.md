@@ -66,13 +66,13 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 40. `Hale.Base.Data.Maybe` -->
 <!-- 41. `Hale.Base.Data.Newtype` -->
 <!-- 42. `Hale.Base.Data.Ord` -->
-<!-- 43. `Hale.Network.Network.Socket.Types` -->
-<!-- 44. `Hale.Network.Network.Socket.FFI` -->
-<!-- 45. `Hale.Network.Network.Socket` -->
-<!-- 46. `Hale.Network.Network.Socket.EventDispatcher` -->
-47. `Hale.Base.Data.Proxy`
-48. `Hale.Base.Data.Ratio`
-49. `Hale.Base.Data.Fixed`
+<!-- 43. `Hale.Base.Data.Proxy` -->
+<!-- 44. `Hale.Base.Data.Ratio` -->
+<!-- 45. `Hale.Base.Data.Fixed` -->
+<!-- 46. `Hale.Network.Network.Socket.Types` -->
+<!-- 47. `Hale.Network.Network.Socket.FFI` -->
+<!-- 48. `Hale.Network.Network.Socket` -->
+<!-- 49. `Hale.Network.Network.Socket.EventDispatcher` -->
 50. `Hale.Base.Data.String`
 51. `Hale.Base.Data.Traversable`
 52. `Hale.Base.Data.Tuple`

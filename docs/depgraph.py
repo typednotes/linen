@@ -51,6 +51,8 @@ DONE = {
     "Hale.Base.Data.Maybe",   # = stdlib `Option`/`List` (elim/getD/get/filterMap/head?/toList); no file
     "Hale.Base.Data.Newtype",
     "Hale.Base.Data.Ord",
+    "Hale.Base.Data.Proxy",
+    "Hale.Base.Data.Ratio",   # = stdlib `Rat` (Field, mkRat, floor/ceil/abs); only `Rat.round` added
     "Hale.Base.Data.Either",   # covered by stdlib `Sum`/`Except` (+ `List.partitionMap`); no file
     "Hale.Base.Control.Concurrent.MVar",
     "Hale.Base.Control.Concurrent.Chan",
@@ -63,6 +65,7 @@ DONE = {
     "Hale.Network.Network.Socket.FFI",
     "Hale.Network.Network.Socket",
     "Hale.Network.Network.Socket.EventDispatcher",
+    "Hale.Base.Data.Fixed",
 }
 
 

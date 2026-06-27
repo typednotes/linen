@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>34 modules</strong> · <strong>81 compile-time theorems</strong> · <strong>435 <code>#guard</code> checks</strong>
+  <strong>37 modules</strong> · <strong>91 compile-time theorems</strong> · <strong>480 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -68,6 +68,9 @@ Three rules hold across the whole library:
 - `Data.Complex α` — complex numbers over any numeric type: `Add`/`Sub`/`Mul`/`Neg`
   instances, `conjugate`, `magnitudeSquared`, with `conjugate`-involution and
   addition-commutativity proofs.
+- `Data.Fixed` — fixed-point decimals with **type-level precision** (`Fixed 2` ≠
+  `Fixed 4`): exact `Add`/`Sub`/`Neg`, rescaling `Mul`, `ToString`, and exact
+  `toRat`, with `add_exact`/`sub_exact`/`neg_neg` proofs.
 - `Data.Function.on` / `applyTo` — the two `Data.Function` combinators core lacks
   (`flip`/`const` already exist); `applyTo` is the function form of the `|>` pipe.
 - `Data.Ix` — an index typeclass (Haskell `Data.Ix`): `range`, `rangeSize`,
@@ -89,6 +92,10 @@ Three rules hold across the whole library:
 - `Data.Ord` — `Down` (reversed `Ord`/`BEq`, for descending sorts) and a
   proof-carrying `clamp` returning `{y // lo ≤ y ∧ y ≤ hi}` (`comparing` is core's
   `compareOn`).
+- `Data.Proxy` — a phantom-type proxy (no runtime data) with `Functor`/`Monad`
+  instances and verified functor/monad laws.
+- `Data.Rat.round` — round-half-away-from-zero for core `Rat` (Haskell `Data.Ratio`
+  is core's `Rat`, which already has the arithmetic, `floor`/`ceil`/`abs`).
 
 ### `Control` — applicative & monad combinators missing from core
 
@@ -199,6 +206,7 @@ open Data.Functor Control.Monad
 | `Linen.Data.Bool` | `guard'` (list-valued guard; `bool` is already in Lean core) |
 | `Linen.Data.Char` | `Data.Char'` predicates (`isAscii`/`isControl`/…) + `digitToInt`/`intToDigit` |
 | `Linen.Data.Complex` | `Complex α` over any numeric type: arithmetic, `conjugate`, `magnitudeSquared` |
+| `Linen.Data.Fixed` | `Fixed p` fixed-point decimals with type-level precision: exact `+`/`-`, rescaling `*`, `toRat` |
 | `Linen.Data.Function` | `on`, `applyTo` (the `Data.Function` combinators core lacks) |
 | `Linen.Data.Ix` | `Ix` index class: `range`/`rangeSize`/`inRange` + proof-carrying `index`, `Nat`/`Int`/`Char`/`Bool`/product |
 | `Linen.Data.List` | `Data.List'` extras: `transpose`, `tails`/`inits`, `permutations`, `sortOn`, `maximumBy`, `unionBy`, … |
@@ -206,6 +214,8 @@ open Data.Functor Control.Monad
 | `Linen.Data.Foldable` | `Foldable` class + derived `sum`/`any`/`find?`/`minimum?`/…; `List`/`Option`/`NonEmpty`/`Sum` |
 | `Linen.Data.Newtype` | monoid wrappers `Dual`/`Endo`/`First`/`Last`/`Sum`/`Product`/`All`/`Any` (+ assoc laws) |
 | `Linen.Data.Ord` | `Down` (reversed ordering) + proof-carrying `clamp` |
+| `Linen.Data.Proxy` | phantom-type proxy with `Functor`/`Monad` + verified laws |
+| `Linen.Data.Rat` | `Rat.round` (round-half-away-from-zero; `Data.Ratio` is core's `Rat`) |
 | `Linen.Control.Applicative` | `asum` |
 | `Linen.Control.Monad` | `join`, `replicateM`, `replicateM_`, `when`, `unless` |
 | `Linen.Control.Category` | `Category`, `LawfulCategory`, `Fun`, the `≫` operator |
