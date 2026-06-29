@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>51 modules</strong> · <strong>111 compile-time theorems</strong> · <strong>737 <code>#guard</code> checks</strong>
+  <strong>54 modules</strong> · <strong>114 compile-time theorems</strong> · <strong>782 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -81,6 +81,14 @@ Three rules hold across the whole library:
 - `Data.CaseInsensitive` — a `FoldCase` class and a proof-carrying `CI α` wrapper
   whose `BEq`/`Ord`/`Hashable` compare a folded copy (case-insensitively) while
   `ToString`/`Repr` keep the original; `String`/`Char` instances.
+- `Data.Conduit.Internal.Pipe` — conduit's core streaming `Pipe` type, ported
+  **without `unsafe`**: a Freer-style `pipeM` (strictly positive) and a strict
+  spine make it a total, kernel-checked `Functor`/`Monad` for any effect `m`.
+- `Data.Configurator.Types` — a typed config `Value` (string/number/bool/list)
+  with a structural (no-`partial`) `toString`, and `Config = HashMap String Value`.
+- `Data.Configurator` — a `key = value` config loader/parser (comments, dotted
+  keys, quoted strings + escapes, numbers, booleans) with `lookup`/`require`/
+  `load`; parsers are structural recursions (no `Id.run`/`while`).
 - `Data.Bits` / `FiniteBits` — a Haskell-style bitwise typeclass over
   `UInt8/16/32/64`: `and`/`or`/`xor`/`complement`/shifts, plus `testBit`, `bit`,
   `popCount`, `setBit`/`clearBit`/`complementBit`, and width-bounded
@@ -261,6 +269,9 @@ open Data.Functor Control.Monad
 | `Linen.Data.ByteString.Short` | `ShortByteString` (`ByteArray` newtype): `pack`/`unpack`/`index`, `toShort`/`fromShort` |
 | `Linen.Data.ByteString.Builder` | difference-list builder (O(1) `append`): word/UTF-8/decimal/hex encoders + monoid laws |
 | `Linen.Data.CaseInsensitive` | `FoldCase` class + `CI α` wrapper: case-insensitive `BEq`/`Ord`/`Hashable`, original-preserving `ToString` |
+| `Linen.Data.Conduit.Internal.Pipe` | conduit's streaming `Pipe` (Freer `pipeM`, strict spine): total `Functor`/`Monad`, no `unsafe` |
+| `Linen.Data.Configurator.Types` | config `Value` (string/number/bool/list) + `Config = HashMap String Value` |
+| `Linen.Data.Configurator` | `key = value` config parser/loader: `parseConfig`/`lookup`/`require`/`load` |
 | `Linen.Data.Bits` | `Bits`/`FiniteBits` over `UInt8/16/32/64`: `popCount`, `testBit`, `setBit`, bounded clz/ctz |
 | `Linen.Data.Bool` | `guard'` (list-valued guard; `bool` is already in Lean core) |
 | `Linen.Data.Char` | `Data.Char'` predicates (`isAscii`/`isControl`/…) + `digitToInt`/`intToDigit` |

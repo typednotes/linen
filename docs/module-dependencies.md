@@ -93,14 +93,14 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 67. `Hale.ByteString` -->
 <!-- 68. `Hale.CaseInsensitive.Data.CaseInsensitive` -->
 <!-- 69. `Hale.CaseInsensitive` -->
-<!-- 70. `Hale.Network.Network.Socket.Types` -->
-<!-- 71. `Hale.Network.Network.Socket.FFI` -->
-<!-- 72. `Hale.Network.Network.Socket` -->
-<!-- 73. `Hale.Network.Network.Socket.EventDispatcher` -->
-74. `Hale.Conduit.Data.Conduit.Internal.Pipe`
-75. `Hale.ConfiguratorPg.Data.Configurator.Types`
-76. `Hale.ConfiguratorPg.Data.Configurator`
-77. `Hale.ConfiguratorPg`
+<!-- 70. `Hale.Conduit.Data.Conduit.Internal.Pipe` -->
+<!-- 71. `Hale.ConfiguratorPg.Data.Configurator.Types` -->
+<!-- 72. `Hale.ConfiguratorPg.Data.Configurator` -->
+<!-- 73. `Hale.ConfiguratorPg` -->
+<!-- 74. `Hale.Network.Network.Socket.Types` -->
+<!-- 75. `Hale.Network.Network.Socket.FFI` -->
+<!-- 76. `Hale.Network.Network.Socket` -->
+<!-- 77. `Hale.Network.Network.Socket.EventDispatcher` -->
 78. `Hale.Containers.Data.IntMap`
 79. `Hale.Containers.Data.Map`
 80. `Hale.Containers.Data.Map.Strict`

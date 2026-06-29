@@ -21,6 +21,9 @@ import Linen.Data.ByteString.Lazy.Char8
 import Linen.Data.ByteString.Short
 import Linen.Data.ByteString.Builder
 import Linen.Data.CaseInsensitive
+import Linen.Data.Conduit.Internal.Pipe
+import Linen.Data.Configurator.Types
+import Linen.Data.Configurator
 import Linen.Data.Bits
 import Linen.Data.Bool
 import Linen.Data.Char

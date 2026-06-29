@@ -90,6 +90,10 @@ DONE = {
     "Hale.ByteString",   # aggregator: re-exports all `ByteString.*`; covered by linen's root; no file
     "Hale.CaseInsensitive.Data.CaseInsensitive",   # ported to Linen/Data/CaseInsensitive.lean (FoldCase class + CI wrapper)
     "Hale.CaseInsensitive",   # aggregator: re-exports the CaseInsensitive module; covered by linen's root; no file
+    "Hale.Conduit.Data.Conduit.Internal.Pipe",   # ported to Linen/Data/Conduit/Internal/Pipe.lean — SOUND (no unsafe): Freer pipeM (strictly positive) + strict spine; total Functor/Monad
+    "Hale.ConfiguratorPg.Data.Configurator.Types",   # ported to Linen/Data/Configurator/Types.lean (Value.toString made structural, no partial)
+    "Hale.ConfiguratorPg.Data.Configurator",   # ported to Linen/Data/Configurator.lean (parsers rewritten structural, no Id.run/while; dead isSpace dropped)
+    "Hale.ConfiguratorPg",   # aggregator: re-exports Data.Configurator; covered by linen's root; no file
 }
 
 

@@ -27,6 +27,9 @@ import Tests.Linen.Data.ByteString.Lazy.Char8Test
 import Tests.Linen.Data.ByteString.ShortTest
 import Tests.Linen.Data.ByteString.BuilderTest
 import Tests.Linen.Data.CaseInsensitiveTest
+import Tests.Linen.Data.Conduit.Internal.PipeTest
+import Tests.Linen.Data.Configurator.TypesTest
+import Tests.Linen.Data.ConfiguratorTest
 import Tests.Linen.Data.BitsTest
 import Tests.Linen.Data.BoolTest
 import Tests.Linen.Data.FoldableTest
