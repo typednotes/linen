@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>37 modules</strong> · <strong>91 compile-time theorems</strong> · <strong>480 <code>#guard</code> checks</strong>
+  <strong>51 modules</strong> · <strong>111 compile-time theorems</strong> · <strong>737 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -52,9 +52,35 @@ Three rules hold across the whole library:
 - `Const α` — the constant (phantom) functor, the building block for `foldMap`.
 - `Contravariant` / `LawfulContravariant` — contravariant functors, with
   `Predicate` and `Equivalence` instances.
+- `Data.Base64` — RFC 4648 Base64 `encode`/`decode` over core `ByteArray`,
+  written as structural recursion (no `partial`, no `while`); the alphabet is
+  computed arithmetically and roundtrips are exercised in the tests.
 - `Data.Bifunctor` / `LawfulBifunctor` — map over *both* type parameters
   (`bimap`, `mapFst`, `mapSnd`), with `Prod` / `Sum` / `Except` instances and
   verified identity & composition laws.
+- `Data.ByteString` — a slice over core `ByteArray` (`data`/`off`/`len` with a
+  proof `off + len ≤ data.size`) giving **O(1) `take`/`drop`/`splitAt`**; a broad
+  Haskell-`Data.ByteString` API (pack/unpack, folds, scans, search,
+  group/inits/tails, prefix/suffix/infix, file & handle I/O) plus `BEq`/`Ord`/
+  `Hashable`. All loops are structural (no `partial`/fuel).
+- `Data.ByteString.Char8` — a Latin-1 `Char` view of `ByteString` (`String ↔
+  ByteString`, char-wise `map`/`filter`/`fold`/search), with `lines`/`words`/
+  `unlines`/`unwords` as structural recursions over the byte list.
+- `Data.ByteString.Lazy` — chunked lazy byte strings: non-empty strict chunks
+  with a `Thunk`-deferred tail (structural recursion through `Thunk`), with
+  `fromChunks`/`toStrict`, O(1) lazy `append`, chunk-spanning `take`/`drop`,
+  folds, and content-based `BEq`/`Ord`/`Hashable`.
+- `Data.ByteString.Lazy.Char8` — a Latin-1 `Char` view of `LazyByteString`
+  (`String ↔ LazyByteString`, char-wise `map`/`filter`/`fold`/`elem`).
+- `Data.ByteString.Short` — `ShortByteString`, a thin `ByteArray` newtype with
+  `pack`/`unpack`/`index` and `toShort`/`fromShort` conversions to the strict
+  slice, with a verified `length_toShort`.
+- `Data.ByteString.Builder` — a difference-list (`LazyByteString → LazyByteString`)
+  builder with O(1) `append`: byte/word (BE/LE)/UTF-8/decimal/hex encoders,
+  `toLazyByteString`/`toStrictByteString`, and verified monoid laws.
+- `Data.CaseInsensitive` — a `FoldCase` class and a proof-carrying `CI α` wrapper
+  whose `BEq`/`Ord`/`Hashable` compare a folded copy (case-insensitively) while
+  `ToString`/`Repr` keep the original; `String`/`Char` instances.
 - `Data.Bits` / `FiniteBits` — a Haskell-style bitwise typeclass over
   `UInt8/16/32/64`: `and`/`or`/`xor`/`complement`/shifts, plus `testBit`, `bit`,
   `popCount`, `setBit`/`clearBit`/`complementBit`, and width-bounded
@@ -96,6 +122,19 @@ Three rules hold across the whole library:
   instances and verified functor/monad laws.
 - `Data.Rat.round` — round-half-away-from-zero for core `Rat` (Haskell `Data.Ratio`
   is core's `Rat`, which already has the arithmetic, `floor`/`ceil`/`abs`).
+- `Data.String` — Haskell's `Data.String`: the `IsString` class for overloaded
+  literals, plus `String.words`/`unwords`/`unlines` (`lines` is core's
+  `splitOn "\n"`).
+- `Data.Traversable` — a `Traversable` typeclass (`traverse`/`sequence`) over
+  core `Functor`/`Applicative`, with `List`/`Option`/`NonEmpty` instances, a
+  `LawfulTraversable` law class, and the verified `traverse pure = pure` law for
+  `Option` (Haskell's `Identity` is core's `Id`).
+- `Data.Unique` — globally unique identifiers (Haskell's `Data.Unique`):
+  `newUnique : IO Unique` hands out distinct, strictly increasing values from a
+  process-global `IO.Ref` counter, with `BEq`/`Ord`/`Hashable`/`hashUnique`.
+- `Data.Void` — the uninhabited type (Haskell's `Void` is core's `Empty`,
+  `absurd` is `Empty.elim`): adds the vacuous `BEq`/`Ord`/`Hashable`/`ToString`
+  and `Inhabited (Empty → α)` instances plus the `Empty → α` singleton law.
 
 ### `Control` — applicative & monad combinators missing from core
 
@@ -141,6 +180,18 @@ Three rules hold across the whole library:
 
 - `Color` / `Intensity` enums and the ANSI escape-code builders
   (`setFg`, `setBg`, `colored`, `bold`, …).
+
+### `System.Exit` — process termination
+
+- `ExitCode` (`success` | `failure n`) with `toUInt32`/`isSuccess`/`ToString`
+  and the verified `isSuccess_iff` law, plus `exitWith`/`exitSuccess`/
+  `exitFailure` wrapping core `IO.Process.exit`.
+
+### `Network.HTTP` — HTTP wire framing
+
+- `Network.HTTP.Chunked` — HTTP/1.1 chunked transfer encoding over `ByteArray`:
+  `chunkedTransferEncoding` / `chunkedTransferTerminator` / `encodeChunked`, with
+  the hex chunk length via core `Nat.toDigits`.
 
 ### `Network.Socket` — POSIX sockets & event multiplexing
 
@@ -201,7 +252,15 @@ open Data.Functor Control.Monad
 | Module | Description |
 |---|---|
 | `Linen.Data.Functor` | `Compose`, `Const`, `Product`, `FunctorSum`, `Contravariant` |
+| `Linen.Data.Base64` | RFC 4648 `encode`/`decode` over `ByteArray` (structural, no `partial`) |
 | `Linen.Data.Bifunctor` | `Bifunctor`/`LawfulBifunctor`, `bimap`, `Prod`/`Sum`/`Except` instances |
+| `Linen.Data.ByteString` | slice over `ByteArray` (O(1) `take`/`drop`/`splitAt`); full `Data.ByteString` API + `BEq`/`Ord`/`Hashable` |
+| `Linen.Data.ByteString.Char8` | Latin-1 `Char` view of `ByteString`: `String`↔`ByteString`, `lines`/`words`/`unlines`/`unwords` |
+| `Linen.Data.ByteString.Lazy` | chunked lazy byte strings (`Thunk` tail): `fromChunks`/`toStrict`, lazy `append`, `take`/`drop`, folds |
+| `Linen.Data.ByteString.Lazy.Char8` | Latin-1 `Char` view of `LazyByteString`: `String`↔`LazyByteString`, char-wise ops |
+| `Linen.Data.ByteString.Short` | `ShortByteString` (`ByteArray` newtype): `pack`/`unpack`/`index`, `toShort`/`fromShort` |
+| `Linen.Data.ByteString.Builder` | difference-list builder (O(1) `append`): word/UTF-8/decimal/hex encoders + monoid laws |
+| `Linen.Data.CaseInsensitive` | `FoldCase` class + `CI α` wrapper: case-insensitive `BEq`/`Ord`/`Hashable`, original-preserving `ToString` |
 | `Linen.Data.Bits` | `Bits`/`FiniteBits` over `UInt8/16/32/64`: `popCount`, `testBit`, `setBit`, bounded clz/ctz |
 | `Linen.Data.Bool` | `guard'` (list-valued guard; `bool` is already in Lean core) |
 | `Linen.Data.Char` | `Data.Char'` predicates (`isAscii`/`isControl`/…) + `digitToInt`/`intToDigit` |
@@ -216,6 +275,10 @@ open Data.Functor Control.Monad
 | `Linen.Data.Ord` | `Down` (reversed ordering) + proof-carrying `clamp` |
 | `Linen.Data.Proxy` | phantom-type proxy with `Functor`/`Monad` + verified laws |
 | `Linen.Data.Rat` | `Rat.round` (round-half-away-from-zero; `Data.Ratio` is core's `Rat`) |
+| `Linen.Data.String` | `IsString` class + `String.words`/`unwords`/`unlines` (`lines` is core's `splitOn`) |
+| `Linen.Data.Traversable` | `Traversable` class (`traverse`/`sequence`) + `List`/`Option`/`NonEmpty`; `LawfulTraversable` |
+| `Linen.Data.Unique` | globally unique ids: `newUnique : IO Unique` from a global counter (`BEq`/`Ord`/`Hashable`) |
+| `Linen.Data.Void` | vacuous `Empty` instances (`BEq`/`Ord`/`Hashable`/`ToString`) + `Empty → α` singleton law |
 | `Linen.Control.Applicative` | `asum` |
 | `Linen.Control.Monad` | `join`, `replicateM`, `replicateM_`, `when`, `unless` |
 | `Linen.Control.Category` | `Category`, `LawfulCategory`, `Fun`, the `≫` operator |
@@ -230,6 +293,8 @@ open Data.Functor Control.Monad
 | `Linen.Control.Concurrent` | thread management (`forkIO`/`forkFinally`/`forkGreen`/`killThread`/`waitThread`) |
 | `Linen.Data.Json` | JSON AST, `ToJSON`/`FromJSON`, encode/decode + roundtrip proofs |
 | `Linen.System.Console.Ansi` | ANSI terminal colors and styles |
+| `Linen.System.Exit` | `ExitCode` (success/failure) + `exitWith`/`exitSuccess`/`exitFailure` over `IO.Process.exit` |
+| `Linen.Network.HTTP.Chunked` | HTTP/1.1 chunked transfer encoding over `ByteArray` (`chunkedTransferEncoding`/`encodeChunked`) |
 | `Linen.Network.Socket.Types` | phantom-typed `Socket` lifecycle, `Family`/`SockAddr`/`EventType`, non-blocking outcome types |
 | `Linen.Network.Socket.FFI` | `@[extern]` C bindings: sockets, options, UDP, `getAddrInfo`, kqueue/epoll event loop |
 | `Linen.Network.Socket` | safe phantom-typed lifecycle API, `withSocket`/`listenTCP`/`withEventLoop`, `EventLoop` |

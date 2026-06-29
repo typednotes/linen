@@ -69,34 +69,34 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 43. `Hale.Base.Data.Proxy` -->
 <!-- 44. `Hale.Base.Data.Ratio` -->
 <!-- 45. `Hale.Base.Data.Fixed` -->
-<!-- 46. `Hale.Network.Network.Socket.Types` -->
-<!-- 47. `Hale.Network.Network.Socket.FFI` -->
-<!-- 48. `Hale.Network.Network.Socket` -->
-<!-- 49. `Hale.Network.Network.Socket.EventDispatcher` -->
-50. `Hale.Base.Data.String`
-51. `Hale.Base.Data.Traversable`
-52. `Hale.Base.Data.Tuple`
-53. `Hale.Base.Data.Unique`
-54. `Hale.Base.Data.Void`
-55. `Hale.Base.System.Environment`
-56. `Hale.Base.System.Exit`
-57. `Hale.Base.System.IO`
-58. `Hale.Base`
-59. `Hale.Base64.Data.ByteString.Base64`
-60. `Hale.Base64`
-61. `Hale.BsbHttpChunked.Network.HTTP.Chunked`
-62. `Hale.BsbHttpChunked`
-63. `Hale.ByteString.Data.ByteString.Internal`
-64. `Hale.ByteString.Data.ByteString`
-65. `Hale.ByteString.Data.ByteString.Char8`
-66. `Hale.ByteString.Data.ByteString.Lazy.Internal`
-67. `Hale.ByteString.Data.ByteString.Lazy`
-68. `Hale.ByteString.Data.ByteString.Lazy.Char8`
-69. `Hale.ByteString.Data.ByteString.Short`
-70. `Hale.ByteString.Data.ByteString.Builder`
-71. `Hale.ByteString`
-72. `Hale.CaseInsensitive.Data.CaseInsensitive`
-73. `Hale.CaseInsensitive`
+<!-- 46. `Hale.Base.Data.String` -->
+<!-- 47. `Hale.Base.Data.Traversable` -->
+<!-- 48. `Hale.Base.Data.Tuple` -->
+<!-- 49. `Hale.Base.Data.Unique` -->
+<!-- 50. `Hale.Base.Data.Void` -->
+<!-- 51. `Hale.Base.System.Environment` -->
+<!-- 52. `Hale.Base.System.Exit` -->
+<!-- 53. `Hale.Base.System.IO` -->
+<!-- 54. `Hale.Base` -->
+<!-- 55. `Hale.Base64.Data.ByteString.Base64` -->
+<!-- 56. `Hale.Base64` -->
+<!-- 57. `Hale.BsbHttpChunked.Network.HTTP.Chunked` -->
+<!-- 58. `Hale.BsbHttpChunked` -->
+<!-- 59. `Hale.ByteString.Data.ByteString.Internal` -->
+<!-- 60. `Hale.ByteString.Data.ByteString` -->
+<!-- 61. `Hale.ByteString.Data.ByteString.Char8` -->
+<!-- 62. `Hale.ByteString.Data.ByteString.Lazy.Internal` -->
+<!-- 63. `Hale.ByteString.Data.ByteString.Lazy` -->
+<!-- 64. `Hale.ByteString.Data.ByteString.Lazy.Char8` -->
+<!-- 65. `Hale.ByteString.Data.ByteString.Short` -->
+<!-- 66. `Hale.ByteString.Data.ByteString.Builder` -->
+<!-- 67. `Hale.ByteString` -->
+<!-- 68. `Hale.CaseInsensitive.Data.CaseInsensitive` -->
+<!-- 69. `Hale.CaseInsensitive` -->
+<!-- 70. `Hale.Network.Network.Socket.Types` -->
+<!-- 71. `Hale.Network.Network.Socket.FFI` -->
+<!-- 72. `Hale.Network.Network.Socket` -->
+<!-- 73. `Hale.Network.Network.Socket.EventDispatcher` -->
 74. `Hale.Conduit.Data.Conduit.Internal.Pipe`
 75. `Hale.ConfiguratorPg.Data.Configurator.Types`
 76. `Hale.ConfiguratorPg.Data.Configurator`

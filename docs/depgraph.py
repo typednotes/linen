@@ -66,6 +66,30 @@ DONE = {
     "Hale.Network.Network.Socket",
     "Hale.Network.Network.Socket.EventDispatcher",
     "Hale.Base.Data.Fixed",
+    "Hale.Base.Data.String",
+    "Hale.Base.Data.Traversable",
+    "Hale.Base.Data.Tuple",   # covered: core `Prod.swap`/`Function.curry`/`uncurry` + `Data.Bifunctor` (`bimap`/`mapFst`/`mapSnd`); no file
+    "Hale.Base.Data.Unique",
+    "Hale.Base.Data.Void",
+    "Hale.Base.System.Environment",   # covered: core `IO.getEnv` (= lookupEnv) + `Option.getD`; getHome/getPath are `IO.getEnv "HOME"`/`"PATH"`; no file
+    "Hale.Base.System.Exit",
+    "Hale.Base.System.IO",   # covered: IOMode=`IO.FS.Mode`, Handle=`IO.FS.Handle`, h*/withFile/putStr*/getLine all core (`IO.FS.Handle.*`, `IO.FS.withFile`, `IO.print`/`println`, `IO.getStd*`); no file
+    "Hale.Base",   # aggregator: re-exports all `Base.*`; linen's root `Linen.lean` already plays this role; no file
+    "Hale.Base64.Data.ByteString.Base64",   # ported to Linen/Data/Base64.lean (over core `ByteArray`; no `ByteString` slice needed)
+    "Hale.Base64",   # aggregator: re-exports the Base64 module; covered by linen's root; no file
+    "Hale.BsbHttpChunked.Network.HTTP.Chunked",   # ported to Linen/Network/HTTP/Chunked.lean (over core `ByteArray`; hex via `Nat.toDigits`)
+    "Hale.BsbHttpChunked",   # aggregator: re-exports the Chunked module; covered by linen's root; no file
+    "Hale.ByteString.Data.ByteString.Internal",   # ported to Linen/Data/ByteString.lean (slice over `ByteArray`; idiomatic single module, no Internal/public split)
+    "Hale.ByteString.Data.ByteString",   # public re-export of Internal; merged into Linen/Data/ByteString.lean; no file
+    "Hale.ByteString.Data.ByteString.Char8",   # ported to Linen/Data/ByteString/Char8.lean (lines/words rewritten structural, no fuel)
+    "Hale.ByteString.Data.ByteString.Lazy.Internal",   # ported to Linen/Data/ByteString/Lazy.lean (Thunk-chunked; structural recursion through Thunk)
+    "Hale.ByteString.Data.ByteString.Lazy",   # public re-export of Lazy.Internal; merged into Linen/Data/ByteString/Lazy.lean; no file
+    "Hale.ByteString.Data.ByteString.Lazy.Char8",   # ported to Linen/Data/ByteString/Lazy/Char8.lean (thin Char view over LazyByteString)
+    "Hale.ByteString.Data.ByteString.Short",   # ported to Linen/Data/ByteString/Short.lean (ByteArray newtype; bogus self-ToString instance fixed)
+    "Hale.ByteString.Data.ByteString.Builder",   # ported to Linen/Data/ByteString/Builder.lean (diff-list; wordHex via `Nat.toDigits`, no fuel)
+    "Hale.ByteString",   # aggregator: re-exports all `ByteString.*`; covered by linen's root; no file
+    "Hale.CaseInsensitive.Data.CaseInsensitive",   # ported to Linen/Data/CaseInsensitive.lean (FoldCase class + CI wrapper)
+    "Hale.CaseInsensitive",   # aggregator: re-exports the CaseInsensitive module; covered by linen's root; no file
 }
 
 
