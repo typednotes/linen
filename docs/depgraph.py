@@ -94,6 +94,27 @@ DONE = {
     "Hale.ConfiguratorPg.Data.Configurator.Types",   # ported to Linen/Data/Configurator/Types.lean (Value.toString made structural, no partial)
     "Hale.ConfiguratorPg.Data.Configurator",   # ported to Linen/Data/Configurator.lean (parsers rewritten structural, no Id.run/while; dead isSpace dropped)
     "Hale.ConfiguratorPg",   # aggregator: re-exports Data.Configurator; covered by linen's root; no file
+    "Hale.Containers.Data.IntMap",   # ported to Linen/Data/IntMap.lean (Data.IntMap API over Std.HashMap Nat; already stdlib-backed in Hale)
+    "Hale.Containers.Data.Map",   # ported to Linen/Data/Map.lean (Data.Map API over Lean.RBMap; lookupMin/Max simplified to RBMap.min/max)
+    "Hale.Containers.Data.Map.Strict",   # re-export of Data.Map (Lean is strict — no lazy/strict distinction); covered by Linen/Data/Map.lean; no file
+    "Hale.Containers.Data.Set",   # ported to Linen/Data/Set.lean (Data.Set `Set'` over Lean.RBMap _ Unit; findMin/Max simplified)
+    "Hale.Containers",   # aggregator: re-exports Map/Map.Strict/Set/IntMap; covered by linen's root; no file
+    "Hale.Cookie.Web.Cookie",   # ported to Linen/Web/Cookie.lean (parsers/renderers rewritten pure, no Id.run/for/mut)
+    "Hale.Cookie",   # aggregator: re-exports Web.Cookie; covered by linen's root; no file
+    "Hale.DataDefault.Data.Default",   # ported to Linen/Data/Default.lean (Default class; kept distinct from Inhabited)
+    "Hale.DataDefault",   # aggregator: re-exports Data.Default; covered by linen's root; no file
+    "Hale.DataFrame.DataFrame.Internal.Types",   # ported to Linen/DataFrame/Internal/Types.lean (proof-carrying DataFrame; getRowSafe rewritten as well-founded rowAux, no fuel)
+    "Hale.DataFrame.DataFrame.IO.CSV",   # ported to Linen/DataFrame/IO/CSV.lean (for-loop state machine over finite list; sound, no while/partial/fuel)
+    "Hale.DataFrame.DataFrame.Internal.Column",   # ported to Linen/DataFrame/Internal/Column.lean (filterByMask/unique rewritten pure via zip/filterMap/foldl)
+    "Hale.DataFrame.DataFrame.Display",   # ported to Linen/DataFrame/Display.lean (Id.run for-loops rewritten pure via map/flatMap; unused padLeft dropped)
+    "Hale.DataFrame.DataFrame.Operations.Join",   # ported to Linen/DataFrame/Operations/Join.lean (nested-loop join kept imperative over finite ranges; alignment proof via map_column_aligned)
+    "Hale.DataFrame.DataFrame.Operations.Sort",   # ported to Linen/DataFrame/Operations/Sort.lean (pure; List.mergeSort over row-index permutation; needs import Init.Data.List.Sort.Lemmas)
+    "Hale.DataFrame.DataFrame.Operations.Statistics",   # ported to Linen/DataFrame/Operations/Statistics.lean (Id.run accumulators rewritten pure via filterMap/foldl)
+    "Hale.DataFrame.DataFrame.Operations.Aggregation",   # ported to Linen/DataFrame/Operations/Aggregation.lean (groupBy rewritten pure foldl+map; aggregate append-alignment proof)
+    "Hale.DataFrame.DataFrame.Operations.Subset",   # ported to Linen/DataFrame/Operations/Subset.lean (mask builders rewritten pure filter/map; filter/extract/rename alignment proofs)
+    "Hale.DataFrame.DataFrame.Operations.Transform",   # ported to Linen/DataFrame/Operations/Transform.lean (info rewritten pure; push/map/filter alignment proofs)
+    "Hale.DataFrame.DataFrame",   # umbrella: re-exports all DataFrame.* sub-modules; covered by linen's root; no file
+    "Hale.DataFrame",   # outer aggregator: re-exports Hale.DataFrame.DataFrame; covered by linen's root; no file
 }
 
 

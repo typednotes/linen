@@ -97,31 +97,31 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 71. `Hale.ConfiguratorPg.Data.Configurator.Types` -->
 <!-- 72. `Hale.ConfiguratorPg.Data.Configurator` -->
 <!-- 73. `Hale.ConfiguratorPg` -->
-<!-- 74. `Hale.Network.Network.Socket.Types` -->
-<!-- 75. `Hale.Network.Network.Socket.FFI` -->
-<!-- 76. `Hale.Network.Network.Socket` -->
-<!-- 77. `Hale.Network.Network.Socket.EventDispatcher` -->
-78. `Hale.Containers.Data.IntMap`
-79. `Hale.Containers.Data.Map`
-80. `Hale.Containers.Data.Map.Strict`
-81. `Hale.Containers.Data.Set`
-82. `Hale.Containers`
-83. `Hale.Cookie.Web.Cookie`
-84. `Hale.Cookie`
-85. `Hale.DataDefault.Data.Default`
-86. `Hale.DataDefault`
-87. `Hale.DataFrame.DataFrame.Internal.Types`
-88. `Hale.DataFrame.DataFrame.IO.CSV`
-89. `Hale.DataFrame.DataFrame.Internal.Column`
-90. `Hale.DataFrame.DataFrame.Display`
-91. `Hale.DataFrame.DataFrame.Operations.Join`
-92. `Hale.DataFrame.DataFrame.Operations.Sort`
-93. `Hale.DataFrame.DataFrame.Operations.Statistics`
-94. `Hale.DataFrame.DataFrame.Operations.Aggregation`
-95. `Hale.DataFrame.DataFrame.Operations.Subset`
-96. `Hale.DataFrame.DataFrame.Operations.Transform`
-97. `Hale.DataFrame.DataFrame`
-98. `Hale.DataFrame`
+<!-- 74. `Hale.Containers.Data.IntMap` -->
+<!-- 75. `Hale.Containers.Data.Map` -->
+<!-- 76. `Hale.Containers.Data.Map.Strict` -->
+<!-- 77. `Hale.Containers.Data.Set` -->
+<!-- 78. `Hale.Containers` -->
+<!-- 79. `Hale.Cookie.Web.Cookie` -->
+<!-- 80. `Hale.Cookie` -->
+<!-- 81. `Hale.DataDefault.Data.Default` -->
+<!-- 82. `Hale.DataDefault` -->
+<!-- 83. `Hale.DataFrame.DataFrame.Internal.Types` -->
+<!-- 84. `Hale.DataFrame.DataFrame.IO.CSV` -->
+<!-- 85. `Hale.DataFrame.DataFrame.Internal.Column` -->
+<!-- 86. `Hale.DataFrame.DataFrame.Display` -->
+<!-- 87. `Hale.DataFrame.DataFrame.Operations.Join` -->
+<!-- 88. `Hale.DataFrame.DataFrame.Operations.Sort` -->
+<!-- 89. `Hale.DataFrame.DataFrame.Operations.Statistics` -->
+<!-- 90. `Hale.DataFrame.DataFrame.Operations.Aggregation` -->
+<!-- 91. `Hale.DataFrame.DataFrame.Operations.Subset` -->
+<!-- 92. `Hale.DataFrame.DataFrame.Operations.Transform` -->
+<!-- 93. `Hale.DataFrame.DataFrame` -->
+<!-- 94. `Hale.DataFrame` -->
+<!-- 95. `Hale.Network.Network.Socket.Types` -->
+<!-- 96. `Hale.Network.Network.Socket.FFI` -->
+<!-- 97. `Hale.Network.Network.Socket` -->
+<!-- 98. `Hale.Network.Network.Socket.EventDispatcher` -->
 99. `Hale.FastLogger.System.Log.FastLogger`
 100. `Hale.FastLogger`
 101. `Hale.Hasql.Database.PostgreSQL.LibPQ.Types`

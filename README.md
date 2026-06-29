@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>54 modules</strong> · <strong>114 compile-time theorems</strong> · <strong>782 <code>#guard</code> checks</strong>
+  <strong>69 modules</strong> · <strong>121 compile-time theorems</strong> · <strong>1148 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -89,6 +89,17 @@ Three rules hold across the whole library:
 - `Data.Configurator` — a `key = value` config loader/parser (comments, dotted
   keys, quoted strings + escapes, numbers, booleans) with `lookup`/`require`/
   `load`; parsers are structural recursions (no `Id.run`/`while`).
+- `Data.Default` — the `Default` typeclass (Haskell's `Data.Default`): sensible
+  default values (`false`/`0`/`""`/`[]`/`none`/…), distinct from `Inhabited`.
+- `Data.IntMap` — Haskell's `Data.IntMap` API (`union`/`unionWith`/`intersection`/
+  `difference`/`adjust`/`toAscList`/`lookupMin`/`Max`/`isSubmapOf`/…) over
+  `Std.HashMap Nat v`.
+- `Data.Map` — Haskell's ordered `Data.Map k v` over `Lean.RBMap` ($O(\log n)$):
+  the same combinator surface as `IntMap`, plus `mapKeys`, ascending
+  `toList`/`keys`/`elems`, and verified empty-map laws.
+- `Data.Set` — Haskell's ordered `Data.Set` (`Set'`) over `Lean.RBMap _ Unit`:
+  `member`/`insert`/`union`/`intersection`/`difference`/`isSubsetOf`/`mapSet`/
+  folds/`findMin`/`Max`, ascending dedup `toList'`, and empty-set laws.
 - `Data.Bits` / `FiniteBits` — a Haskell-style bitwise typeclass over
   `UInt8/16/32/64`: `and`/`or`/`xor`/`complement`/shifts, plus `testBit`, `bit`,
   `popCount`, `setBit`/`clearBit`/`complementBit`, and width-bounded
@@ -232,6 +243,49 @@ Three rules hold across the whole library:
   instead of holding an OS thread**. This is what lets one worker pool serve many
   thousands of IO-bound connections.
 
+### `DataFrame` — typed tabular data
+
+- `DataFrame.Internal.Types` — a `DataFrame` with a **proven rectangular
+  invariant** (`columns_aligned`: every column has exactly `nRows` elements,
+  carried as a runtime-erased proof field). A heterogeneous `Value`
+  (int/float/str/bool/null) with `Ord`/conversions, named `Column`s with a
+  `ColumnType` tag, and smart constructors (`fromColumns`/`fromRows`/
+  `fromNamedColumns`) that discharge the alignment proof; safe proof-carrying
+  row access (`getRow?`), plus `GroupedDataFrame`.
+- `DataFrame.IO.CSV` — RFC 4180 CSV read/write (`parseCsv`/`toCsv`/`readCsv`/
+  `writeCsv`/`readTsv`): a finite `for`-loop state machine (quoted fields,
+  doubled-quote escapes, CRLF), `Value` type inference, and a pure float parser.
+- `DataFrame.Internal.Column` — column ops: `inferType`/`mk'`/`mapValues`/
+  `reInferType`/`filterByMask`/`toFloats`/`toStrings`/null counts/`take`/`drop`/
+  `unique` (all pure).
+- `DataFrame.Display` — render a frame as an aligned plain-text table
+  (`toString`, with truncation + ellipsis) or a Markdown table (`toMarkdown`),
+  plus `ToString`/`Repr` instances; pure `.map`/`.flatMap` rendering.
+- `DataFrame.Operations.Join` — inner/left/right/outer joins on shared key
+  columns (`join`/`innerJoin`/`leftJoin`/`rightJoin`/`outerJoin`); the result's
+  rectangular invariant is re-established via `map_column_aligned`.
+- `DataFrame.Operations.Sort` — `sortBy`/`sortByMultiple` (asc/desc, multi-key
+  with tie-breaking) via `List.mergeSort` over a row-index permutation, with a
+  proof the permuted columns stay aligned.
+- `DataFrame.Operations.Statistics` — column stats: `sum`/`mean`/`variance`/
+  `std`/`median`/`min`/`max`/`minValue`/`maxValue` and `count`/null counts
+  (numeric stats `Option Float`, skipping non-numeric/null).
+- `DataFrame.Operations.Aggregation` — `groupBy` into a `GroupedDataFrame`
+  (pure `foldl` find-or-append) and `aggregate` with `AggFunc`
+  (`sum`/`mean`/`count`/`min`/`max`/`first`/`last`/`std`/`var`).
+- `DataFrame.Operations.Subset` — `select`/`exclude` columns, `take`/`drop`/
+  `head`/`tail`/`slice` rows, `filterBy`/`filterWhere`, and `rename` — each
+  re-establishing the rectangular invariant.
+- `DataFrame.Operations.Transform` — `addColumn`/`derive` (computed columns),
+  `mapColumn`, `dropColumn`, `renameColumn`, and `dimensions`/`info`.
+
+### `Web.Cookie` — HTTP cookies
+
+- `Web.Cookie` — RFC 6265 cookie parsing/rendering: `parseCookies`/`renderCookies`
+  for `Cookie:` headers, and a `SetCookie` record (`path`/`domain`/`maxAge`/
+  `secure`/`httpOnly`/`sameSite`) with `renderSetCookie`/`parseSetCookie` for
+  `Set-Cookie:` (pure parsers, no `Id.run`/`while`).
+
 ## Quick Start
 
 Add to your `lakefile.toml`:
@@ -272,6 +326,10 @@ open Data.Functor Control.Monad
 | `Linen.Data.Conduit.Internal.Pipe` | conduit's streaming `Pipe` (Freer `pipeM`, strict spine): total `Functor`/`Monad`, no `unsafe` |
 | `Linen.Data.Configurator.Types` | config `Value` (string/number/bool/list) + `Config = HashMap String Value` |
 | `Linen.Data.Configurator` | `key = value` config parser/loader: `parseConfig`/`lookup`/`require`/`load` |
+| `Linen.Data.Default` | `Default` typeclass (sensible defaults) + instances for `Bool`/`Nat`/`String`/`List`/`Option`/… |
+| `Linen.Data.IntMap` | `Data.IntMap` API over `Std.HashMap Nat v`: union/intersection/difference/folds/`toAscList`/min-max |
+| `Linen.Data.Map` | ordered `Data.Map k v` over `Lean.RBMap`: union/intersection/difference/`mapKeys`/folds/min-max + laws |
+| `Linen.Data.Set` | ordered `Data.Set` (`Set'`) over `Lean.RBMap _ Unit`: member/union/intersection/`isSubsetOf`/folds/min-max |
 | `Linen.Data.Bits` | `Bits`/`FiniteBits` over `UInt8/16/32/64`: `popCount`, `testBit`, `setBit`, bounded clz/ctz |
 | `Linen.Data.Bool` | `guard'` (list-valued guard; `bool` is already in Lean core) |
 | `Linen.Data.Char` | `Data.Char'` predicates (`isAscii`/`isControl`/…) + `digitToInt`/`intToDigit` |
@@ -310,6 +368,17 @@ open Data.Functor Control.Monad
 | `Linen.Network.Socket.FFI` | `@[extern]` C bindings: sockets, options, UDP, `getAddrInfo`, kqueue/epoll event loop |
 | `Linen.Network.Socket` | safe phantom-typed lifecycle API, `withSocket`/`listenTCP`/`withEventLoop`, `EventLoop` |
 | `Linen.Network.Socket.EventDispatcher` | kqueue/epoll → `Green` bridge: `waitReadable`/`waitWritable`/`recvGreen`/`sendAllGreen` |
+| `Linen.Web.Cookie` | RFC 6265 cookie parse/render: `parseCookies`/`renderCookies`, `SetCookie` + `parseSetCookie`/`renderSetCookie` |
+| `Linen.DataFrame.Internal.Types` | typed tabular `DataFrame` with a proven rectangular invariant; `Value`/`Column`/`ColumnType` + smart constructors |
+| `Linen.DataFrame.IO.CSV` | RFC 4180 CSV `parseCsv`/`toCsv`/`readCsv`/`writeCsv` with type inference |
+| `Linen.DataFrame.Internal.Column` | column ops: `inferType`/`mk'`/`mapValues`/`filterByMask`/`toFloats`/`unique`/… |
+| `Linen.DataFrame.Display` | render a frame as an aligned text table (`toString`) or Markdown (`toMarkdown`) + `ToString`/`Repr` |
+| `Linen.DataFrame.Operations.Join` | inner/left/right/outer joins on shared key columns |
+| `Linen.DataFrame.Operations.Sort` | `sortBy`/`sortByMultiple` (asc/desc, multi-key) via `List.mergeSort` |
+| `Linen.DataFrame.Operations.Statistics` | column stats: `sum`/`mean`/`variance`/`std`/`median`/`min`/`max`/counts |
+| `Linen.DataFrame.Operations.Aggregation` | `groupBy` → `GroupedDataFrame` + `aggregate` with `AggFunc` |
+| `Linen.DataFrame.Operations.Subset` | `select`/`exclude`/`take`/`drop`/`slice`/`filterBy`/`filterWhere`/`rename` |
+| `Linen.DataFrame.Operations.Transform` | `addColumn`/`derive`/`mapColumn`/`dropColumn`/`renameColumn`/`dimensions`/`info` |
 
 ## Build & Test
 
