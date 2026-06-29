@@ -69,6 +69,7 @@ import Tests.Linen.Data.Json.EncodeTest
 import Tests.Linen.Data.Json.DecodeTest
 import Tests.Linen.System.Console.AnsiTest
 import Tests.Linen.System.ExitTest
+import Tests.Linen.System.Log.FastLoggerTest
 import Tests.Linen.Network.HTTP.ChunkedTest
 import Tests.Linen.Network.Socket.TypesTest
 import Tests.Linen.Network.Socket.FFITest

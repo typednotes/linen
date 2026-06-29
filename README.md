@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>69 modules</strong> · <strong>121 compile-time theorems</strong> · <strong>1148 <code>#guard</code> checks</strong>
+  <strong>70 modules</strong> · <strong>121 compile-time theorems</strong> · <strong>1148 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -206,6 +206,12 @@ Three rules hold across the whole library:
   and the verified `isSuccess_iff` law, plus `exitWith`/`exitSuccess`/
   `exitFailure` wrapping core `IO.Process.exit`.
 
+### `System.Log.FastLogger` — buffered logging
+
+- `System.Log.FastLogger` — a thread-safe buffered logger (`Std.Mutex`-protected
+  buffer, auto-flush on full / on close) to stdout/stderr/file/callback:
+  `newLoggerSet`/`pushLogStr`/`flushLogStr`/`withFastLogger`.
+
 ### `Network.HTTP` — HTTP wire framing
 
 - `Network.HTTP.Chunked` — HTTP/1.1 chunked transfer encoding over `ByteArray`:
@@ -363,6 +369,7 @@ open Data.Functor Control.Monad
 | `Linen.Data.Json` | JSON AST, `ToJSON`/`FromJSON`, encode/decode + roundtrip proofs |
 | `Linen.System.Console.Ansi` | ANSI terminal colors and styles |
 | `Linen.System.Exit` | `ExitCode` (success/failure) + `exitWith`/`exitSuccess`/`exitFailure` over `IO.Process.exit` |
+| `Linen.System.Log.FastLogger` | buffered thread-safe logger (`Std.Mutex`): `newLoggerSet`/`pushLogStr`/`flushLogStr`/`withFastLogger` |
 | `Linen.Network.HTTP.Chunked` | HTTP/1.1 chunked transfer encoding over `ByteArray` (`chunkedTransferEncoding`/`encodeChunked`) |
 | `Linen.Network.Socket.Types` | phantom-typed `Socket` lifecycle, `Family`/`SockAddr`/`EventType`, non-blocking outcome types |
 | `Linen.Network.Socket.FFI` | `@[extern]` C bindings: sockets, options, UDP, `getAddrInfo`, kqueue/epoll event loop |

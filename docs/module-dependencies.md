@@ -118,12 +118,12 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 92. `Hale.DataFrame.DataFrame.Operations.Transform` -->
 <!-- 93. `Hale.DataFrame.DataFrame` -->
 <!-- 94. `Hale.DataFrame` -->
-<!-- 95. `Hale.Network.Network.Socket.Types` -->
-<!-- 96. `Hale.Network.Network.Socket.FFI` -->
-<!-- 97. `Hale.Network.Network.Socket` -->
-<!-- 98. `Hale.Network.Network.Socket.EventDispatcher` -->
-99. `Hale.FastLogger.System.Log.FastLogger`
-100. `Hale.FastLogger`
+<!-- 95. `Hale.FastLogger.System.Log.FastLogger` -->
+<!-- 96. `Hale.FastLogger` -->
+<!-- 97. `Hale.Network.Network.Socket.Types` -->
+<!-- 98. `Hale.Network.Network.Socket.FFI` -->
+<!-- 99. `Hale.Network.Network.Socket` -->
+<!-- 100. `Hale.Network.Network.Socket.EventDispatcher` -->
 101. `Hale.Hasql.Database.PostgreSQL.LibPQ.Types`
 102. `Hale.Hasql.Database.PostgreSQL.LibPQ`
 103. `Hale.Hasql.Hasql.Connection`

@@ -115,6 +115,8 @@ DONE = {
     "Hale.DataFrame.DataFrame.Operations.Transform",   # ported to Linen/DataFrame/Operations/Transform.lean (info rewritten pure; push/map/filter alignment proofs)
     "Hale.DataFrame.DataFrame",   # umbrella: re-exports all DataFrame.* sub-modules; covered by linen's root; no file
     "Hale.DataFrame",   # outer aggregator: re-exports Hale.DataFrame.DataFrame; covered by linen's root; no file
+    "Hale.FastLogger.System.Log.FastLogger",   # ported to Linen/System/Log/FastLogger.lean (dropped vestigial AutoUpdate import; withTimedFastLogger→withFastLogger as it does no timing)
+    "Hale.FastLogger",   # aggregator: re-exports System.Log.FastLogger; covered by linen's root; no file
 }
 
 
