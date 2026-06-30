@@ -143,6 +143,17 @@ DONE = {
     "Hale.Http3.Network.HTTP3.QPACK.Table",   # ported to Linen/Network/HTTP3/QPACK/Table.lean (namespace Network.HTTP3.QPACK): 99-entry RFC 9204 App. A static table + staticLookup/staticFind; pure, verbatim
     "Hale.Http3.Network.HTTP3.QPACK.Decode",   # ported to Linen/Network/HTTP3/QPACK/Decode.lean: decodeQInt (fuel→bounded foldl) + decodeHeaderEntries (fuel→well-founded via decodeQInt_consumed); changed fromUTF8! to fromUTF8? (none on bad UTF-8 instead of panic)
     "Hale.Http3.Network.HTTP3.QPACK.Encode",   # ported to Linen/Network/HTTP3/QPACK/Encode.lean: encodeQInt (replaced Id.run while-loop with well-founded encodeQIntCont, v/128<v) + encodeStringLiteral/encodeHeaders; encode↔decode round-trip tested
+    "Hale.HttpDate.Network.HTTP.Date",   # ported to Linen/Network/HTTP/Date.lean (namespace Network.HTTP.Date): HTTPDate + parseHTTPDate (IMF-fixdate/asctime) + formatHTTPDate (Zeller dow); pure, verbatim
+    "Hale.HttpDate",   # aggregator: re-exports Network.HTTP.Date; covered by linen's root; no file
+    "Hale.HttpTypes.Network.HTTP.Types.Header",   # ported to Linen/Network/HTTP/Types/Header.lean (namespace Network.HTTP.Types): HeaderName=CI String + ~50 standard header constants; pure, verbatim (import Hale.CaseInsensitive→Linen.Data.CaseInsensitive)
+    "Hale.HttpTypes.Network.HTTP.Types.Method",   # ported to Linen/Network/HTTP/Types/Method.lean (namespace Network.HTTP.Types): StdMethod/Method + parseMethod/renderMethod + RFC 9110 isSafe/isIdempotent + laws; pure, verbatim
+    "Hale.HttpTypes.Network.HTTP.Types.Status",   # ported to Linen/Network/HTTP/Types/Status.lean (namespace Network.HTTP.Types): proof-carrying Status (100-999) + ~50 codes/aliases + class predicates + RFC 9110 mustNotHaveBody + theorems; pure, verbatim
+    "Hale.HttpTypes.Network.HTTP.Types.URI",   # ported to Linen/Network/HTTP/Types/URI.lean (namespace Network.HTTP.Types): parseQuery/renderQuery + urlEncode/urlDecode (urlDecode is structural recursion over chars, no fuel); pure, verbatim
+    "Hale.HttpTypes.Network.HTTP.Types.Version",   # ported to Linen/Network/HTTP/Types/Version.lean (namespace Network.HTTP.Types): HttpVersion + lex Ord + http09/10/11/20 + theorems; pure, verbatim
+    "Hale.HttpTypes",   # aggregator: re-exports Network.HTTP.Types.{Header,Method,Status,URI,Version}; covered by linen's root; no file
+    "Hale.HttpClient.Network.HTTP.Client.Types",   # ported to Linen/Network/HTTP/Client/Types.lean (namespace Network.HTTP.Client): Connection/Request/Response + Response accessors; import Hale.HttpTypes→specific Types.{Method,Status,Header} (avoided Types.Version to prevent HttpVersion clash); pure, verbatim
+    "Hale.HttpClient.Network.HTTP.Client.Request",   # ported to Linen/Network/HTTP/Client/Request.lean (namespace Network.HTTP.Client): serializeRequest (auto Host/Content-Length/Connection, structural for-loop) + sendRequest; pure, verbatim
+    "Hale.HttpClient.Network.HTTP.Client.Response",   # ported to Linen/Network/HTTP/Client/Response.lean: converted 5 partial-def network loops to while-loops; findCRLF/findCharIdx → stdlib find?/findIdx?; FIXED chunked-decode bug (readExactly truncated & dropped buffered following chunks → added non-truncating fillTo); #eval IO tests via mock Connection
 }
 
 

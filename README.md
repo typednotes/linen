@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>94 modules</strong> · <strong>184 compile-time theorems</strong> · <strong>1739 <code>#guard</code> checks</strong>
+  <strong>103 modules</strong> · <strong>222 compile-time theorems</strong> · <strong>1871 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -217,6 +217,37 @@ Three rules hold across the whole library:
 - `Network.HTTP.Chunked` — HTTP/1.1 chunked transfer encoding over `ByteArray`:
   `chunkedTransferEncoding` / `chunkedTransferTerminator` / `encodeChunked`, with
   the hex chunk length via core `Nat.toDigits`.
+- `Network.HTTP.Date` — HTTP date parsing/formatting (RFC 7231): `HTTPDate`,
+  `parseHTTPDate` (IMF-fixdate + asctime), and `formatHTTPDate` (IMF-fixdate with
+  the day-of-week from Zeller's congruence).
+- `Network.HTTP.Types.Header` — case-insensitive header names (`HeaderName =
+  CI String`), the `Header`/`RequestHeaders`/`ResponseHeaders` aliases, and the
+  ~50 standard header-name constants (`hContentType`, `hHost`, …).
+- `Network.HTTP.Types.Method` — `StdMethod`/`Method` (standard or custom),
+  `parseMethod`/`renderMethod`, and the RFC 9110 §9.2 `isSafe`/`isIdempotent`
+  predicates with verified laws (incl. safe ⇒ idempotent).
+- `Network.HTTP.Types.Status` — proof-carrying `Status` (a `statusValid : 100 ≤
+  code ≤ 999` field, erased at runtime), ~50 named codes + aliases, the
+  `isInformational`/…/`isServerError` class predicates, and the RFC 9110 §6.4.1
+  `mustNotHaveBody` rule with verified theorems.
+- `Network.HTTP.Types.URI` — query-string `parseQuery`/`renderQuery` (over
+  `Query = List (String × Option String)`) and percent-encoding
+  `urlEncode`/`urlDecode` (the latter a structural recursion over the char list).
+- `Network.HTTP.Types.Version` — `HttpVersion` (major/minor) with lexicographic
+  `Ord`, `ToString` (`HTTP/1.1`), the `http09`/`http10`/`http11`/`http20`
+  constants, and well-formedness theorems.
+- `Network.HTTP.Client.Types` — HTTP/1.1 client core types: the transport
+  `Connection` (read/write/close callbacks abstracting TCP vs TLS), the wire-level
+  `Request`, and the parsed `Response` with case-insensitive `findHeader`,
+  `contentLength`, and `isSuccess`.
+- `Network.HTTP.Client.Request` — HTTP/1.1 request serialization
+  (`serializeRequest`): request line + headers, auto-adding `Host` (with
+  non-default port), `Content-Length` (when a body is present), and
+  `Connection: close`, plus `sendRequest` over a `Connection`.
+- `Network.HTTP.Client.Response` — HTTP/1.1 response parsing: status line,
+  headers, and bodies via Content-Length / chunked / read-until-close
+  (`receiveResponse`, `performRequest`). The network read-loops are
+  condition-driven `while`s — no `partial`.
 
 ### `Network.HTTP2` — HTTP/2 framing (RFC 9113)
 
@@ -480,6 +511,15 @@ open Data.Functor Control.Monad
 | `Linen.System.Exit` | `ExitCode` (success/failure) + `exitWith`/`exitSuccess`/`exitFailure` over `IO.Process.exit` |
 | `Linen.System.Log.FastLogger` | buffered thread-safe logger (`Std.Mutex`): `newLoggerSet`/`pushLogStr`/`flushLogStr`/`withFastLogger` |
 | `Linen.Network.HTTP.Chunked` | HTTP/1.1 chunked transfer encoding over `ByteArray` (`chunkedTransferEncoding`/`encodeChunked`) |
+| `Linen.Network.HTTP.Date` | HTTP date parsing/formatting (RFC 7231): `HTTPDate`, `parseHTTPDate` (IMF-fixdate/asctime), `formatHTTPDate` |
+| `Linen.Network.HTTP.Types.Header` | case-insensitive `HeaderName` (`CI String`), `Header`/`RequestHeaders`/`ResponseHeaders`, ~50 standard header constants |
+| `Linen.Network.HTTP.Types.Method` | `StdMethod`/`Method`, `parseMethod`/`renderMethod`, RFC 9110 `isSafe`/`isIdempotent` + laws |
+| `Linen.Network.HTTP.Types.Status` | proof-carrying `Status` (100–999), ~50 codes + aliases, class predicates, RFC 9110 `mustNotHaveBody` + theorems |
+| `Linen.Network.HTTP.Types.URI` | query strings (`parseQuery`/`renderQuery`) + percent-encoding (`urlEncode`/`urlDecode`) |
+| `Linen.Network.HTTP.Types.Version` | `HttpVersion` (major/minor), lexicographic `Ord`, `http09`/`http10`/`http11`/`http20` |
+| `Linen.Network.HTTP.Client.Types` | HTTP/1.1 client types: transport `Connection` (TCP/TLS callbacks), `Request`, `Response` (`findHeader`/`contentLength`/`isSuccess`) |
+| `Linen.Network.HTTP.Client.Request` | HTTP/1.1 request serialization (`serializeRequest` — auto Host/Content-Length/Connection) + `sendRequest` |
+| `Linen.Network.HTTP.Client.Response` | HTTP/1.1 response parsing (`receiveResponse`/`performRequest`): status/headers + Content-Length/chunked/until-close bodies |
 | `Linen.Network.HTTP2.Frame.Types` | HTTP/2 (RFC 9113) framing types: 31-bit `StreamId`, `FrameType`/`ErrorCode`/`SettingsKeyId` + total conversions, `FrameFlags`, `Settings` |
 | `Linen.Network.HTTP2.Frame.Decode` | HTTP/2 frame parsing: header, SETTINGS/`applySettings`, GOAWAY/WINDOW_UPDATE/RST_STREAM/PRIORITY/padding, `validateFrameSize` |
 | `Linen.Network.HTTP2.Frame.Encode` | HTTP/2 frame serialisation: header/frame, builders (SETTINGS/PING/GOAWAY/HEADERS/DATA/…), `encodePriority`/`encodePadding`, `splitHeaderBlock` |

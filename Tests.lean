@@ -95,6 +95,15 @@ import Tests.Linen.Network.HTTP3.QPACK.TableTest
 import Tests.Linen.Network.HTTP3.QPACK.DecodeTest
 import Tests.Linen.Network.HTTP3.QPACK.EncodeTest
 import Tests.Linen.Network.HTTP.ChunkedTest
+import Tests.Linen.Network.HTTP.DateTest
+import Tests.Linen.Network.HTTP.Types.HeaderTest
+import Tests.Linen.Network.HTTP.Types.MethodTest
+import Tests.Linen.Network.HTTP.Types.StatusTest
+import Tests.Linen.Network.HTTP.Types.URITest
+import Tests.Linen.Network.HTTP.Types.VersionTest
+import Tests.Linen.Network.HTTP.Client.TypesTest
+import Tests.Linen.Network.HTTP.Client.RequestTest
+import Tests.Linen.Network.HTTP.Client.ResponseTest
 import Tests.Linen.Network.Socket.TypesTest
 import Tests.Linen.Network.Socket.FFITest
 import Tests.Linen.Network.SocketTest

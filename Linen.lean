@@ -86,6 +86,15 @@ import Linen.Network.HTTP3.QPACK.Table
 import Linen.Network.HTTP3.QPACK.Decode
 import Linen.Network.HTTP3.QPACK.Encode
 import Linen.Network.HTTP.Chunked
+import Linen.Network.HTTP.Date
+import Linen.Network.HTTP.Types.Header
+import Linen.Network.HTTP.Types.Method
+import Linen.Network.HTTP.Types.Status
+import Linen.Network.HTTP.Types.URI
+import Linen.Network.HTTP.Types.Version
+import Linen.Network.HTTP.Client.Types
+import Linen.Network.HTTP.Client.Request
+import Linen.Network.HTTP.Client.Response
 import Linen.Network.Socket.Types
 import Linen.Network.Socket.FFI
 import Linen.Network.Socket
