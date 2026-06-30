@@ -117,6 +117,15 @@ DONE = {
     "Hale.DataFrame",   # outer aggregator: re-exports Hale.DataFrame.DataFrame; covered by linen's root; no file
     "Hale.FastLogger.System.Log.FastLogger",   # ported to Linen/System/Log/FastLogger.lean (dropped vestigial AutoUpdate import; withTimedFastLogger→withFastLogger as it does no timing)
     "Hale.FastLogger",   # aggregator: re-exports System.Log.FastLogger; covered by linen's root; no file
+    "Hale.Hasql.Database.PostgreSQL.LibPQ.Types",   # ported to Linen/Database/PostgreSQL/LibPQ/Types.lean (pure: opaque handles + status enums; verbatim, FFI in next module)
+    "Hale.Hasql.Database.PostgreSQL.LibPQ",   # ported to Linen/Database/PostgreSQL/LibPQ.lean + ffi/postgres.c (linen_pg_* libpq bindings; libpq via pkg-config in lakefile, CI installs libpq-dev)
+    "Hale.Hasql.Hasql.Connection",   # ported to Linen/Database/SQL/Connection.lean (namespace SQL not Hasql, per request): Settings/acquire/release/withConnection
+    "Hale.Hasql.Hasql.Encoders",   # ported to Linen/Database/SQL/Encoders.lean (namespace SQL not Hasql): pure Params encoders + width laws
+    "Hale.Hasql.Hasql.Session",   # ported to Linen/Database/SQL/Session.lean (namespace SQL): Session = ReaderT/ExceptT IO stack (stdlib instances, dropped bespoke Monad), sql/query/transaction/run
+    "Hale.Hasql.Hasql.Decoders",   # ported to Linen/Database/SQL/Decoders.lean (namespace SQL): Value/Row/Result decoders + row width laws (kept hand-rolled parseFloat?, no stdlib String.toFloat?)
+    "Hale.Hasql.Hasql.Pool",   # ported to Linen/Database/SQL/Pool.lean (namespace SQL): IO.Ref-backed connection pool, PoolSettings proofs, create/use/destroy/stats
+    "Hale.Hasql.Hasql.Statement",   # ported to Linen/Database/SQL/Statement.lean (namespace SQL): Statement = Encoders.Params + Decoders.Result (dropped dup Encoder/Decoder aliases), run/command/sql_/mapResult/contramapParams
+    "Hale.Hasql",   # aggregator: re-exports the whole libpq + SQL tier (LibPQ.Types/LibPQ + SQL.Connection/Session/Encoders/Decoders/Pool/Statement); covered by linen's root; no file
 }
 
 

@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>70 modules</strong> · <strong>121 compile-time theorems</strong> · <strong>1148 <code>#guard</code> checks</strong>
+  <strong>78 modules</strong> · <strong>142 compile-time theorems</strong> · <strong>1270 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -292,6 +292,45 @@ Three rules hold across the whole library:
   `secure`/`httpOnly`/`sameSite`) with `renderSetCookie`/`parseSetCookie` for
   `Set-Cookie:` (pure parsers, no `Id.run`/`while`).
 
+### `Database.PostgreSQL` — libpq bindings
+
+- `Database.PostgreSQL.LibPQ.Types` — opaque `PgConn`/`PgResult` handles (external
+  objects, same pattern as `RawSocket`) and the libpq status enums
+  (`ConnStatus`/`ExecStatus`/`TransactionStatus`) with `ofUInt8` decoders, an
+  `ExecStatus.isOk` predicate with verified laws, and `PgError`/`PgNotification`.
+- `Database.PostgreSQL.LibPQ` — `@[extern]` bindings to PostgreSQL's libpq C
+  library (`ffi/postgres.c`): `connect`/`exec`/`execParams`/`prepare`/`execPrepared`,
+  result inspection (`ntuples`/`nfields`/`getvalue`/`fname`/`ftype`), escaping,
+  LISTEN/NOTIFY, transaction status, and `execCheck`/`connectCheck` helpers. libpq
+  is discovered via `pkg-config` in the lakefile.
+
+### `Database.SQL` — high-level client (hasql-style)
+
+- `Database.SQL.Connection` — managed connections over `LibPQ`: a `Settings`
+  builder (`uri`/`components`, carrying a proof the connection string is
+  non-empty), `acquire`/`release` (idempotent) and bracketed `withConnection`,
+  plus a `ConnectionError` type.
+- `Database.SQL.Encoders` — composable parameter encoders (`Params α`) that
+  serialize typed values to `Array (Option String)` for `execParams`: `text`/
+  `int`/`nat`/`float`/`bool`/`ofToString` primitives, `nullable`, `contramap`,
+  `pair`/`triple`, each with a `width` and verified width laws.
+- `Database.SQL.Session` — the session monad, an `abbrev` for
+  `ReaderT Connection (ExceptT SessionError IO)` (so `Monad`/`MonadExcept`/`IO`
+  lifting come from the stdlib): `sql`/`query` execution, `transaction`
+  (BEGIN/COMMIT/ROLLBACK), `getConnection`, `run`, and a `SessionError` type.
+- `Database.SQL.Decoders` — three-level result decoders: `Value` (single
+  column: `text`/`int`/`nat`/`float`/`bool`/`nullable`/`map`, with a hand-rolled
+  float parser), `Row` (`column`/`seq`/`pair`/`triple` with width laws), and
+  `Result` (`rowList`/`rowArray`/`singleRow`/`maybeRow`/`rowsAffected`).
+- `Database.SQL.Pool` — a thread-safe connection pool over `IO.Ref` + `Array`:
+  `PoolSettings` (bounded `maxSize`/`idleTimeout` proofs), on-demand connection
+  creation up to `maxSize`, `use` (auto-return on success/error/exception),
+  `destroy`, `stats`, and a `PoolError` type.
+- `Database.SQL.Statement` — type-safe parameterized statements
+  `Statement p r` composing an `Encoders.Params p` with a `Decoders.Result r`:
+  `run` (within a `Session`), `command`/`sql_` constructors, and
+  `mapResult`/`contramapParams` (reusing `Result.map`/`Params.contramap`).
+
 ## Quick Start
 
 Add to your `lakefile.toml`:
@@ -386,6 +425,14 @@ open Data.Functor Control.Monad
 | `Linen.DataFrame.Operations.Aggregation` | `groupBy` → `GroupedDataFrame` + `aggregate` with `AggFunc` |
 | `Linen.DataFrame.Operations.Subset` | `select`/`exclude`/`take`/`drop`/`slice`/`filterBy`/`filterWhere`/`rename` |
 | `Linen.DataFrame.Operations.Transform` | `addColumn`/`derive`/`mapColumn`/`dropColumn`/`renameColumn`/`dimensions`/`info` |
+| `Linen.Database.PostgreSQL.LibPQ.Types` | opaque `PgConn`/`PgResult` handles + libpq status enums/decoders, `PgError`/`PgNotification` |
+| `Linen.Database.PostgreSQL.LibPQ` | `@[extern]` libpq bindings: connect/exec/prepare, result inspection, escaping, LISTEN/NOTIFY, transactions |
+| `Linen.Database.SQL.Connection` | managed connections over libpq: `Settings` builder (non-empty proof), `acquire`/`release`/`withConnection`, `ConnectionError` |
+| `Linen.Database.SQL.Encoders` | composable parameter encoders `Params α → Array (Option String)`: primitives, `nullable`/`contramap`/`pair`/`triple`, width laws |
+| `Linen.Database.SQL.Session` | session monad (`ReaderT`/`ExceptT IO` stack): `sql`/`query`, `transaction`, `run`, `SessionError` |
+| `Linen.Database.SQL.Decoders` | result decoders: `Value`/`Row`/`Result` levels, `singleRow`/`rowList`/`maybeRow`, row width laws |
+| `Linen.Database.SQL.Pool` | thread-safe connection pool (`IO.Ref`): `PoolSettings` (bounded proofs), `create`/`use`/`destroy`/`stats`, `PoolError` |
+| `Linen.Database.SQL.Statement` | type-safe `Statement p r` = `Params p` + `Result r`: `run`/`command`/`sql_`, `mapResult`/`contramapParams` |
 
 ## Build & Test
 

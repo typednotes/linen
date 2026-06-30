@@ -120,19 +120,19 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 94. `Hale.DataFrame` -->
 <!-- 95. `Hale.FastLogger.System.Log.FastLogger` -->
 <!-- 96. `Hale.FastLogger` -->
-<!-- 97. `Hale.Network.Network.Socket.Types` -->
-<!-- 98. `Hale.Network.Network.Socket.FFI` -->
-<!-- 99. `Hale.Network.Network.Socket` -->
-<!-- 100. `Hale.Network.Network.Socket.EventDispatcher` -->
-101. `Hale.Hasql.Database.PostgreSQL.LibPQ.Types`
-102. `Hale.Hasql.Database.PostgreSQL.LibPQ`
-103. `Hale.Hasql.Hasql.Connection`
-104. `Hale.Hasql.Hasql.Encoders`
-105. `Hale.Hasql.Hasql.Session`
-106. `Hale.Hasql.Hasql.Decoders`
-107. `Hale.Hasql.Hasql.Pool`
-108. `Hale.Hasql.Hasql.Statement`
-109. `Hale.Hasql`
+<!-- 97. `Hale.Hasql.Database.PostgreSQL.LibPQ.Types` -->
+<!-- 98. `Hale.Hasql.Database.PostgreSQL.LibPQ` -->
+<!-- 99. `Hale.Hasql.Hasql.Connection` -->
+<!-- 100. `Hale.Hasql.Hasql.Encoders` -->
+<!-- 101. `Hale.Hasql.Hasql.Session` -->
+<!-- 102. `Hale.Hasql.Hasql.Decoders` -->
+<!-- 103. `Hale.Hasql.Hasql.Pool` -->
+<!-- 104. `Hale.Hasql.Hasql.Statement` -->
+<!-- 105. `Hale.Hasql` -->
+<!-- 106. `Hale.Network.Network.Socket.Types` -->
+<!-- 107. `Hale.Network.Network.Socket.FFI` -->
+<!-- 108. `Hale.Network.Network.Socket` -->
+<!-- 109. `Hale.Network.Network.Socket.EventDispatcher` -->
 110. `Hale.Http2.Network.HTTP2.Frame.Types`
 111. `Hale.Http2.Network.HTTP2.Frame.Decode`
 112. `Hale.Http2.Network.HTTP2.Frame.Encode`

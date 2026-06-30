@@ -70,6 +70,14 @@ import Tests.Linen.Data.Json.DecodeTest
 import Tests.Linen.System.Console.AnsiTest
 import Tests.Linen.System.ExitTest
 import Tests.Linen.System.Log.FastLoggerTest
+import Tests.Linen.Database.PostgreSQL.LibPQ.TypesTest
+import Tests.Linen.Database.PostgreSQL.LibPQTest
+import Tests.Linen.Database.SQL.ConnectionTest
+import Tests.Linen.Database.SQL.EncodersTest
+import Tests.Linen.Database.SQL.SessionTest
+import Tests.Linen.Database.SQL.DecodersTest
+import Tests.Linen.Database.SQL.PoolTest
+import Tests.Linen.Database.SQL.StatementTest
 import Tests.Linen.Network.HTTP.ChunkedTest
 import Tests.Linen.Network.Socket.TypesTest
 import Tests.Linen.Network.Socket.FFITest

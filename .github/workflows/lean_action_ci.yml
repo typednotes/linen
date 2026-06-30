@@ -11,4 +11,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+      # libpq (PostgreSQL client library) is required by the Database.PostgreSQL
+      # FFI shim (ffi/postgres.c); the lakefile resolves its flags via pkg-config.
+      - name: Install libpq (PostgreSQL client library)
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev pkg-config
       - uses: leanprover/lean-action@v1

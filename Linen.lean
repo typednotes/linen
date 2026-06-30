@@ -61,6 +61,14 @@ import Linen.Data.Proxy
 import Linen.Data.Rat
 import Linen.System.Exit
 import Linen.System.Log.FastLogger
+import Linen.Database.PostgreSQL.LibPQ.Types
+import Linen.Database.PostgreSQL.LibPQ
+import Linen.Database.SQL.Connection
+import Linen.Database.SQL.Encoders
+import Linen.Database.SQL.Session
+import Linen.Database.SQL.Decoders
+import Linen.Database.SQL.Pool
+import Linen.Database.SQL.Statement
 import Linen.Network.HTTP.Chunked
 import Linen.Network.Socket.Types
 import Linen.Network.Socket.FFI
