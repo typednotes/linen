@@ -89,6 +89,11 @@ import Tests.Linen.Network.HTTP2.TypesTest
 import Tests.Linen.Network.HTTP2.StreamTest
 import Tests.Linen.Network.HTTP2.FlowControlTest
 import Tests.Linen.Network.HTTP2.ServerTest
+import Tests.Linen.Network.HTTP3.ErrorTest
+import Tests.Linen.Network.HTTP3.FrameTest
+import Tests.Linen.Network.HTTP3.QPACK.TableTest
+import Tests.Linen.Network.HTTP3.QPACK.DecodeTest
+import Tests.Linen.Network.HTTP3.QPACK.EncodeTest
 import Tests.Linen.Network.HTTP.ChunkedTest
 import Tests.Linen.Network.Socket.TypesTest
 import Tests.Linen.Network.Socket.FFITest

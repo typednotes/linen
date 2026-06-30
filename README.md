@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>89 modules</strong> · <strong>158 compile-time theorems</strong> · <strong>1635 <code>#guard</code> checks</strong>
+  <strong>94 modules</strong> · <strong>184 compile-time theorems</strong> · <strong>1739 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -268,6 +268,26 @@ Three rules hold across the whole library:
   assembly and HPACK decode, response encoding (`sendResponse`), and the
   `runHTTP2Connection` frame loop (driven by EOF/GOAWAY — no fuel counter).
 
+### `Network.HTTP3` — HTTP/3 over QUIC (RFC 9114)
+
+- `Network.HTTP3.Error` — the `H3Error` error-code enum (RFC 9114 §8.1,
+  `0x100`–`0x110`) with total `toCode`/`fromCode` conversions and verified
+  round-trip laws.
+- `Network.HTTP3.Frame` — HTTP/3 framing (RFC 9114 §7): `FrameType`, the QUIC
+  variable-length integer codec (RFC 9000 §16, minimal encoding, fuel-free
+  decode), `Frame.encode`/`decode`, and `H3Settings` encode/decode.
+- `Network.HTTP3.QPACK.Table` — the 99-entry QPACK static table (RFC 9204
+  Appendix A, 0-indexed) with `staticLookup` and `staticFind` (exact then
+  name-only).
+- `Network.HTTP3.QPACK.Decode` — static-table-only QPACK decoding (RFC 9204):
+  the prefix integer (`decodeQInt`, bounded fold) and string-literal primitives,
+  and `decodeHeaders` for indexed / literal-with-name-reference / literal-name
+  field lines (well-founded loop; rejects dynamic-table references).
+- `Network.HTTP3.QPACK.Encode` — static-table-only QPACK encoding: `encodeQInt`
+  (prefix varint, recursing on a strictly-decreasing value), `encodeStringLiteral`,
+  and `encodeHeaders` (compact indexed form where possible), verified by
+  encode→decode round-trips.
+
 ### `Network.Socket` — POSIX sockets & event multiplexing
 
 - `Network.Socket.Types` — the type layer for a phantom-typed socket API:
@@ -471,6 +491,11 @@ open Data.Functor Control.Monad
 | `Linen.Network.HTTP2.Stream` | HTTP/2 stream lifecycle: `StreamState` machine, `StreamInfo`, `StreamTable` (`Std.HashMap`) with open/update/priority/active-count |
 | `Linen.Network.HTTP2.FlowControl` | HTTP/2 flow control: `FlowWindow` (`increment`/`consume`/`available`/signed `adjust`), `ConnectionFlowControl`, stream window updates |
 | `Linen.Network.HTTP2.Server` | HTTP/2 server connection handler: preface/SETTINGS/PING/WINDOW_UPDATE/GOAWAY, HEADERS+CONTINUATION+HPACK, `runHTTP2Connection` |
+| `Linen.Network.HTTP3.Error` | HTTP/3 (RFC 9114 §8.1) `H3Error` codes with `toCode`/`fromCode` and round-trip laws |
+| `Linen.Network.HTTP3.Frame` | HTTP/3 framing: `FrameType`, QUIC varint codec (RFC 9000 §16), `Frame.encode`/`decode`, `H3Settings` |
+| `Linen.Network.HTTP3.QPACK.Table` | QPACK static table (RFC 9204 App. A, 99 entries, 0-indexed): `staticLookup`/`staticFind` |
+| `Linen.Network.HTTP3.QPACK.Decode` | static-only QPACK decoding: `decodeQInt`/`decodeStringLiteral` + `decodeHeaders` (indexed/literal field lines) |
+| `Linen.Network.HTTP3.QPACK.Encode` | static-only QPACK encoding: `encodeQInt`/`encodeStringLiteral` + `encodeHeaders`, round-trip tested |
 | `Linen.Network.Socket.Types` | phantom-typed `Socket` lifecycle, `Family`/`SockAddr`/`EventType`, non-blocking outcome types |
 | `Linen.Network.Socket.FFI` | `@[extern]` C bindings: sockets, options, UDP, `getAddrInfo`, kqueue/epoll event loop |
 | `Linen.Network.Socket` | safe phantom-typed lifecycle API, `withSocket`/`listenTCP`/`withEventLoop`, `EventLoop` |

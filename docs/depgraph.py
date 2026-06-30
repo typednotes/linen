@@ -138,6 +138,11 @@ DONE = {
     "Hale.Http2.Network.HTTP2.FlowControl",   # ported to Linen/Network/HTTP2/FlowControl.lean (namespace Network.HTTP2): FlowWindow/ConnectionFlowControl + stream window updates; FIXED adjust to use signed Int subtraction (Hale used Nat sub which truncated a negative settings delta to 0)
     "Hale.Http2.Network.HTTP2.Server",   # ported to Linen/Network/HTTP2/Server.lean (namespace Network.HTTP2): IO connection handler (preface/SETTINGS/PING/WINDOW_UPDATE/GOAWAY/HEADERS+CONTINUATION/HPACK); removed loopFuel & attempts fuel counters (while-loops driven by done/EOF/remaining, matching EventDispatcher/AutoUpdate idiom)
     "Hale.Http2",   # aggregator: re-exports the whole HTTP/2 tier (Frame.*, HPACK.*, Types, Stream, FlowControl, Server); covered by linen's root; no file
+    "Hale.Http3.Network.HTTP3.Error",   # ported to Linen/Network/HTTP3/Error.lean (namespace Network.HTTP3): H3Error enum + toCode/fromCode + 17 roundtrip theorems; pure, verbatim
+    "Hale.Http3.Network.HTTP3.Frame",   # ported to Linen/Network/HTTP3/Frame.lean (namespace Network.HTTP3): FrameType + QUIC varint codec + Frame/H3Settings; replaced fuel-recursion in decodeSettingsPairs with well-founded (decodeVarInt_consumed lemma)
+    "Hale.Http3.Network.HTTP3.QPACK.Table",   # ported to Linen/Network/HTTP3/QPACK/Table.lean (namespace Network.HTTP3.QPACK): 99-entry RFC 9204 App. A static table + staticLookup/staticFind; pure, verbatim
+    "Hale.Http3.Network.HTTP3.QPACK.Decode",   # ported to Linen/Network/HTTP3/QPACK/Decode.lean: decodeQInt (fuel→bounded foldl) + decodeHeaderEntries (fuel→well-founded via decodeQInt_consumed); changed fromUTF8! to fromUTF8? (none on bad UTF-8 instead of panic)
+    "Hale.Http3.Network.HTTP3.QPACK.Encode",   # ported to Linen/Network/HTTP3/QPACK/Encode.lean: encodeQInt (replaced Id.run while-loop with well-founded encodeQIntCont, v/128<v) + encodeStringLiteral/encodeHeaders; encode↔decode round-trip tested
 }
 
 

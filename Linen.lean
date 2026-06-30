@@ -80,6 +80,11 @@ import Linen.Network.HTTP2.Types
 import Linen.Network.HTTP2.Stream
 import Linen.Network.HTTP2.FlowControl
 import Linen.Network.HTTP2.Server
+import Linen.Network.HTTP3.Error
+import Linen.Network.HTTP3.Frame
+import Linen.Network.HTTP3.QPACK.Table
+import Linen.Network.HTTP3.QPACK.Decode
+import Linen.Network.HTTP3.QPACK.Encode
 import Linen.Network.HTTP.Chunked
 import Linen.Network.Socket.Types
 import Linen.Network.Socket.FFI

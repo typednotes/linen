@@ -141,15 +141,15 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 115. `Hale.Http2.Network.HTTP2.FlowControl` -->
 <!-- 116. `Hale.Http2.Network.HTTP2.Server` -->
 <!-- 117. `Hale.Http2` -->
-<!-- 118. `Hale.Network.Network.Socket.Types` -->
-<!-- 119. `Hale.Network.Network.Socket.FFI` -->
-<!-- 120. `Hale.Network.Network.Socket` -->
-<!-- 121. `Hale.Network.Network.Socket.EventDispatcher` -->
-122. `Hale.Http3.Network.HTTP3.Error`
-123. `Hale.Http3.Network.HTTP3.Frame`
-124. `Hale.Http3.Network.HTTP3.QPACK.Table`
-125. `Hale.Http3.Network.HTTP3.QPACK.Decode`
-126. `Hale.Http3.Network.HTTP3.QPACK.Encode`
+<!-- 118. `Hale.Http3.Network.HTTP3.Error` -->
+<!-- 119. `Hale.Http3.Network.HTTP3.Frame` -->
+<!-- 120. `Hale.Http3.Network.HTTP3.QPACK.Table` -->
+<!-- 121. `Hale.Http3.Network.HTTP3.QPACK.Decode` -->
+<!-- 122. `Hale.Http3.Network.HTTP3.QPACK.Encode` -->
+<!-- 123. `Hale.Network.Network.Socket.Types` -->
+<!-- 124. `Hale.Network.Network.Socket.FFI` -->
+<!-- 125. `Hale.Network.Network.Socket` -->
+<!-- 126. `Hale.Network.Network.Socket.EventDispatcher` -->
 127. `Hale.HttpDate.Network.HTTP.Date`
 128. `Hale.HttpDate`
 129. `Hale.HttpTypes.Network.HTTP.Types.Header`
