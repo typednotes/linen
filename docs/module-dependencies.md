@@ -129,22 +129,22 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 103. `Hale.Hasql.Hasql.Pool` -->
 <!-- 104. `Hale.Hasql.Hasql.Statement` -->
 <!-- 105. `Hale.Hasql` -->
-<!-- 106. `Hale.Network.Network.Socket.Types` -->
-<!-- 107. `Hale.Network.Network.Socket.FFI` -->
-<!-- 108. `Hale.Network.Network.Socket` -->
-<!-- 109. `Hale.Network.Network.Socket.EventDispatcher` -->
-110. `Hale.Http2.Network.HTTP2.Frame.Types`
-111. `Hale.Http2.Network.HTTP2.Frame.Decode`
-112. `Hale.Http2.Network.HTTP2.Frame.Encode`
-113. `Hale.Http2.Network.HTTP2.HPACK.Huffman`
-114. `Hale.Http2.Network.HTTP2.HPACK.Table`
-115. `Hale.Http2.Network.HTTP2.HPACK.Decode`
-116. `Hale.Http2.Network.HTTP2.HPACK.Encode`
-117. `Hale.Http2.Network.HTTP2.Types`
-118. `Hale.Http2.Network.HTTP2.Stream`
-119. `Hale.Http2.Network.HTTP2.FlowControl`
-120. `Hale.Http2.Network.HTTP2.Server`
-121. `Hale.Http2`
+<!-- 106. `Hale.Http2.Network.HTTP2.Frame.Types` -->
+<!-- 107. `Hale.Http2.Network.HTTP2.Frame.Decode` -->
+<!-- 108. `Hale.Http2.Network.HTTP2.Frame.Encode` -->
+<!-- 109. `Hale.Http2.Network.HTTP2.HPACK.Huffman` -->
+<!-- 110. `Hale.Http2.Network.HTTP2.HPACK.Table` -->
+<!-- 111. `Hale.Http2.Network.HTTP2.HPACK.Decode` -->
+<!-- 112. `Hale.Http2.Network.HTTP2.HPACK.Encode` -->
+<!-- 113. `Hale.Http2.Network.HTTP2.Types` -->
+<!-- 114. `Hale.Http2.Network.HTTP2.Stream` -->
+<!-- 115. `Hale.Http2.Network.HTTP2.FlowControl` -->
+<!-- 116. `Hale.Http2.Network.HTTP2.Server` -->
+<!-- 117. `Hale.Http2` -->
+<!-- 118. `Hale.Network.Network.Socket.Types` -->
+<!-- 119. `Hale.Network.Network.Socket.FFI` -->
+<!-- 120. `Hale.Network.Network.Socket` -->
+<!-- 121. `Hale.Network.Network.Socket.EventDispatcher` -->
 122. `Hale.Http3.Network.HTTP3.Error`
 123. `Hale.Http3.Network.HTTP3.Frame`
 124. `Hale.Http3.Network.HTTP3.QPACK.Table`

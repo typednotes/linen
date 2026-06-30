@@ -78,6 +78,17 @@ import Tests.Linen.Database.SQL.SessionTest
 import Tests.Linen.Database.SQL.DecodersTest
 import Tests.Linen.Database.SQL.PoolTest
 import Tests.Linen.Database.SQL.StatementTest
+import Tests.Linen.Network.HTTP2.Frame.TypesTest
+import Tests.Linen.Network.HTTP2.Frame.DecodeTest
+import Tests.Linen.Network.HTTP2.Frame.EncodeTest
+import Tests.Linen.Network.HTTP2.HPACK.HuffmanTest
+import Tests.Linen.Network.HTTP2.HPACK.TableTest
+import Tests.Linen.Network.HTTP2.HPACK.DecodeTest
+import Tests.Linen.Network.HTTP2.HPACK.EncodeTest
+import Tests.Linen.Network.HTTP2.TypesTest
+import Tests.Linen.Network.HTTP2.StreamTest
+import Tests.Linen.Network.HTTP2.FlowControlTest
+import Tests.Linen.Network.HTTP2.ServerTest
 import Tests.Linen.Network.HTTP.ChunkedTest
 import Tests.Linen.Network.Socket.TypesTest
 import Tests.Linen.Network.Socket.FFITest

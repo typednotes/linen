@@ -69,6 +69,17 @@ import Linen.Database.SQL.Session
 import Linen.Database.SQL.Decoders
 import Linen.Database.SQL.Pool
 import Linen.Database.SQL.Statement
+import Linen.Network.HTTP2.Frame.Types
+import Linen.Network.HTTP2.Frame.Decode
+import Linen.Network.HTTP2.Frame.Encode
+import Linen.Network.HTTP2.HPACK.Huffman
+import Linen.Network.HTTP2.HPACK.Table
+import Linen.Network.HTTP2.HPACK.Decode
+import Linen.Network.HTTP2.HPACK.Encode
+import Linen.Network.HTTP2.Types
+import Linen.Network.HTTP2.Stream
+import Linen.Network.HTTP2.FlowControl
+import Linen.Network.HTTP2.Server
 import Linen.Network.HTTP.Chunked
 import Linen.Network.Socket.Types
 import Linen.Network.Socket.FFI

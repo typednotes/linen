@@ -126,6 +126,18 @@ DONE = {
     "Hale.Hasql.Hasql.Pool",   # ported to Linen/Database/SQL/Pool.lean (namespace SQL): IO.Ref-backed connection pool, PoolSettings proofs, create/use/destroy/stats
     "Hale.Hasql.Hasql.Statement",   # ported to Linen/Database/SQL/Statement.lean (namespace SQL): Statement = Encoders.Params + Decoders.Result (dropped dup Encoder/Decoder aliases), run/command/sql_/mapResult/contramapParams
     "Hale.Hasql",   # aggregator: re-exports the whole libpq + SQL tier (LibPQ.Types/LibPQ + SQL.Connection/Session/Encoders/Decoders/Pool/Statement); covered by linen's root; no file
+    "Hale.Http2.Network.HTTP2.Frame.Types",   # ported to Linen/Network/HTTP2/Frame/Types.lean (namespace Network.HTTP2): RFC 9113 framing types + total conversions/proofs (fixed Nat.toDigits arg order in ToString)
+    "Hale.Http2.Network.HTTP2.Frame.Decode",   # ported to Linen/Network/HTTP2/Frame/Decode.lean: wire decoders (replaced fuel-recursion in decodeSettingsPayload with List.range.mapM over Option)
+    "Hale.Http2.Network.HTTP2.Frame.Encode",   # ported to Linen/Network/HTTP2/Frame/Encode.lean: wire encoders + frame builders (replaced fuel-recursion in splitHeaderBlock with ceil-division List.range.map)
+    "Hale.Http2.Network.HTTP2.HPACK.Huffman",   # ported to Linen/Network/HTTP2/HPACK/Huffman.lean: UPGRADED from Hale's pass-through stub to a full RFC 7541 App. B Huffman codec (257-entry table from the RFC, trie decode + padding validation, RFC-vector tested) — generic Hackage `huffman` pkg doesn't fit (frequency-based, not the fixed HPACK code)
+    "Hale.Http2.Network.HTTP2.HPACK.Table",   # ported to Linen/Network/HTTP2/HPACK/Table.lean: 61-entry static table + DynamicTable FIFO (replaced fuel-recursion in evict with a stop-flag foldl keeping the longest size-fitting prefix)
+    "Hale.Http2.Network.HTTP2.HPACK.Decode",   # ported to Linen/Network/HTTP2/HPACK/Decode.lean: decodeInteger (fuel→bounded foldl over List.range 10) + decodeString + decodeHeaders (fuel→well-founded on bs.size-offset via decodeInteger_consumed lemma); RFC App. C vectors
+    "Hale.Http2.Network.HTTP2.HPACK.Encode",   # ported to Linen/Network/HTTP2/HPACK/Encode.lean: encodeInteger (fuel→well-founded on v, v/128<v) + encodeString + encodeHeaderRep/encodeHeaders; encode↔decode round-trip tested (dropped unused Huffman import)
+    "Hale.Http2.Network.HTTP2.Types",   # ported to Linen/Network/HTTP2/Types.lean (namespace Network.HTTP2): ConnectionError/StreamError, HeaderBlockState (CONTINUATION assembly), HTTP2Result map/bind; pure, verbatim
+    "Hale.Http2.Network.HTTP2.Stream",   # ported to Linen/Network/HTTP2/Stream.lean (namespace Network.HTTP2): StreamState machine + StreamTable over Std.HashMap (openClientStream/updateState/updatePriority/activeStreamCount); pure, verbatim (Lean accepts `open` constructor)
+    "Hale.Http2.Network.HTTP2.FlowControl",   # ported to Linen/Network/HTTP2/FlowControl.lean (namespace Network.HTTP2): FlowWindow/ConnectionFlowControl + stream window updates; FIXED adjust to use signed Int subtraction (Hale used Nat sub which truncated a negative settings delta to 0)
+    "Hale.Http2.Network.HTTP2.Server",   # ported to Linen/Network/HTTP2/Server.lean (namespace Network.HTTP2): IO connection handler (preface/SETTINGS/PING/WINDOW_UPDATE/GOAWAY/HEADERS+CONTINUATION/HPACK); removed loopFuel & attempts fuel counters (while-loops driven by done/EOF/remaining, matching EventDispatcher/AutoUpdate idiom)
+    "Hale.Http2",   # aggregator: re-exports the whole HTTP/2 tier (Frame.*, HPACK.*, Types, Stream, FlowControl, Server); covered by linen's root; no file
 }
 
 

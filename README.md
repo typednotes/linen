@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>78 modules</strong> · <strong>142 compile-time theorems</strong> · <strong>1270 <code>#guard</code> checks</strong>
+  <strong>89 modules</strong> · <strong>158 compile-time theorems</strong> · <strong>1635 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -218,6 +218,56 @@ Three rules hold across the whole library:
   `chunkedTransferEncoding` / `chunkedTransferTerminator` / `encodeChunked`, with
   the hex chunk length via core `Nat.toDigits`.
 
+### `Network.HTTP2` — HTTP/2 framing (RFC 9113)
+
+- `Network.HTTP2.Frame.Types` — core framing types: a `StreamId` carrying an
+  (erased) 31-bit proof, the `FrameType`/`ErrorCode`/`SettingsKeyId` closed
+  inductives with total `UInt8`/`UInt16`/`UInt32` conversions (provably inverse
+  for defined values), `FrameFlags` bit ops, `FrameHeader`/`Frame`, and a
+  `Settings` record whose fields carry RFC value-range proofs.
+- `Network.HTTP2.Frame.Decode` — wire-format parsing: big-endian integers,
+  `decodeFrameHeader`, SETTINGS (`decodeSettingsPayload` via fuel-free
+  `List.mapM`, `applySettings` with proof-carrying updates), GOAWAY /
+  WINDOW_UPDATE / RST_STREAM / PRIORITY / padding, and `validateFrameSize`.
+- `Network.HTTP2.Frame.Encode` — wire-format serialisation: big-endian
+  integers, `encodeFrameHeader`/`encodeFrame`, frame builders
+  (SETTINGS/PING/GOAWAY/WINDOW_UPDATE/RST_STREAM/HEADERS/DATA/CONTINUATION),
+  `encodePriority`/`encodePadding`, and `splitHeaderBlock` (fuel-free chunking).
+- `Network.HTTP2.HPACK.Huffman` — a complete HPACK (RFC 7541 Appendix B)
+  Huffman codec: the fixed 257-entry code table, `huffmanEncode` (MSB-first
+  bit packing with EOS-`1`s padding) and `huffmanDecode` (prefix-trie walk with
+  padding validation), verified against the RFC's published test vectors. Total
+  (structural fold over the bit list — no `partial`/fuel).
+- `Network.HTTP2.HPACK.Table` — the HPACK header tables: the 61-entry RFC 7541
+  Appendix A static table, and a `DynamicTable` FIFO with size-based eviction
+  (entry size `|name|+|value|+32`, fuel-free), plus `find`/`indexLookup`/
+  `findInTables` over the combined static + dynamic index space.
+- `Network.HTTP2.HPACK.Decode` — HPACK header-block decoding: the variable-length
+  `decodeInteger` (bounded structural fold) and `decodeString` (raw + Huffman)
+  primitives, and `decodeHeaders` dispatching the indexed / literal / size-update
+  representations (well-founded on the unconsumed input), threading the dynamic
+  table. Tested against the RFC 7541 Appendix C wire vectors.
+- `Network.HTTP2.HPACK.Encode` — HPACK header-block encoding: `encodeInteger`
+  (prefix varint, recursing on a strictly-decreasing value), `encodeString`, the
+  `HeaderRep` representations (`encodeHeaderRep`), and `encodeHeaders` (greedy
+  indexing), verified by encode→decode round-trips.
+- `Network.HTTP2.Types` — connection-level types: `ConnectionError` (→ GOAWAY)
+  and `StreamError` (→ RST_STREAM), the `HeaderBlockState` machine assembling
+  header blocks across HEADERS + CONTINUATION frames, and an `HTTP2Result`
+  three-way result with `map`/`bind`.
+- `Network.HTTP2.Stream` — the stream lifecycle (RFC 9113 §5.1): the
+  `StreamState` machine, per-stream `StreamInfo` (windows + priority), and a
+  `StreamTable` over `Std.HashMap` with `openClientStream`/`updateState`/
+  `updatePriority`/`activeStreamCount` and stream-id classification.
+- `Network.HTTP2.FlowControl` — flow-control windows (RFC 9113 §5.2): `FlowWindow`
+  with `increment` (WINDOW_UPDATE, zero/overflow checks), `consume`/`available`,
+  and signed `adjust` for SETTINGS changes; plus `ConnectionFlowControl` and
+  per-stream window updates.
+- `Network.HTTP2.Server` — the server-side connection handler: preface
+  validation, SETTINGS/PING/WINDOW_UPDATE/GOAWAY handling, HEADERS + CONTINUATION
+  assembly and HPACK decode, response encoding (`sendResponse`), and the
+  `runHTTP2Connection` frame loop (driven by EOF/GOAWAY — no fuel counter).
+
 ### `Network.Socket` — POSIX sockets & event multiplexing
 
 - `Network.Socket.Types` — the type layer for a phantom-typed socket API:
@@ -410,6 +460,17 @@ open Data.Functor Control.Monad
 | `Linen.System.Exit` | `ExitCode` (success/failure) + `exitWith`/`exitSuccess`/`exitFailure` over `IO.Process.exit` |
 | `Linen.System.Log.FastLogger` | buffered thread-safe logger (`Std.Mutex`): `newLoggerSet`/`pushLogStr`/`flushLogStr`/`withFastLogger` |
 | `Linen.Network.HTTP.Chunked` | HTTP/1.1 chunked transfer encoding over `ByteArray` (`chunkedTransferEncoding`/`encodeChunked`) |
+| `Linen.Network.HTTP2.Frame.Types` | HTTP/2 (RFC 9113) framing types: 31-bit `StreamId`, `FrameType`/`ErrorCode`/`SettingsKeyId` + total conversions, `FrameFlags`, `Settings` |
+| `Linen.Network.HTTP2.Frame.Decode` | HTTP/2 frame parsing: header, SETTINGS/`applySettings`, GOAWAY/WINDOW_UPDATE/RST_STREAM/PRIORITY/padding, `validateFrameSize` |
+| `Linen.Network.HTTP2.Frame.Encode` | HTTP/2 frame serialisation: header/frame, builders (SETTINGS/PING/GOAWAY/HEADERS/DATA/…), `encodePriority`/`encodePadding`, `splitHeaderBlock` |
+| `Linen.Network.HTTP2.HPACK.Huffman` | complete HPACK (RFC 7541 App. B) Huffman codec: 257-entry table, `huffmanEncode`/`huffmanDecode` (trie + padding validation), RFC-vector tested |
+| `Linen.Network.HTTP2.HPACK.Table` | HPACK tables: 61-entry static (RFC 7541 App. A) + `DynamicTable` FIFO with eviction, `find`/`indexLookup`/`findInTables` |
+| `Linen.Network.HTTP2.HPACK.Decode` | HPACK header-block decoding: `decodeInteger`/`decodeString` primitives + `decodeHeaders` (indexed/literal/size-update), RFC App. C tested |
+| `Linen.Network.HTTP2.HPACK.Encode` | HPACK header-block encoding: `encodeInteger`/`encodeString`, `HeaderRep`/`encodeHeaderRep`, `encodeHeaders`, round-trip tested |
+| `Linen.Network.HTTP2.Types` | HTTP/2 connection types: `ConnectionError`/`StreamError`, `HeaderBlockState` (CONTINUATION assembly), `HTTP2Result` |
+| `Linen.Network.HTTP2.Stream` | HTTP/2 stream lifecycle: `StreamState` machine, `StreamInfo`, `StreamTable` (`Std.HashMap`) with open/update/priority/active-count |
+| `Linen.Network.HTTP2.FlowControl` | HTTP/2 flow control: `FlowWindow` (`increment`/`consume`/`available`/signed `adjust`), `ConnectionFlowControl`, stream window updates |
+| `Linen.Network.HTTP2.Server` | HTTP/2 server connection handler: preface/SETTINGS/PING/WINDOW_UPDATE/GOAWAY, HEADERS+CONTINUATION+HPACK, `runHTTP2Connection` |
 | `Linen.Network.Socket.Types` | phantom-typed `Socket` lifecycle, `Family`/`SockAddr`/`EventType`, non-blocking outcome types |
 | `Linen.Network.Socket.FFI` | `@[extern]` C bindings: sockets, options, UDP, `getAddrInfo`, kqueue/epoll event loop |
 | `Linen.Network.Socket` | safe phantom-typed lifecycle API, `withSocket`/`listenTCP`/`withEventLoop`, `EventLoop` |
