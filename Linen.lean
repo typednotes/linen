@@ -133,3 +133,4 @@ import Linen.PostgREST.Response.GucHeader
 import Linen.PostgREST.Response.Performance
 import Linen.PostgREST.SchemaCache.Identifiers
 import Linen.PostgREST.ApiRequest.Types
+import Linen.PostgREST.Config

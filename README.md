@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>136 modules</strong> · <strong>253 compile-time theorems</strong> · <strong>2432 <code>#guard</code> checks</strong>
+  <strong>138 modules</strong> · <strong>255 compile-time theorems</strong> · <strong>2520 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -597,6 +597,18 @@ Three rules hold across the whole library:
   `ToString`, `escapeIdent`/`quoteIdent`/`quoteQi` for injection-safe SQL
   quoting, `toQi` parsing, `anyElement`/`isAnyElement`, and `RelIdentifier`;
   4 theorems prove `quoteIdent`'s quoting/escaping behavior.
+- `PostgREST.ApiRequest.Types` — the API-request domain model: `Mutation`/
+  `InvokeMethod`/`Action`, `JsonOperation`, `SimpleOperator`/`FtsOperator`/
+  `QuantOperator`/`FilterOperator`, `Filter`, `LogicOperator`/`LogicTree`,
+  `OrderDirection`/`OrderNulls`/`OrderTerm`, `SelectItem`, `Payload`, `IsVal`,
+  and `Target`, each with a `ToString` rendering back to PostgREST filter/
+  select syntax.
+- `PostgREST.Config` — application configuration: `LogLevel`/`OpenAPIMode`,
+  a refined `Port` (1-65535, proof-carrying), and the flat `AppConfig`
+  record (`configDbUri`/`configDbSchemas`/`configJwtSecret`/`configServerPort`/
+  …) with non-emptiness/positivity proof fields, `AppConfig.default`, and
+  query helpers (`hasJwtSecret`, `hasAdminServer`, `mainSchema`, …); 2
+  roundtrip theorems for `LogLevel`/`OpenAPIMode` parsing.
 
 ## Quick Start
 
@@ -758,6 +770,8 @@ open Data.Functor Control.Monad
 | `Linen.PostgREST.Response.GucHeader` | GUC-to-HTTP-header mapping: `gucHeaderPrefix`, `gucStatusVar`, `parseGucHeaders`, `parseGucStatus` |
 | `Linen.PostgREST.Response.Performance` | performance timing headers: `serverTimingHeader`, `serverTimingValue`, `timingHeaders` |
 | `Linen.PostgREST.SchemaCache.Identifiers` | schema-qualified identifiers: `QualifiedIdentifier`, `escapeIdent`/`quoteIdent`/`quoteQi`/`toQi`, `RelIdentifier` |
+| `Linen.PostgREST.ApiRequest.Types` | API-request domain model: `Action`, `Filter`, `LogicTree`, `OrderTerm`, `SelectItem`, `Payload`, `Target` |
+| `Linen.PostgREST.Config` | application configuration: `AppConfig`, `LogLevel`, `OpenAPIMode`, refined `Port` |
 
 ## Build & Test
 

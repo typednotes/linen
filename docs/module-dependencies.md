@@ -202,8 +202,8 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 176. `Hale.PostgREST.PostgREST.Response.GucHeader` -->
 <!-- 177. `Hale.PostgREST.PostgREST.Response.Performance` -->
 <!-- 178. `Hale.PostgREST.PostgREST.SchemaCache.Identifiers` -->
-179. `Hale.PostgREST.PostgREST.ApiRequest.Types`
-180. `Hale.PostgREST.PostgREST.Config`
+<!-- 179. `Hale.PostgREST.PostgREST.ApiRequest.Types` -->
+<!-- 180. `Hale.PostgREST.PostgREST.Config` -->
 181. `Hale.PostgREST.PostgREST.Config.Database`
 182. `Hale.PostgREST.PostgREST.Error.Types`
 183. `Hale.PostgREST.PostgREST.Error`

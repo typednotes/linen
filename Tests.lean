@@ -142,3 +142,4 @@ import Tests.Linen.PostgREST.Response.GucHeaderTest
 import Tests.Linen.PostgREST.Response.PerformanceTest
 import Tests.Linen.PostgREST.SchemaCache.IdentifiersTest
 import Tests.Linen.PostgREST.ApiRequest.TypesTest
+import Tests.Linen.PostgREST.ConfigTest

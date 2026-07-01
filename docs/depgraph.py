@@ -196,6 +196,7 @@ DONE = {
     "Hale.PostgREST.PostgREST.Response.Performance",   # ported to Linen/PostgREST/Response/Performance.lean (namespace PostgREST.Response.Performance): serverTimingHeader, serverTimingValue, timingHeaders; verbatim
     "Hale.PostgREST.PostgREST.SchemaCache.Identifiers",   # ported to Linen/PostgREST/SchemaCache/Identifiers.lean (namespace PostgREST.SchemaCache.Identifiers): Schema/TableName/FieldName/FunctionName/ConstraintName aliases, QualifiedIdentifier + BEq/Hashable/Ord/ToString, escapeIdent/quoteIdent/quoteQi/toQi, anyElement/isAnyElement, RelIdentifier, 4 quoting correctness theorems; verbatim
     "Hale.PostgREST.PostgREST.ApiRequest.Types",   # ported to Linen/PostgREST/ApiRequest/Types.lean (namespace PostgREST.ApiRequest): Mutation/InvokeMethod/Action, JsonOperation, SimpleOperator/FtsOperator/QuantOperator/FilterOperator, Filter, LogicOperator/LogicTree, OrderDirection/OrderNulls/OrderTerm, SelectItem, Payload, IsVal, Target; LogicTree.toString/SelectItem.toString ported without `partial` (Lean's structural recursion checker handles the nested Array-of-self recursion directly); verbatim otherwise
+    "Hale.PostgREST.PostgREST.Config",   # ported to Linen/PostgREST/Config.lean (namespace PostgREST.Config): LogLevel, OpenAPIMode, refined Port (0 < val <= 65535), AppConfig (flat record with configDbSchemas_nonempty/configDbPoolSize_pos proof fields), AppConfig.default, hasJwtSecret/hasAdminServer/hasRootSpec/hasPreRequest/mainSchema, LogLevel.parse_toString_roundtrip/OpenAPIMode.parse_toString_roundtrip theorems; verbatim
 }
 
 
