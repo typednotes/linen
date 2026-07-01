@@ -28,27 +28,35 @@ def pkgConfig (args : Array String) : IO (Array String) := do
   let normalized := (out.stdout.replace "\n" " ").replace "\t" " "
   return (normalized.splitOn " ").filter (· != "") |>.toArray
 
-/-- Extra library search paths, by platform. Lean's bundled linker (`ld.lld`)
-    does NOT search Debian/Ubuntu's multiarch lib dir by default, so a bare
-    `-lpq`/`-lssl` fails on the GitHub runner with "unable to find library".
-    We add the multiarch dirs on Linux and the keg-only Homebrew prefixes on
-    macOS. A non-existent `-L` is only a linker warning, so listing several
-    (x86_64 + aarch64, Apple-Silicon + Intel) is safe. -/
-def libSearchDirs : Array String :=
-  if System.Platform.isOSX then
-    #["-L/opt/homebrew/opt/libpq/lib", "-L/usr/local/opt/libpq/lib",
-      "-L/opt/homebrew/opt/openssl@3/lib", "-L/usr/local/opt/openssl@3/lib"]
-  else
-    #["-L/usr/lib/x86_64-linux-gnu", "-L/usr/lib/aarch64-linux-gnu"]
+/-- Link flags for a pkg-config package: its `--libs`, plus an explicit
+    `-L<libdir>` from `--variable=libdir`.
 
-/-- Link flags for libpq (`ffi/postgres.c`). -/
-def libpqLinkArgs : Array String := libSearchDirs ++ #["-lpq"]
+    `pkg-config --libs` omits library directories it considers "default" (e.g.
+    Debian/Ubuntu's multiarch `/usr/lib/x86_64-linux-gnu`), but Lean's bundled
+    `ld.lld` does NOT search those — so a bare `-lpq`/`-lssl` fails on the
+    GitHub runner with "unable to find library". `--variable=libdir` reports the
+    exact directory on every platform (multiarch on Linux, the keg-only Homebrew
+    prefix on macOS), so no library path is ever hardcoded. -/
+def pkgLinkFlags (pkg : String) : IO (Array String) := do
+  let libs ← pkgConfig #["--libs", pkg]
+  let libdir ← pkgConfig #["--variable=libdir", pkg]
+  return (libdir.filter (· != "")).map ("-L" ++ ·) ++ libs
 
-/-- Link flags for OpenSSL (`ffi/jose.c`). -/
-def opensslLinkArgs : Array String := libSearchDirs ++ #["-lssl", "-lcrypto"]
-
-/-- All native link flags for the linen FFI (libpq + OpenSSL). -/
-def nativeLinkArgs : Array String := libpqLinkArgs ++ opensslLinkArgs
+-- Resolve the native link flags at lakefile-elaboration time via `pkg-config`.
+-- This runs on the build machine (Lake recompiles the lakefile per checkout),
+-- so the Ubuntu runner gets Linux paths and dev boxes get their own — with no
+-- library location hardcoded. Defines `libpqLinkArgs`, `opensslLinkArgs`,
+-- and `nativeLinkArgs` as plain `Array String` literals.
+open Lean Elab Command in
+run_cmd do
+  let mkDef (n : Name) (flags : Array String) : CommandElabM Unit := do
+    let lits : Array (TSyntax `term) := flags.map (fun s => quote s)
+    elabCommand (← `(def $(mkIdent n) : Array String := #[$lits,*]))
+  let pq ← pkgLinkFlags "libpq"
+  let ssl ← pkgLinkFlags "openssl"
+  mkDef `libpqLinkArgs pq
+  mkDef `opensslLinkArgs ssl
+  mkDef `nativeLinkArgs (pq ++ ssl)
 
 -- ── Native FFI (POSIX sockets + kqueue/epoll, PostgreSQL libpq) ──
 -- The C shims in `ffi/` are portable across macOS and Linux. `network.c`
