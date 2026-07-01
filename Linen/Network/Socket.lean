@@ -23,6 +23,7 @@
   | `connectFinish` | `Socket .connecting`| `ConnectOutcome`   | argument type          |
   | `send`          | `Socket .connected` | `SendOutcome`      | argument type          |
   | `recv`          | `Socket .connected` | `RecvOutcome`      | argument type          |
+  | `sendAll`/`sendTo`/`recvFrom` | `Socket .connected` | `Unit`/`ℕ`/`ByteArray × SockAddr` | argument type |
   | `close`         | `Socket state`, `state ≠ .closed` | `Socket .closed` | **proof obligation** |
 
   The `close` function is the most interesting case: it accepts a socket in
@@ -168,6 +169,26 @@ def connectFinish (s : Socket .connecting) : IO ConnectOutcome :=
     POSIX: recv(2) requires a connected socket. -/
 @[inline] def recv (s : Socket .connected) (maxlen : Nat := 4096) : IO RecvOutcome :=
   socketRecvNB s.raw maxlen.toUSize
+
+/-- Send all bytes from a `ByteArray` on a connected socket, looping until
+    complete. The retry loop runs in C (avoiding round-trips through the
+    non-blocking `send` above), so prefer this over `Blocking.sendAll` when
+    the extra reliability isn't needed at the Lean level.
+    $$\text{sendAll} : \text{Socket}\ \texttt{.connected} \to \text{ByteArray} \to \text{IO}(\text{Unit})$$ -/
+@[inline] def sendAll (s : Socket .connected) (data : ByteArray) : IO Unit :=
+  socketSendAll s.raw data
+
+/-- Send a UDP datagram to a specific host and port on a connected socket.
+    Returns the number of bytes sent.
+    $$\text{sendTo} : \text{Socket}\ \texttt{.connected} \to \text{ByteArray} \to \text{SockAddr} \to \text{IO}\ \mathbb{N}$$ -/
+def sendTo (s : Socket .connected) (data : ByteArray) (addr : SockAddr) : IO Nat :=
+  socketSendTo s.raw data addr.host addr.port
+
+/-- Receive a UDP datagram together with the sender's address on a connected socket.
+    $$\text{recvFrom} : \text{Socket}\ \texttt{.connected} \to \mathbb{N} \to \text{IO}(\text{ByteArray} \times \text{SockAddr})$$ -/
+def recvFrom (s : Socket .connected) (maxlen : Nat := 4096) : IO (ByteArray × SockAddr) := do
+  let (data, host, port) ← socketRecvFrom s.raw maxlen.toUSize
+  pure (data, ⟨host, port.toUInt16⟩)
 
 /-- Get the raw file descriptor for EventLoop correlation.
     $$\text{getFd} : \text{Socket}\ s \to \text{IO Nat}$$ -/

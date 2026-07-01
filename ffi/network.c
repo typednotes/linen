@@ -643,7 +643,7 @@ LEAN_EXPORT lean_obj_res linen_socket_sendto(b_lean_obj_arg sock, b_lean_obj_arg
 
 /**
  * recvfrom(sock, maxlen) -> (ByteArray, (host_string, port))
- * Returns nested pair: (ByteArray x (String x USize))
+ * Returns nested pair: (ByteArray x (String x Nat))
  */
 LEAN_EXPORT lean_obj_res linen_socket_recvfrom(b_lean_obj_arg sock, size_t maxlen) {
     int fd = get_socket_fd(sock);

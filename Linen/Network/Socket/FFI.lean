@@ -95,10 +95,11 @@ opaque socketConnect (sock : @& RawSocket) (host : @& String) (port : UInt16) : 
 
 -- ── Send / Recv (TCP) ──
 
-/-- Send data. Returns bytes sent.
-    $$\text{socketSend} : \text{Socket} \to \text{ByteArray} \to \text{IO}(\text{USize})$$ -/
+/-- Send data. Returns bytes sent as a Nat (boxed) to avoid compiled-mode
+    ABI issues with `IO USize` (see `socketGetFd`).
+    $$\text{socketSend} : \text{Socket} \to \text{ByteArray} \to \text{IO}(\mathbb{N})$$ -/
 @[extern "linen_socket_send"]
-opaque socketSend (sock : @& RawSocket) (data : @& ByteArray) : IO USize
+opaque socketSend (sock : @& RawSocket) (data : @& ByteArray) : IO Nat
 
 /-- Receive data. Returns received bytes.
     $$\text{socketRecv} : \text{Socket} \to \text{USize} \to \text{IO}(\text{ByteArray})$$ -/
@@ -113,16 +114,18 @@ opaque socketSendAll (sock : @& RawSocket) (data : @& ByteArray) : IO Unit
 
 -- ── UDP: sendto / recvfrom ──
 
-/-- Send data to a specific address (UDP).
-    $$\text{socketSendTo} : \text{Socket} \to \text{ByteArray} \to \text{String} \to \text{UInt16} \to \text{IO}(\text{USize})$$ -/
+/-- Send data to a specific address (UDP). Returns bytes sent as a Nat
+    (boxed) to avoid compiled-mode ABI issues with `IO USize` (see `socketGetFd`).
+    $$\text{socketSendTo} : \text{Socket} \to \text{ByteArray} \to \text{String} \to \text{UInt16} \to \text{IO}(\mathbb{N})$$ -/
 @[extern "linen_socket_sendto"]
-opaque socketSendTo (sock : @& RawSocket) (data : @& ByteArray) (host : @& String) (port : UInt16) : IO USize
+opaque socketSendTo (sock : @& RawSocket) (data : @& ByteArray) (host : @& String) (port : UInt16) : IO Nat
 
 /-- Receive data with sender address (UDP).
-    Returns `(data, (host, port))`.
-    $$\text{socketRecvFrom} : \text{Socket} \to \text{USize} \to \text{IO}(\text{ByteArray} \times (\text{String} \times \text{USize}))$$ -/
+    Returns `(data, (host, port))`; `port` is a Nat (boxed) to avoid
+    compiled-mode ABI issues with `USize` fields (see `socketGetFd`).
+    $$\text{socketRecvFrom} : \text{Socket} \to \text{USize} \to \text{IO}(\text{ByteArray} \times (\text{String} \times \mathbb{N}))$$ -/
 @[extern "linen_socket_recvfrom"]
-opaque socketRecvFrom (sock : @& RawSocket) (maxlen : USize) : IO (ByteArray × String × USize)
+opaque socketRecvFrom (sock : @& RawSocket) (maxlen : USize) : IO (ByteArray × String × Nat)
 
 -- ── Socket options ──
 

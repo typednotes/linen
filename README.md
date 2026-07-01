@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>110 modules</strong> · <strong>226 compile-time theorems</strong> · <strong>1975 <code>#guard</code> checks</strong>
+  <strong>136 modules</strong> · <strong>253 compile-time theorems</strong> · <strong>2432 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -161,6 +161,20 @@ Three rules hold across the whole library:
 - `Control.Monad.join`, `replicateM`, `replicateM_`, `when`, `unless` — flatten,
   repeat, and conditionally run
   monadic actions (with the `join_pure` law).
+- `Control.Monad.Except` — `mtl`-named `throwError`/`catchError`/`liftEither`/
+  `mapExceptT`/`withExceptT`/`runExceptT` over core's own `ExceptT`/`Except`.
+- `Control.Monad.Reader` — the `Reader` alias plus `mtl`-named `ask`/`asks`/
+  `local`/`runReaderT`/`runReader`/`mapReaderT` over core's own `ReaderT`/
+  `read`/`ReaderT.adapt`.
+- `Control.Monad.State` — the `State` alias plus `mtl`-named `put`/`gets`/
+  `runStateT`/`evalStateT`/`execStateT`/`runState`/`evalState`/`execState`
+  over core's own `StateT` (`get`/`set`/`modify` are core's `MonadState`
+  names already — used directly, not re-wrapped).
+- `Control.Monad.Trans` — the `mtl`-named `lift` over core's own
+  `MonadLift`/`monadLift`, with the `lift_pure`/`lift_bind` laws restated
+  generically (core's `MonadLift`/`LawfulMonadLift` already generalize
+  Haskell's `MonadTrans` class, with lawful instances for `ExceptT`,
+  `ReaderT`, and `StateT`).
 - `Control.Category` / `LawfulCategory` — categories with identity and
   associative composition (`≫`, diagrammatic), with the lawful `Fun` instance.
 - `Control.Arrow` / `ArrowChoice` — arrows over a `Category`: `arr`, `first`,
@@ -337,11 +351,12 @@ Three rules hold across the whole library:
   (`extern_lib linenffi`); the `Linen` library is `precompileModules`-enabled so
   the bindings are callable from `#eval`.
 - `Network.Socket` — the safe, high-level API over the FFI: `socket → bind →
-  listen → accept` (and `connect`/`connectFinish`, `send`/`recv`) with each
-  transition's pre/post state in its signature, a `close` whose `state ≠ .closed`
-  proof obligation makes double-close a type error, `withSocket` / `withListenTCP`
-  / `withEventLoop` bracket helpers, `listenTCP`/`listenTCP6`, address
-  introspection, and an `EventLoop` (kqueue/epoll) wrapper.
+  listen → accept` (and `connect`/`connectFinish`, `send`/`recv`, `sendAll`,
+  UDP `sendTo`/`recvFrom`) with each transition's pre/post state in its
+  signature, a `close` whose `state ≠ .closed` proof obligation makes
+  double-close a type error, `withSocket` / `withListenTCP` / `withEventLoop`
+  bracket helpers, `listenTCP`/`listenTCP6`, address introspection, and an
+  `EventLoop` (kqueue/epoll) wrapper.
 - `Network.Socket.EventDispatcher` — the bridge from socket readiness to the
   green-thread model: a **sharded** set of dispatch threads (fds partitioned by
   `fd % N`, each shard its own kqueue/epoll loop + waiter map) resolves an
@@ -349,6 +364,11 @@ Three rules hold across the whole library:
   `recvGreen` / `sendAllGreen`) **suspend a `Green` thread as a heap object
   instead of holding an OS thread**. This is what lets one worker pool serve many
   thousands of IO-bound connections.
+- `Network.Socket.Blocking` — blocking-style `accept` / `connect` / `send` /
+  `sendAll` / `recv`, retrying on `wouldBlock` for tests, scripts, and code
+  that doesn't need event-loop integration (production non-blocking I/O should
+  use `EventDispatcher` instead). Every retry loop is a plain `while`, so the
+  module needs no `partial def`.
 
 ### `Network.Mime` — MIME type lookup
 
@@ -462,6 +482,122 @@ Three rules hold across the whole library:
   (parse compact form, verify the signature over the candidate JWK set, then
   validate the claims).
 
+### `Options.Applicative` — command-line argument parsing
+
+- `Options.Applicative.Types` — the core types of Haskell's
+  `optparse-applicative`: `ReadM` (a `String → Except String α` reader),
+  `Mod` (a right-biased monoid of option modifiers — long/short name, help,
+  metavar, hidden, showDefault), `InfoMod`/`ParserInfo` (program description,
+  header/footer, failure code), and `OptDescr` (option/flag/argument/
+  subcommand descriptions kept separate for help generation). `Parser` is a
+  **functional** representation (`List String → Except String (α × List
+  String)`) standing in for Haskell's free-applicative GADT, which Lean's
+  positivity checker rejects.
+- `Options.Applicative.Builder` — the fluent builder API over `Types`:
+  modifier constructors (`long`/`short`/`help`/`metavar`/`hidden`/
+  `showDefault`), readers (`str`/`eitherReader`/`auto` via a `FromString`
+  class), option/flag/argument/subcommand builders (`option`/`strOption`/
+  `switch`/`flag`/`flag'`/`argument`/`subparser`), `Pure`/`Functor`/`Seq`/
+  `Applicative`/`OrElse` instances for `Parser` (so parsers compose with
+  `<*>`/`<|>`), and `withDefault`/`optionWithDefault`/
+  `strOptionWithDefault`/`command`.
+- `Options.Applicative.Extra` — the high-level execution API: `renderHelp`
+  (generates usage/options/commands help text from a `ParserInfo`), `helper`
+  (adds `--help`/`-h` support as an identity-returning flag), `info` (wraps a
+  parser with `helper` and `InfoMod` metadata), `hsubparser` (a subcommand
+  parser hidden from help), `execParser` (runs a `ParserInfo` against `IO`
+  arguments, printing help and exiting on failure or `--help`), and
+  `execParserPure` (an `Except`-returning variant for testing).
+
+### `PostgREST.ApiRequest` — request-preference parsing
+
+- `PostgREST.ApiRequest.Preferences` — parses the HTTP `Prefer` header used by
+  PostgREST-style APIs: `PreferCount`/`PreferReturn`/`PreferResolution`/
+  `PreferTransaction`/`PreferMissing`/`PreferHandling` enums (each with a
+  `none_`/unspecified variant and a `ToString` rendering back to the wire
+  format), a `Preferences` struct bundling all dimensions plus an optional
+  `preferMaxAffected` count, and `parsePreferences` to fold a list of header
+  values (comma- or semicolon-separated, whitespace-trimmed) into a
+  `Preferences`.
+- `PostgREST.Auth` — the result of authenticating a request: `AuthResult`
+  bundles the PostgreSQL role to assume for the request (with a proof that
+  the role name is non-empty, since PostgreSQL rejects empty role names for
+  `SET ROLE`) together with the JWT claims as key-value pairs, plus
+  `AuthResult.lookupClaim` to look up a claim by key.
+- `PostgREST.Auth` — the authentication middleware built on `Auth.Types`:
+  `extractBearerToken`/`findAuthHeader` pull a Bearer token out of the
+  Authorization header, `extractRole` resolves a role from a dot-separated
+  claim path (falling back to the anonymous role), and `authenticate` ties
+  it together into an `Except String AuthResult`. JWT signature validation
+  is stubbed pending wiring to `Crypto.JOSE`, matching the equivalent point
+  in Hale's own port.
+- `PostgREST.Cache.Sieve` — the SIEVE cache eviction policy (scan-resistant,
+  simpler than ARC): `SieveCache` holds entries in a circular buffer with a
+  "hand" pointer; `create`/`lookup`/`insert`/`remove`/`size` manage the
+  cache, with `lookup` marking an entry visited and eviction sweeping the
+  hand to clear visited flags before evicting the first unvisited entry.
+- `PostgREST.Config.JSPath` — JWT claim path parsing: `JSPath` is a list of
+  `JSPathSegment`s (`key`/`index`) parsed from strings like `.role` or
+  `.user.permissions` via `JSPath.parse`; `follow`/`followNested` walk a
+  flat (or one-level-nested) key-value claim association list, and
+  `defaultRoleClaimPath` is the default `.role` path.
+- `PostgREST.Config.PgVersion` — PostgreSQL version parsing and comparison:
+  `PGVersion` (major/minor/patch) with `ToString`/`Ord`/`Inhabited`,
+  `fromVersionNum`/`toVersionNum` for PostgreSQL's packed integer encoding
+  (e.g. `150004` ↔ `15.0.4`), `PGVersion.parse` for dotted version strings,
+  and `pgVersionMin`/`isSupported`/`isAtLeastMajor`/`isAtLeast` for
+  minimum-version checks (PostgreSQL 9.6+).
+- `PostgREST.Config.Proxy` — reverse-proxy URI configuration for OpenAPI
+  spec generation: `ProxyUri` (scheme/host/port/base path) with
+  `ProxyUri.parse`/`toUri`/`ToString`, and `openApiServerUrl` to build the
+  OpenAPI server URL from either the configured proxy or the bound
+  host/port.
+- `PostgREST.Cors` — CORS middleware: `corsHeaders` and `preflightHeaders`
+  compute the `Access-Control-*` response headers for an origin against an
+  optional allow-list, plus `defaultExposedHeaders`/`defaultAllowedHeaders`.
+- `PostgREST.Debounce` — schema-cache-reload rate limiting: `Debouncer`
+  (an `IO.Ref`-backed timestamp plus a minimum interval) and
+  `Debouncer.create`/`run`, which only invokes the given action once the
+  interval has elapsed since the last invocation.
+- `PostgREST.Listener` — PostgreSQL `LISTEN`/`NOTIFY` channel handling:
+  `pgrstChannel`/`listenSql`, and `NotificationAction`/`parseNotification`
+  to classify a notification payload as a schema-cache reload, a config
+  reload, or an unrecognized payload.
+- `PostgREST.Logger` — structured logging: `LogLevel` (`crit`/`error`/
+  `warn`/`info`/`debug`) with `Ord`/`ToString`, and `log`/`logCrit`/
+  `logError`/`logWarn`/`logInfo`/`logDebug`, which print a timestamped
+  message to stderr only when the level is at or above the configured
+  threshold.
+- `PostgREST.MediaType` — content-type negotiation: `MediaType` (JSON,
+  CSV, plain, XML, octet-stream, GeoJSON, OpenAPI, the `vnd.pgrst.object`
+  singular-object types, an `EXPLAIN` plan type, and an `other` escape
+  hatch) with `toMime`/`toContentType`/`ofMime`/`isJSON`/`isText`; 9
+  `native_decide` theorems prove the `ofMime`/`toMime` roundtrip for every
+  standard variant.
+- `PostgREST.Network` — server binding helpers: `resolveHost` maps the
+  `"!4"`/`"!6"`/`"*"` bind-address shorthands to their concrete
+  IPv4/IPv6 wildcard addresses.
+- `PostgREST.RangeQuery` — HTTP range-based pagination: `NonnegRange`
+  (offset + optional limit) with `parseRange` for the `Range` header, and
+  `ContentRange` (offset/limit/optional total, with a proof that the range
+  fits within the total) with `contentRangeHeader`/`ContentRange.fromNonnegRange`
+  for the `Content-Range` response header.
+- `PostgREST.Response` — HTTP response construction: `contentRangeHeader`,
+  `readHeaders`/`mutateHeaders`, and `readStatus` (200/206/416 depending on
+  offset/count/total), with a `readStatus_valid` theorem proving the
+  returned status code is always in `[100, 599]`.
+- `PostgREST.Response.GucHeader` — GUC-variable-to-HTTP-header mapping:
+  `gucHeaderPrefix`/`gucStatusVar` and `parseGucHeaders`/`parseGucStatus`
+  for the `response.headers`/`response.status` PostgreSQL session settings.
+- `PostgREST.Response.Performance` — performance timing headers:
+  `serverTimingHeader`, `serverTimingValue`, and `timingHeaders`, which
+  builds a `Server-Timing` header from total/plan/exec durations.
+- `PostgREST.SchemaCache.Identifiers` — schema-qualified identifiers:
+  `QualifiedIdentifier` (schema + name) with `BEq`/`Hashable`/`Ord`/
+  `ToString`, `escapeIdent`/`quoteIdent`/`quoteQi` for injection-safe SQL
+  quoting, `toQi` parsing, `anyElement`/`isAnyElement`, and `RelIdentifier`;
+  4 theorems prove `quoteIdent`'s quoting/escaping behavior.
+
 ## Quick Start
 
 Add to your `lakefile.toml`:
@@ -527,6 +663,10 @@ open Data.Functor Control.Monad
 | `Linen.Data.Void` | vacuous `Empty` instances (`BEq`/`Ord`/`Hashable`/`ToString`) + `Empty → α` singleton law |
 | `Linen.Control.Applicative` | `asum` |
 | `Linen.Control.Monad` | `join`, `replicateM`, `replicateM_`, `when`, `unless` |
+| `Linen.Control.Monad.Except` | `mtl` names over core `ExceptT`/`Except`: `throwError`, `catchError`, `liftEither`, `mapExceptT`, `withExceptT`, `runExceptT` |
+| `Linen.Control.Monad.Reader` | `Reader` alias + `mtl` names over core `ReaderT`/`read`/`adapt`: `ask`, `asks`, `local`, `runReaderT`, `runReader`, `mapReaderT` |
+| `Linen.Control.Monad.State` | `State` alias + `mtl` names over core `StateT`: `put`, `gets`, `runStateT`, `evalStateT`, `execStateT`, `runState`, `evalState`, `execState` (`get`/`set`/`modify` reused as-is) |
+| `Linen.Control.Monad.Trans` | `mtl` name `lift` over core `MonadLift`/`monadLift`, plus generic `lift_pure`/`lift_bind` laws (no bespoke `MonadTrans` class or per-transformer instances) |
 | `Linen.Control.Category` | `Category`, `LawfulCategory`, `Fun`, the `≫` operator |
 | `Linen.Control.Arrow` | `Arrow`/`ArrowChoice`: `arr`/`first`/`split`/`left`/`right`/`fanin`, `Fun` instances |
 | `Linen.Control.Exception` | IO `bracket` / `onException` (resource safety & failure cleanup) |
@@ -569,8 +709,9 @@ open Data.Functor Control.Monad
 | `Linen.Network.HTTP3.QPACK.Encode` | static-only QPACK encoding: `encodeQInt`/`encodeStringLiteral` + `encodeHeaders`, round-trip tested |
 | `Linen.Network.Socket.Types` | phantom-typed `Socket` lifecycle, `Family`/`SockAddr`/`EventType`, non-blocking outcome types |
 | `Linen.Network.Socket.FFI` | `@[extern]` C bindings: sockets, options, UDP, `getAddrInfo`, kqueue/epoll event loop |
-| `Linen.Network.Socket` | safe phantom-typed lifecycle API, `withSocket`/`listenTCP`/`withEventLoop`, `EventLoop` |
+| `Linen.Network.Socket` | safe phantom-typed lifecycle API, `withSocket`/`listenTCP`/`withEventLoop`, `EventLoop`, `sendAll`/`sendTo`/`recvFrom` |
 | `Linen.Network.Socket.EventDispatcher` | kqueue/epoll → `Green` bridge: `waitReadable`/`waitWritable`/`recvGreen`/`sendAllGreen` |
+| `Linen.Network.Socket.Blocking` | blocking-style `accept`/`connect`/`send`/`sendAll`/`recv` over the non-blocking API, retrying on `wouldBlock` |
 | `Linen.Network.Mime` | MIME lookup (`mime-types`): `defaultMimeMap`, `fileNameExtensions`, `mimeByExt`, `defaultMimeLookup` |
 | `Linen.Web.Cookie` | RFC 6265 cookie parse/render: `parseCookies`/`renderCookies`, `SetCookie` + `parseSetCookie`/`renderSetCookie` |
 | `Linen.DataFrame.Internal.Types` | typed tabular `DataFrame` with a proven rectangular invariant; `Value`/`Column`/`ColumnType` + smart constructors |
@@ -596,6 +737,27 @@ open Data.Functor Control.Monad
 | `Linen.Crypto.JOSE.JWK` | JWK helpers: `parseOctKey` (base64url), `toDerPublicKey` (RSA/EC → DER via OpenSSL) |
 | `Linen.Crypto.JOSE.JWS` | JWS compact verification (RFC 7515): `splitCompact`, `verifySignature` (HMAC/RSA/EC via OpenSSL) |
 | `Linen.Crypto.JOSE.JWT` | JWT verification (RFC 7519): `validateClaims` (exp/nbf/aud/iss, bounded skew), `verifyJWT` (signature + claims) |
+| `Linen.Options.Applicative.Types` | `optparse-applicative` core types: `ReadM`, `Mod` (right-biased modifier monoid), `InfoMod`/`ParserInfo`, `OptDescr`, functional `Parser` |
+| `Linen.Options.Applicative.Builder` | builder API: `option`/`strOption`/`switch`/`flag`/`flag'`/`argument`/`subparser`, `Pure`/`Functor`/`Seq`/`Applicative`/`OrElse` for `Parser`, `withDefault`/`command` |
+| `Linen.Options.Applicative.Extra` | execution API: `renderHelp`, `helper`, `info`, `hsubparser`, `execParser`, `execParserPure` |
+| `Linen.PostgREST.ApiRequest.Preferences` | HTTP `Prefer` header parsing: `PreferCount`/`PreferReturn`/`PreferResolution`/`PreferTransaction`/`PreferMissing`/`PreferHandling`, `Preferences`, `parsePreferences` |
+| `Linen.PostgREST.Auth.Types` | `AuthResult` (role + non-emptiness proof + JWT claims), `AuthResult.lookupClaim` |
+| `Linen.PostgREST.Auth` | auth middleware: `extractBearerToken`, `findAuthHeader`, `extractRole`, `authenticate` |
+| `Linen.PostgREST.Cache.Sieve` | SIEVE cache eviction: `SieveCache`, `create`/`lookup`/`insert`/`remove`/`size` |
+| `Linen.PostgREST.Config.JSPath` | JWT claim path parsing: `JSPath`, `JSPath.parse`, `follow`/`followNested`, `defaultRoleClaimPath` |
+| `Linen.PostgREST.Config.PgVersion` | PostgreSQL version parsing: `PGVersion`, `fromVersionNum`/`toVersionNum`/`parse`, `isSupported`/`isAtLeastMajor`/`isAtLeast` |
+| `Linen.PostgREST.Config.Proxy` | proxy configuration: `UriScheme`, `ProxyUri`, `ProxyUri.parse`/`toUri`, `openApiServerUrl` |
+| `Linen.PostgREST.Cors` | CORS middleware: `corsHeaders`, `preflightHeaders`, `defaultExposedHeaders`/`defaultAllowedHeaders` |
+| `Linen.PostgREST.Debounce` | debounce utility: `Debouncer`, `Debouncer.create`/`run` |
+| `Linen.PostgREST.Listener` | LISTEN/NOTIFY handling: `pgrstChannel`, `listenSql`, `NotificationAction`, `parseNotification` |
+| `Linen.PostgREST.Logger` | structured logging: `LogLevel`, `log`, `logCrit`/`logError`/`logWarn`/`logInfo`/`logDebug` |
+| `Linen.PostgREST.MediaType` | content-type negotiation: `MediaType`, `toMime`/`toContentType`/`ofMime`/`isJSON`/`isText` |
+| `Linen.PostgREST.Network` | server binding helpers: `resolveHost` |
+| `Linen.PostgREST.RangeQuery` | HTTP range pagination: `NonnegRange`, `parseRange`, `ContentRange`, `contentRangeHeader`, `ContentRange.fromNonnegRange` |
+| `Linen.PostgREST.Response` | HTTP response construction: `contentRangeHeader`, `readHeaders`/`mutateHeaders`, `readStatus`, `readStatus_valid` |
+| `Linen.PostgREST.Response.GucHeader` | GUC-to-HTTP-header mapping: `gucHeaderPrefix`, `gucStatusVar`, `parseGucHeaders`, `parseGucStatus` |
+| `Linen.PostgREST.Response.Performance` | performance timing headers: `serverTimingHeader`, `serverTimingValue`, `timingHeaders` |
+| `Linen.PostgREST.SchemaCache.Identifiers` | schema-qualified identifiers: `QualifiedIdentifier`, `escapeIdent`/`quoteIdent`/`quoteQi`/`toQi`, `RelIdentifier` |
 
 ## Build & Test
 

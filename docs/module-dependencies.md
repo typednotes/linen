@@ -167,41 +167,41 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 141. `Hale.Jose` -->
 <!-- 142. `Hale.MimeTypes.Network.Mime` -->
 <!-- 143. `Hale.MimeTypes` -->
-<!-- 144. `Hale.Network.Network.Socket.Types` -->
-<!-- 145. `Hale.Network.Network.Socket.FFI` -->
-<!-- 146. `Hale.Network.Network.Socket` -->
-<!-- 147. `Hale.Network.Network.Socket.EventDispatcher` -->
-148. `Hale.Mtl.Control.Monad.Except`
-149. `Hale.Mtl.Control.Monad.Reader`
-150. `Hale.Mtl.Control.Monad.State`
-151. `Hale.Mtl.Control.Monad.Trans`
-152. `Hale.Mtl`
-153. `Hale.Network.Network.Socket.Blocking`
-154. `Hale.Network.Network.Socket.ByteString`
-155. `Hale.Network`
-156. `Hale.OptParse.Options.Applicative.Types`
-157. `Hale.OptParse.Options.Applicative.Builder`
-158. `Hale.OptParse.Options.Applicative.Extra`
-159. `Hale.OptParse.Options.Applicative`
-160. `Hale.OptParse`
-161. `Hale.PostgREST.PostgREST.ApiRequest.Preferences`
-162. `Hale.PostgREST.PostgREST.Auth.Types`
-163. `Hale.PostgREST.PostgREST.Auth`
-164. `Hale.PostgREST.PostgREST.Cache.Sieve`
-165. `Hale.PostgREST.PostgREST.Config.JSPath`
-166. `Hale.PostgREST.PostgREST.Config.PgVersion`
-167. `Hale.PostgREST.PostgREST.Config.Proxy`
-168. `Hale.PostgREST.PostgREST.Cors`
-169. `Hale.PostgREST.PostgREST.Debounce`
-170. `Hale.PostgREST.PostgREST.Listener`
-171. `Hale.PostgREST.PostgREST.Logger`
-172. `Hale.PostgREST.PostgREST.MediaType`
-173. `Hale.PostgREST.PostgREST.Network`
-174. `Hale.PostgREST.PostgREST.RangeQuery`
-175. `Hale.PostgREST.PostgREST.Response`
-176. `Hale.PostgREST.PostgREST.Response.GucHeader`
-177. `Hale.PostgREST.PostgREST.Response.Performance`
-178. `Hale.PostgREST.PostgREST.SchemaCache.Identifiers`
+<!-- 144. `Hale.Mtl.Control.Monad.Except` -->
+<!-- 145. `Hale.Mtl.Control.Monad.Reader` -->
+<!-- 146. `Hale.Mtl.Control.Monad.State` -->
+<!-- 147. `Hale.Mtl.Control.Monad.Trans` -->
+<!-- 148. `Hale.Mtl` -->
+<!-- 149. `Hale.Network.Network.Socket.Types` -->
+<!-- 150. `Hale.Network.Network.Socket.FFI` -->
+<!-- 151. `Hale.Network.Network.Socket` -->
+<!-- 152. `Hale.Network.Network.Socket.Blocking` -->
+<!-- 153. `Hale.Network.Network.Socket.ByteString` -->
+<!-- 154. `Hale.Network.Network.Socket.EventDispatcher` -->
+<!-- 155. `Hale.Network` -->
+<!-- 156. `Hale.OptParse.Options.Applicative.Types` -->
+<!-- 157. `Hale.OptParse.Options.Applicative.Builder` -->
+<!-- 158. `Hale.OptParse.Options.Applicative.Extra` -->
+<!-- 159. `Hale.OptParse.Options.Applicative` -->
+<!-- 160. `Hale.OptParse` -->
+<!-- 161. `Hale.PostgREST.PostgREST.ApiRequest.Preferences` -->
+<!-- 162. `Hale.PostgREST.PostgREST.Auth.Types` -->
+<!-- 163. `Hale.PostgREST.PostgREST.Auth` -->
+<!-- 164. `Hale.PostgREST.PostgREST.Cache.Sieve` -->
+<!-- 165. `Hale.PostgREST.PostgREST.Config.JSPath` -->
+<!-- 166. `Hale.PostgREST.PostgREST.Config.PgVersion` -->
+<!-- 167. `Hale.PostgREST.PostgREST.Config.Proxy` -->
+<!-- 168. `Hale.PostgREST.PostgREST.Cors` -->
+<!-- 169. `Hale.PostgREST.PostgREST.Debounce` -->
+<!-- 170. `Hale.PostgREST.PostgREST.Listener` -->
+<!-- 171. `Hale.PostgREST.PostgREST.Logger` -->
+<!-- 172. `Hale.PostgREST.PostgREST.MediaType` -->
+<!-- 173. `Hale.PostgREST.PostgREST.Network` -->
+<!-- 174. `Hale.PostgREST.PostgREST.RangeQuery` -->
+<!-- 175. `Hale.PostgREST.PostgREST.Response` -->
+<!-- 176. `Hale.PostgREST.PostgREST.Response.GucHeader` -->
+<!-- 177. `Hale.PostgREST.PostgREST.Response.Performance` -->
+<!-- 178. `Hale.PostgREST.PostgREST.SchemaCache.Identifiers` -->
 179. `Hale.PostgREST.PostgREST.ApiRequest.Types`
 180. `Hale.PostgREST.PostgREST.Config`
 181. `Hale.PostgREST.PostgREST.Config.Database`

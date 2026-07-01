@@ -12,6 +12,7 @@
     makes available to the interpreter.
 -/
 import Linen.Network.Socket
+import Linen.Network.Socket.Blocking
 
 open Network.Socket
 
@@ -27,6 +28,9 @@ example : Socket .fresh → SockAddr → IO ConnectOutcome  := connect
 example : Socket .connecting → IO ConnectOutcome        := connectFinish
 example : Socket .connected → ByteArray → IO SendOutcome := send
 example : Socket .connected → IO RecvOutcome            := (recv ·)
+example : Socket .connected → ByteArray → IO Unit       := sendAll
+example : Socket .connected → ByteArray → SockAddr → IO Nat := sendTo
+example : Socket .connected → IO (ByteArray × SockAddr) := (recvFrom ·)
 -- `close` accepts any non-closed state; the `state ≠ .closed` proof is
 -- discharged by `decide` for a concrete state. (Closing a `Socket .closed`
 -- is rejected at compile time — no proof of `.closed ≠ .closed` exists.)
@@ -74,5 +78,65 @@ example : Socket .connected → IO (Socket .closed)       := (close ·)
       unless info.host == "127.0.0.1" do
         throw (IO.userError s!"expected host 127.0.0.1, got {info.host}")
     | none => throw (IO.userError "unreachable: non-empty list has a head")
+
+-- sendAll (FFI-looped, TCP): establish a loopback connection via `Blocking`
+-- (already tested against these same non-blocking primitives), then verify
+-- the peer receives exactly the bytes sent through `sendAll`. Bounded: the
+-- accept side is polled via `IO.hasFinished` for at most ~2s.
+#eval show IO Unit from do
+  let server ← listenTCP "127.0.0.1" 0
+  let addr ← getSockName server
+  let serverTask ← IO.asTask (prio := .dedicated) (Blocking.accept server)
+  let client ← socket .inet .stream
+  let conn ← Blocking.connect client addr
+  let mut done := false
+  for _ in [0:200] do
+    if ← IO.hasFinished serverTask then done := true; break
+    IO.sleep 10
+  unless done do
+    throw (IO.userError "accept did not complete within ~2s")
+  match serverTask.get with
+  | .error e => throw e
+  | .ok (accepted, _peer) =>
+    sendAll accepted "hello".toUTF8
+    let bytes ← Blocking.recv conn 16
+    unless bytes == "hello".toUTF8 do
+      throw (IO.userError s!"expected 'hello', got {bytes.size} bytes")
+    let _ ← close accepted
+  let _ ← close conn
+  let _ ← close server
+
+-- recvFrom (UDP): `recvFrom` requires a `Socket .connected`, but `connect`
+-- only accepts `Socket .fresh`, and there is no `.bound → .connected`
+-- transition -- so a single socket can never be both "has a known fixed
+-- address" (via `bind`) and `.connected`. The sender below stays merely
+-- `.bound` (a real, addressable UDP socket) and is driven directly through
+-- the raw FFI; only the receiver reaches `.connected` and exercises the
+-- `recvFrom` wrapper under test.
+--
+-- `sendTo` itself is exercised only at compile time (line 32 above): on
+-- BSD/Darwin, `sendto(2)` on an already-connected `SOCK_DGRAM` socket fails
+-- with `EISCONN` even when the supplied address matches the connected peer
+-- (confirmed empirically on this host) -- unlike Linux, where it is
+-- permitted. Since `sendTo`'s type requires `Socket .connected`, no runtime
+-- call to it can succeed portably across the platforms this library targets.
+#eval show IO Unit from do
+  let p ← socket .inet .datagram
+  let p ← bind p ⟨"127.0.0.1", 0⟩
+  let addrP ← getSockName p
+  let q ← socket .inet .datagram
+  let connQ ← match ← connect q addrP with
+    | .connected s  => pure s
+    | .inProgress _ => throw (IO.userError "unexpected inProgress connecting a UDP socket")
+    | .refused e    => throw e
+  let addrQ ← getSockName connQ
+  let _ ← Network.Socket.FFI.socketSendTo p.raw "pong".toUTF8 addrQ.host addrQ.port
+  let (data, from_) ← recvFrom connQ
+  unless data == "pong".toUTF8 do
+    throw (IO.userError s!"expected 'pong', got {data.size} bytes")
+  unless from_.host == "127.0.0.1" do
+    throw (IO.userError s!"expected sender host 127.0.0.1, got {from_.host}")
+  let _ ← close connQ
+  let _ ← close p
 
 end Tests.Network.Socket
