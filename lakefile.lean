@@ -28,14 +28,35 @@ def pkgConfig (args : Array String) : IO (Array String) := do
   let normalized := (out.stdout.replace "\n" " ").replace "\t" " "
   return (normalized.splitOn " ").filter (· != "") |>.toArray
 
-/-- Link flags for libpq. On Linux libpq is on the default search path, so a
-    bare `-lpq` suffices and we avoid emitting bogus `-L` warnings in CI logs.
-    On macOS (keg-only) we add the Homebrew lib prefixes. -/
-def libpqLinkArgs : Array String :=
-  if System.Platform.isOSX then
-    #["-L/opt/homebrew/opt/libpq/lib", "-L/usr/local/opt/libpq/lib", "-lpq"]
-  else
-    #["-lpq"]
+/-- Link flags for a pkg-config package: its `--libs`, plus an explicit
+    `-L<libdir>` from `--variable=libdir`.
+
+    `pkg-config --libs` omits library directories it considers "default" (e.g.
+    Debian/Ubuntu's multiarch `/usr/lib/x86_64-linux-gnu`), but Lean's bundled
+    `ld.lld` does NOT search those — so a bare `-lpq`/`-lssl` fails on the
+    GitHub runner with "unable to find library". `--variable=libdir` reports the
+    exact directory on every platform (multiarch on Linux, the keg-only Homebrew
+    prefix on macOS), so no library path is ever hardcoded. -/
+def pkgLinkFlags (pkg : String) : IO (Array String) := do
+  let libs ← pkgConfig #["--libs", pkg]
+  let libdir ← pkgConfig #["--variable=libdir", pkg]
+  return (libdir.filter (· != "")).map ("-L" ++ ·) ++ libs
+
+-- Resolve the native link flags at lakefile-elaboration time via `pkg-config`.
+-- This runs on the build machine (Lake recompiles the lakefile per checkout),
+-- so the Ubuntu runner gets Linux paths and dev boxes get their own — with no
+-- library location hardcoded. Defines `libpqLinkArgs`, `opensslLinkArgs`,
+-- and `nativeLinkArgs` as plain `Array String` literals.
+open Lean Elab Command in
+run_cmd do
+  let mkDef (n : Name) (flags : Array String) : CommandElabM Unit := do
+    let lits : Array (TSyntax `term) := flags.map (fun s => quote s)
+    elabCommand (← `(def $(mkIdent n) : Array String := #[$lits,*]))
+  let pq ← pkgLinkFlags "libpq"
+  let ssl ← pkgLinkFlags "openssl"
+  mkDef `libpqLinkArgs pq
+  mkDef `opensslLinkArgs ssl
+  mkDef `nativeLinkArgs (pq ++ ssl)
 
 -- ── Native FFI (POSIX sockets + kqueue/epoll, PostgreSQL libpq) ──
 -- The C shims in `ffi/` are portable across macOS and Linux. `network.c`
@@ -59,11 +80,21 @@ target postgres.o pkg : FilePath := do
   let weakArgs := #["-I", (← getLeanIncludeDir).toString] ++ libpqCFlags
   buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
 
+/-- Compile `ffi/jose.c` (OpenSSL JOSE bindings) into an object file.
+    OpenSSL's include path is discovered at build time via `pkg-config`. -/
+target jose.o pkg : FilePath := do
+  let oFile := pkg.buildDir / "ffi" / "jose.o"
+  let srcJob ← inputTextFile <| pkg.dir / "ffi" / "jose.c"
+  let opensslCFlags ← pkgConfig #["--cflags", "openssl"]
+  let weakArgs := #["-I", (← getLeanIncludeDir).toString] ++ opensslCFlags
+  buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
+
 /-- Bundle the FFI object(s) into a static lib that Lake links automatically. -/
 extern_lib linenffi pkg := do
   let networkObj ← network.o.fetch
   let postgresObj ← postgres.o.fetch
-  buildStaticLib (pkg.staticLibDir / nameToStaticLib "linenffi") #[networkObj, postgresObj]
+  let joseObj ← jose.o.fetch
+  buildStaticLib (pkg.staticLibDir / nameToStaticLib "linenffi") #[networkObj, postgresObj, joseObj]
 
 @[default_target]
 lean_lib Linen where
@@ -71,23 +102,23 @@ lean_lib Linen where
   -- checks can call the `@[extern]` bindings through the interpreter.
   -- `moreLinkArgs` pulls in libpq (`-lpq` and its lib path) for `postgres.o`.
   needs := #[linenffi]
-  moreLinkArgs := libpqLinkArgs
+  moreLinkArgs := nativeLinkArgs
   precompileModules := true
 
 lean_lib Tests where
   needs := #[linenffi]
-  moreLinkArgs := libpqLinkArgs
+  moreLinkArgs := nativeLinkArgs
 
 lean_exe linen where
   root := `Main
-  moreLinkArgs := libpqLinkArgs
+  moreLinkArgs := nativeLinkArgs
 
 -- Example programs live under `Examples/` and share one entrypoint:
 -- `lake exe examples <name> [args...]`.
 lean_lib Examples where
   globs := #[.submodules `Examples]
-  moreLinkArgs := libpqLinkArgs
+  moreLinkArgs := nativeLinkArgs
 
 lean_exe examples where
   root := `Examples.Main
-  moreLinkArgs := libpqLinkArgs
+  moreLinkArgs := nativeLinkArgs

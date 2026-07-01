@@ -154,6 +154,11 @@ DONE = {
     "Hale.HttpClient.Network.HTTP.Client.Types",   # ported to Linen/Network/HTTP/Client/Types.lean (namespace Network.HTTP.Client): Connection/Request/Response + Response accessors; import Hale.HttpTypes→specific Types.{Method,Status,Header} (avoided Types.Version to prevent HttpVersion clash); pure, verbatim
     "Hale.HttpClient.Network.HTTP.Client.Request",   # ported to Linen/Network/HTTP/Client/Request.lean (namespace Network.HTTP.Client): serializeRequest (auto Host/Content-Length/Connection, structural for-loop) + sendRequest; pure, verbatim
     "Hale.HttpClient.Network.HTTP.Client.Response",   # ported to Linen/Network/HTTP/Client/Response.lean: converted 5 partial-def network loops to while-loops; findCRLF/findCharIdx → stdlib find?/findIdx?; FIXED chunked-decode bug (readExactly truncated & dropped buffered following chunks → added non-truncating fillTo); #eval IO tests via mock Connection
+    "Hale.IpRoute.Data.IP",   # ported to Linen/Data/IP.lean (namespace Data.IP): IPv4/IPv6/IP + AddrRange4/6 (bounded mask proof) + isMatchedTo + parseIPv4/parseCIDR4; pure, verbatim
+    "Hale.IpRoute",   # aggregator: re-exports Data.IP; covered by linen's root; no file
+    "Hale.Jose.Crypto.JOSE.FFI",   # ported to Linen/Crypto/JOSE/FFI.lean + ffi/jose.c (linen_jose_* OpenSSL bindings: HMAC/RSA-verify/EC-verify/key-build/base64url); OpenSSL via pkg-config in lakefile (nativeLinkArgs = libpq++openssl), CI installs libssl-dev
+    "Hale.Jose.Crypto.JOSE.Types",   # ported to Linen/Crypto/JOSE/Types.lean (namespace Crypto.JOSE): JWSAlgorithm/ECCurve/JWKKeyType/JWKKeyMaterial/JWK (coherence proof)/ClaimsSet/JWSHeader/JWTValidationSettings/JwtError + laws; kept local Repr ByteArray (stdlib lacks it); pure, verbatim
+    "Hale.Jose.Crypto.JOSE.JWK",   # ported to Linen/Crypto/JOSE/JWK.lean (namespace Crypto.JOSE.JWK): parseOctKey + toDerPublicKey over the OpenSSL FFI; #eval IO tests exercise the real base64url FFI; verbatim
 }
 
 

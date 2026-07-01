@@ -60,6 +60,7 @@ import Tests.Linen.Data.NewtypeTest
 import Tests.Linen.Data.OrdTest
 import Tests.Linen.Data.ProxyTest
 import Tests.Linen.Data.RatTest
+import Tests.Linen.Data.IPTest
 import Tests.Linen.Data.StringTest
 import Tests.Linen.Data.TraversableTest
 import Tests.Linen.Data.UniqueTest
@@ -78,6 +79,9 @@ import Tests.Linen.Database.SQL.SessionTest
 import Tests.Linen.Database.SQL.DecodersTest
 import Tests.Linen.Database.SQL.PoolTest
 import Tests.Linen.Database.SQL.StatementTest
+import Tests.Linen.Crypto.JOSE.FFITest
+import Tests.Linen.Crypto.JOSE.TypesTest
+import Tests.Linen.Crypto.JOSE.JWKTest
 import Tests.Linen.Network.HTTP2.Frame.TypesTest
 import Tests.Linen.Network.HTTP2.Frame.DecodeTest
 import Tests.Linen.Network.HTTP2.Frame.EncodeTest
