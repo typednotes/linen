@@ -925,6 +925,7 @@ lake exe examples                  # list the available examples
 lake exe examples echo             # green-threaded echo server — self-checking demo (exits 0)
 lake exe examples echo serve 9099  # run the echo server forever; then:  nc 127.0.0.1 9099
 lake exe examples bench            # network round-trips w/ a few-ms server delay: Green vs blocking pool (same #cores threads)
+lake exe examples postgrest        # in-memory PostgREST request handling + OpenAPI spec generation — self-checking demo
 ```
 
 The `echo` example exercises the whole socket stack end-to-end — a green accept
