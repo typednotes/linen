@@ -204,31 +204,31 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 178. `Hale.PostgREST.PostgREST.SchemaCache.Identifiers` -->
 <!-- 179. `Hale.PostgREST.PostgREST.ApiRequest.Types` -->
 <!-- 180. `Hale.PostgREST.PostgREST.Config` -->
-181. `Hale.PostgREST.PostgREST.Config.Database`
-182. `Hale.PostgREST.PostgREST.Error.Types`
-183. `Hale.PostgREST.PostgREST.Error`
-184. `Hale.PostgREST.PostgREST.MainTx`
-185. `Hale.PostgREST.PostgREST.Plan.Types`
-186. `Hale.PostgREST.PostgREST.Query.SqlFragment`
-187. `Hale.PostgREST.PostgREST.SchemaCache.Relationship`
-188. `Hale.PostgREST.PostgREST.Plan.ReadPlan`
-189. `Hale.PostgREST.PostgREST.Plan.MutatePlan`
-190. `Hale.PostgREST.PostgREST.SchemaCache.Representations`
-191. `Hale.PostgREST.PostgREST.SchemaCache.Routine`
-192. `Hale.PostgREST.PostgREST.Plan.CallPlan`
-193. `Hale.PostgREST.PostgREST.SchemaCache.Table`
-194. `Hale.PostgREST.PostgREST.SchemaCache`
-195. `Hale.PostgREST.PostgREST.AppState`
-196. `Hale.PostgREST.PostgREST.Metrics`
-197. `Hale.PostgREST.PostgREST.Admin`
-198. `Hale.PostgREST.PostgREST.Observation`
-199. `Hale.PostgREST.PostgREST.TimeIt`
-200. `Hale.PostgREST.PostgREST.Unix`
-201. `Hale.PostgREST.PostgREST.Version`
-202. `Hale.PostgREST.PostgREST.App`
-203. `Hale.PostgREST.PostgREST.CLI`
-204. `Hale.PostgREST.PostgREST.Response.OpenAPI`
-205. `Hale.PostgREST`
+<!-- 181. `Hale.PostgREST.PostgREST.Config.Database` -->
+<!-- 182. `Hale.PostgREST.PostgREST.Error.Types` -->
+<!-- 183. `Hale.PostgREST.PostgREST.Error` -->
+<!-- 184. `Hale.PostgREST.PostgREST.MainTx` -->
+<!-- 185. `Hale.PostgREST.PostgREST.Plan.Types` -->
+<!-- 186. `Hale.PostgREST.PostgREST.Query.SqlFragment` -->
+<!-- 187. `Hale.PostgREST.PostgREST.SchemaCache.Relationship` -->
+<!-- 188. `Hale.PostgREST.PostgREST.Plan.ReadPlan` -->
+<!-- 189. `Hale.PostgREST.PostgREST.Plan.MutatePlan` -->
+<!-- 190. `Hale.PostgREST.PostgREST.SchemaCache.Representations` -->
+<!-- 191. `Hale.PostgREST.PostgREST.SchemaCache.Routine` -->
+<!-- 192. `Hale.PostgREST.PostgREST.Plan.CallPlan` -->
+<!-- 193. `Hale.PostgREST.PostgREST.SchemaCache.Table` -->
+<!-- 194. `Hale.PostgREST.PostgREST.SchemaCache` -->
+<!-- 195. `Hale.PostgREST.PostgREST.AppState` -->
+<!-- 196. `Hale.PostgREST.PostgREST.Metrics` -->
+<!-- 197. `Hale.PostgREST.PostgREST.Admin` -->
+<!-- 198. `Hale.PostgREST.PostgREST.Observation` -->
+<!-- 199. `Hale.PostgREST.PostgREST.TimeIt` -->
+<!-- 200. `Hale.PostgREST.PostgREST.Unix` -->
+<!-- 201. `Hale.PostgREST.PostgREST.Version` -->
+<!-- 202. `Hale.PostgREST.PostgREST.App` -->
+<!-- 203. `Hale.PostgREST.PostgREST.CLI` -->
+<!-- 204. `Hale.PostgREST.PostgREST.Response.OpenAPI` -->
+<!-- 205. `Hale.PostgREST` -->
 206. `Hale.QUIC.Network.QUIC.Types`
 207. `Hale.QUIC.Network.QUIC.Config`
 208. `Hale.QUIC.Network.QUIC.Connection`

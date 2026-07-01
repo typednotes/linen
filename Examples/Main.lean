@@ -10,6 +10,7 @@
 -/
 import Examples.Echo
 import Examples.Bench
+import Examples.PostgREST
 
 /-- Registry of runnable examples: `name`, one-line description, entry point. -/
 def examples : List (String × String × (List String → IO Unit)) :=
@@ -18,7 +19,10 @@ def examples : List (String × String × (List String → IO Unit)) :=
        Examples.Echo.run),
     ("bench",
        "network round-trips with a few-ms server delay: Green vs blocking pool, same threads  [args: C delayMs total]",
-       Examples.Bench.run) ]
+       Examples.Bench.run),
+    ("postgrest",
+       "in-memory PostgREST request handling + OpenAPI spec generation — self-checking demo; `postgrest spec` prints just the OpenAPI spec",
+       Examples.PostgREST.run) ]
 
 /-- Print usage and the list of available examples. -/
 def usage : IO Unit := do

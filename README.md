@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>138 modules</strong> · <strong>255 compile-time theorems</strong> · <strong>2520 <code>#guard</code> checks</strong>
+  <strong>162 modules</strong> · <strong>263 compile-time theorems</strong> · <strong>2823 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -609,6 +609,117 @@ Three rules hold across the whole library:
   …) with non-emptiness/positivity proof fields, `AppConfig.default`, and
   query helpers (`hasJwtSecret`, `hasAdminServer`, `mainSchema`, …); 2
   roundtrip theorems for `LogLevel`/`OpenAPIMode` parsing.
+- `PostgREST.Config.Database` — database connection helpers: `DbUriParts`
+  (host/port/dbname/user/password) with `toUri` reconstruction,
+  `searchPathSql`/`searchPathDisplay` for the `search_path` GUC,
+  `setRoleSql`/`resetRoleSql` for `SET LOCAL ROLE`, and `TxMode`/`TxEnd`
+  for transaction access mode and commit/rollback.
+- `PostgREST.Error.Types` — the PostgREST error hierarchy: `RangeError`/
+  `QPError`/`ApiRequestError`/`SchemaCacheError`/`JwtError`/`PgError`
+  (SQLSTATE-code-carrying, proof that the code is exactly 5 characters)
+  combine into the top-level `Error` union, each with `ToString`/`BEq`/
+  `Repr` and a `toHttpStatus` mapping to the appropriate HTTP status code;
+  3 theorems prove every `toHttpStatus` mapping stays within 100-599.
+- `PostgREST.Error` — error formatting: `errorPayload` renders any `Error`
+  as a JSON body (`message`/`details`/`hint`/`code`, with PostgREST's
+  `PGRST…` error codes) and `errorHeaders` produces the matching HTTP
+  headers, adding `WWW-Authenticate: Bearer` for JWT errors and
+  unauthenticated `insufficient_privilege` Postgres errors.
+- `PostgREST.MainTx` — the per-request transaction wrapper: `sqlLit`
+  (SQL string-literal escaping), `setSearchPath`/`setRole` and
+  `setRequestContext` (the `SET LOCAL` statements for role, JWT claims,
+  method, path, and headers), and `preRequestSql` for invoking a
+  configured pre-request function.
+- `PostgREST.Plan.Types` — resolved query-plan types: `CoercibleField` (column
+  reference with JSON path traversal and optional type coercion),
+  `AggregateFunction` (`count`/`sum`/`avg`/`max`/`min`/`json_agg`/
+  `jsonb_agg`) with `toSql`, `CoercibleSelectField`/`CoercibleFilter`/
+  `CoercibleOrderTerm`, the recursive `CoercibleLogicTree` boolean
+  expression tree, `SpreadType`/`RelJsonEmbedMode` for embedded
+  resources, and `ConflictAction` for `INSERT ... ON CONFLICT`.
+- `PostgREST.Query.SqlFragment` — the core SQL builder: `pgFmtIdent`/
+  `pgFmtQi`/`pgFmtLit` for injection-safe identifier and literal quoting,
+  `pgFmtField` (column reference with JSON path traversal and cast),
+  `simpleOpToSql`/`ftsOpToSql` operator mapping, `pgFmtFilter`, the
+  recursive `pgFmtLogicTree` (ported without `partial`, using the same
+  structural-recursion-through-`Array.map` pattern as
+  `ApiRequest.Types.LogicTree.toString`), `pgFmtOrderTerm`, JSON
+  aggregation wrappers (`asJsonF`/`asJsonSingleF`), and `SET LOCAL` GUC
+  helpers; 2 theorems prove `pgFmtIdent`/`pgFmtLit` always quote.
+- `PostgREST.SchemaCache.Relationship` — foreign-key relationships between
+  tables: `Cardinality` (`O2M`/`M2O`/`O2O`/`M2M` via a junction table) with
+  `BEq`/`ToString`, `Relationship` (table/foreign table/cardinality/column
+  pairs) with `BEq`/`ToString`, and `localColumns`/`foreignColumns`
+  accessors.
+- `PostgREST.Plan.ReadPlan` — a resolved SELECT query plan: `ReadPlan`
+  (select list, source table, filters, ordering, pagination via
+  `RangeQuery.NonnegRange`, and `rpRelationships` — embedded sub-queries
+  that become lateral joins, making `ReadPlan` recursive) with
+  `hasEmbeds`/`embedCount`/`hasFilters`/`hasOrdering` queries. Reuses
+  `PostgREST.RangeQuery.NonnegRange` for pagination rather than
+  redeclaring an equivalent range type.
+- `PostgREST.Plan.MutatePlan` — resolved INSERT/UPDATE/DELETE plans:
+  `MutatePlan` (`insert` with an optional `ConflictAction` for upserts,
+  `update`/`delete` with a `NonnegRange` for `LIMIT`-ed mutations) with
+  `targetTable`/`returningFields`/`hasReturning`.
+- `PostgREST.SchemaCache.Representations` — PostgreSQL type casts for
+  output formatting and input parsing: `Representation` (source/target
+  type + conversion function) and `MediaHandler` (custom content-type
+  output function).
+- `PostgREST.SchemaCache.Routine` — PostgreSQL function/procedure metadata
+  exposed as RPC endpoints: `Volatility`/`IsolationLevel`/`ParamMode`,
+  `RoutineParam`, `RoutineReturnType` (`single`/`setof`/`void`) with
+  `isSetof`, and `Routine` with `toQi`/`requiredParams`/`isSafeForGet`;
+  a theorem proves `isSafeForGet` holds exactly for non-`volatile`
+  functions.
+- `PostgREST.Plan.CallPlan` — a resolved RPC call plan: `CallPlan` binds
+  a `Routine` to concrete parameter values and a returning clause, with
+  `routineQi`/`isSetof`/`isSafeForGet`/`paramCount`.
+- `PostgREST.SchemaCache.Table` — table/view metadata from the system
+  catalogs: `Column` (name/type/nullability/default/enum values) and
+  `Table` (columns, primary key, INSERT/UPDATE/DELETE permissions) with
+  a proof field (`pk_subset`) that every primary-key column genuinely
+  appears in `tableColumns`, plus `toQi`/`findColumn`/`columnNames`/
+  `pkColumnNames`/`hasPrimaryKey`.
+- `PostgREST.SchemaCache` — the schema introspection cache: `SchemaCache`
+  aggregates tables, relationships, routines, and representations with
+  `empty`/`findTable`/`findRelationships`/`findRoutines`/
+  `tablesInSchemas`, plus the catalog-introspection SQL literals
+  (`tablesSql`/`columnsSql`/`relationshipsSql`/`routinesSql`/`versionSql`)
+  used to populate it from `pg_catalog`.
+- `PostgREST.AppState` — the shared mutable state of a running instance:
+  `Observation` events (for logging/metrics), `Metrics` counters, and
+  `AppState` itself (`IO.Ref`-backed schema cache and metrics plus an
+  observer callback) with `create`/`getSchemaCache`/`putSchemaCache`/
+  `observe`/`incRequestCount`/`incErrorCount`.
+- `PostgREST.Metrics` — `renderMetrics` renders `AppState.Metrics`
+  counters in Prometheus text exposition format.
+- `PostgREST.Admin` — the optional admin HTTP server: `handleAdminRequest`
+  answers `/live` (liveness), `/ready` (schema cache loaded), `/metrics`
+  (Prometheus exposition), and 404s any other path.
+- `PostgREST.Observation` — `defaultObserver` logs every `AppState.Observation`
+  event to stderr (schema cache load/failure, pool exhaustion, JWT
+  failures, request completion, server start, config reload, LISTEN
+  notifications).
+- `PostgREST.TimeIt` — `timeIt`/`timeIt_` time an `IO` action and return
+  its result (or discard it) alongside the elapsed milliseconds.
+- `PostgREST.Unix` — `defaultSocketMode` is the default Unix socket file
+  permission mode (`0o660`).
+- `PostgREST.Version` — `version`/`prettyVersion` identify this port
+  (`12.2.0-linen`, "Linen/Lean 4 port").
+- `PostgREST.App` — the core request-handling application:
+  `SimpleRequest`/`SimpleResponse`, `handleRequest` (root table listing,
+  CORS preflight, per-table GET/HEAD/POST/PATCH/DELETE/OPTIONS dispatch,
+  an RPC stub, 404/405/501 errors, metrics and observation recording,
+  and CORS headers on every response), and `printBanner` for startup.
+- `PostgREST.CLI` — command-line argument parsing: `Command`
+  (`serve`/`version`/`dumpConfig`/`dumpSchema`/`help`), `parseArgs`,
+  and `printUsage`.
+- `PostgREST.Response.OpenAPI` — OpenAPI 3.0 specification generation:
+  `pgTypeToOpenAPI` maps PostgreSQL types to OpenAPI type/format pairs,
+  `columnSchema` renders a column's JSON schema, and
+  `generateOpenAPISpec` builds the full spec (paths, schemas) from a
+  `SchemaCache`.
 
 ## Quick Start
 
@@ -772,6 +883,30 @@ open Data.Functor Control.Monad
 | `Linen.PostgREST.SchemaCache.Identifiers` | schema-qualified identifiers: `QualifiedIdentifier`, `escapeIdent`/`quoteIdent`/`quoteQi`/`toQi`, `RelIdentifier` |
 | `Linen.PostgREST.ApiRequest.Types` | API-request domain model: `Action`, `Filter`, `LogicTree`, `OrderTerm`, `SelectItem`, `Payload`, `Target` |
 | `Linen.PostgREST.Config` | application configuration: `AppConfig`, `LogLevel`, `OpenAPIMode`, refined `Port` |
+| `Linen.PostgREST.Config.Database` | database connection helpers: `DbUriParts`, `toUri`, `searchPathSql`/`searchPathDisplay`, `setRoleSql`/`resetRoleSql`, `TxMode`/`TxEnd` |
+| `Linen.PostgREST.Error.Types` | PostgREST error hierarchy: `ApiRequestError`, `JwtError`, `PgError`, `SchemaCacheError`, `Error`, `toHttpStatus` |
+| `Linen.PostgREST.Error` | error response rendering: `errorPayload` (JSON body), `errorHeaders` (`Content-Type`/`WWW-Authenticate`) |
+| `Linen.PostgREST.MainTx` | per-request transaction wrapper: `sqlLit`, `setSearchPath`, `setRole`, `setRequestContext`, `preRequestSql` |
+| `Linen.PostgREST.Plan.Types` | resolved query-plan types: `CoercibleField`, `AggregateFunction`, `CoercibleFilter`, `CoercibleLogicTree`, `CoercibleOrderTerm`, `ConflictAction` |
+| `Linen.PostgREST.Query.SqlFragment` | SQL fragment builder: `pgFmtIdent`/`pgFmtLit`, `pgFmtField`, `pgFmtFilter`, `pgFmtLogicTree`, `pgFmtOrderTerm`, `asJsonF`/`asJsonSingleF` |
+| `Linen.PostgREST.SchemaCache.Relationship` | foreign-key relationships: `Cardinality`, `Relationship`, `localColumns`/`foreignColumns` |
+| `Linen.PostgREST.Plan.ReadPlan` | resolved SELECT query plan: `ReadPlan` (recursive via embedded `rpRelationships`), `hasEmbeds`/`embedCount`/`hasFilters`/`hasOrdering` |
+| `Linen.PostgREST.Plan.MutatePlan` | resolved INSERT/UPDATE/DELETE plans: `MutatePlan`, `targetTable`, `returningFields`, `hasReturning` |
+| `Linen.PostgREST.SchemaCache.Representations` | PostgreSQL type casts: `Representation`, `MediaHandler` |
+| `Linen.PostgREST.SchemaCache.Routine` | function/procedure metadata: `Routine`, `Volatility`, `RoutineParam`, `RoutineReturnType`, `isSafeForGet` |
+| `Linen.PostgREST.Plan.CallPlan` | resolved RPC call plan: `CallPlan`, `routineQi`, `isSetof`, `isSafeForGet`, `paramCount` |
+| `Linen.PostgREST.SchemaCache.Table` | table/column metadata: `Column`, `Table` (proof-carrying `pk_subset`), `findColumn`, `hasPrimaryKey` |
+| `Linen.PostgREST.SchemaCache` | schema introspection cache: `SchemaCache`, `findTable`/`findRelationships`/`findRoutines`, catalog SQL literals |
+| `Linen.PostgREST.AppState` | shared mutable app state: `AppState`, `Observation`, `Metrics`, `create`/`getSchemaCache`/`putSchemaCache`/`observe` |
+| `Linen.PostgREST.Metrics` | Prometheus text exposition: `renderMetrics` |
+| `Linen.PostgREST.Admin` | admin HTTP server: `handleAdminRequest` (`/live`, `/ready`, `/metrics`) |
+| `Linen.PostgREST.Observation` | observability events: `defaultObserver` (stderr logging) |
+| `Linen.PostgREST.TimeIt` | IO timing: `timeIt`, `timeIt_` |
+| `Linen.PostgREST.Unix` | Unix socket handling: `defaultSocketMode` |
+| `Linen.PostgREST.Version` | version constants: `version`, `prettyVersion` |
+| `Linen.PostgREST.App` | core request handler: `handleRequest`, `SimpleRequest`/`SimpleResponse`, `printBanner` |
+| `Linen.PostgREST.CLI` | command-line parsing: `Command`, `parseArgs`, `printUsage` |
+| `Linen.PostgREST.Response.OpenAPI` | OpenAPI 3.0 spec generation: `pgTypeToOpenAPI`, `columnSchema`, `generateOpenAPISpec` |
 
 ## Build & Test
 
