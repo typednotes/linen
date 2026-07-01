@@ -28,14 +28,27 @@ def pkgConfig (args : Array String) : IO (Array String) := do
   let normalized := (out.stdout.replace "\n" " ").replace "\t" " "
   return (normalized.splitOn " ").filter (· != "") |>.toArray
 
-/-- Link flags for libpq. On Linux libpq is on the default search path, so a
-    bare `-lpq` suffices and we avoid emitting bogus `-L` warnings in CI logs.
-    On macOS (keg-only) we add the Homebrew lib prefixes. -/
-def libpqLinkArgs : Array String :=
+/-- Extra library search paths, by platform. Lean's bundled linker (`ld.lld`)
+    does NOT search Debian/Ubuntu's multiarch lib dir by default, so a bare
+    `-lpq`/`-lssl` fails on the GitHub runner with "unable to find library".
+    We add the multiarch dirs on Linux and the keg-only Homebrew prefixes on
+    macOS. A non-existent `-L` is only a linker warning, so listing several
+    (x86_64 + aarch64, Apple-Silicon + Intel) is safe. -/
+def libSearchDirs : Array String :=
   if System.Platform.isOSX then
-    #["-L/opt/homebrew/opt/libpq/lib", "-L/usr/local/opt/libpq/lib", "-lpq"]
+    #["-L/opt/homebrew/opt/libpq/lib", "-L/usr/local/opt/libpq/lib",
+      "-L/opt/homebrew/opt/openssl@3/lib", "-L/usr/local/opt/openssl@3/lib"]
   else
-    #["-lpq"]
+    #["-L/usr/lib/x86_64-linux-gnu", "-L/usr/lib/aarch64-linux-gnu"]
+
+/-- Link flags for libpq (`ffi/postgres.c`). -/
+def libpqLinkArgs : Array String := libSearchDirs ++ #["-lpq"]
+
+/-- Link flags for OpenSSL (`ffi/jose.c`). -/
+def opensslLinkArgs : Array String := libSearchDirs ++ #["-lssl", "-lcrypto"]
+
+/-- All native link flags for the linen FFI (libpq + OpenSSL). -/
+def nativeLinkArgs : Array String := libpqLinkArgs ++ opensslLinkArgs
 
 -- ── Native FFI (POSIX sockets + kqueue/epoll, PostgreSQL libpq) ──
 -- The C shims in `ffi/` are portable across macOS and Linux. `network.c`
@@ -59,11 +72,21 @@ target postgres.o pkg : FilePath := do
   let weakArgs := #["-I", (← getLeanIncludeDir).toString] ++ libpqCFlags
   buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
 
+/-- Compile `ffi/jose.c` (OpenSSL JOSE bindings) into an object file.
+    OpenSSL's include path is discovered at build time via `pkg-config`. -/
+target jose.o pkg : FilePath := do
+  let oFile := pkg.buildDir / "ffi" / "jose.o"
+  let srcJob ← inputTextFile <| pkg.dir / "ffi" / "jose.c"
+  let opensslCFlags ← pkgConfig #["--cflags", "openssl"]
+  let weakArgs := #["-I", (← getLeanIncludeDir).toString] ++ opensslCFlags
+  buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
+
 /-- Bundle the FFI object(s) into a static lib that Lake links automatically. -/
 extern_lib linenffi pkg := do
   let networkObj ← network.o.fetch
   let postgresObj ← postgres.o.fetch
-  buildStaticLib (pkg.staticLibDir / nameToStaticLib "linenffi") #[networkObj, postgresObj]
+  let joseObj ← jose.o.fetch
+  buildStaticLib (pkg.staticLibDir / nameToStaticLib "linenffi") #[networkObj, postgresObj, joseObj]
 
 @[default_target]
 lean_lib Linen where
@@ -71,23 +94,23 @@ lean_lib Linen where
   -- checks can call the `@[extern]` bindings through the interpreter.
   -- `moreLinkArgs` pulls in libpq (`-lpq` and its lib path) for `postgres.o`.
   needs := #[linenffi]
-  moreLinkArgs := libpqLinkArgs
+  moreLinkArgs := nativeLinkArgs
   precompileModules := true
 
 lean_lib Tests where
   needs := #[linenffi]
-  moreLinkArgs := libpqLinkArgs
+  moreLinkArgs := nativeLinkArgs
 
 lean_exe linen where
   root := `Main
-  moreLinkArgs := libpqLinkArgs
+  moreLinkArgs := nativeLinkArgs
 
 -- Example programs live under `Examples/` and share one entrypoint:
 -- `lake exe examples <name> [args...]`.
 lean_lib Examples where
   globs := #[.submodules `Examples]
-  moreLinkArgs := libpqLinkArgs
+  moreLinkArgs := nativeLinkArgs
 
 lean_exe examples where
   root := `Examples.Main
-  moreLinkArgs := libpqLinkArgs
+  moreLinkArgs := nativeLinkArgs

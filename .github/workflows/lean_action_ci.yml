@@ -11,8 +11,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-      # libpq (PostgreSQL client library) is required by the Database.PostgreSQL
-      # FFI shim (ffi/postgres.c); the lakefile resolves its flags via pkg-config.
-      - name: Install libpq (PostgreSQL client library)
-        run: sudo apt-get update && sudo apt-get install -y libpq-dev pkg-config
+      # Native FFI dependencies, resolved via pkg-config in the lakefile:
+      #  - libpq   (ffi/postgres.c) for Database.PostgreSQL
+      #  - OpenSSL (ffi/jose.c)     for Crypto.JOSE
+      - name: Install native FFI dependencies (libpq, OpenSSL)
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev libssl-dev pkg-config
       - uses: leanprover/lean-action@v1

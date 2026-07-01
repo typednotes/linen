@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>103 modules</strong> · <strong>222 compile-time theorems</strong> · <strong>1871 <code>#guard</code> checks</strong>
+  <strong>107 modules</strong> · <strong>226 compile-time theorems</strong> · <strong>1936 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -432,6 +432,19 @@ Three rules hold across the whole library:
   `run` (within a `Session`), `command`/`sql_` constructors, and
   `mapResult`/`contramapParams` (reusing `Result.map`/`Params.contramap`).
 
+### `Crypto.JOSE` — JOSE/JWT cryptography (OpenSSL)
+
+- `Crypto.JOSE.FFI` — `@[extern]` bindings to OpenSSL's EVP API (`ffi/jose.c`):
+  HMAC (HS256/384/512), RSA verification (RS/PS), EC verification (ES256/384/512),
+  JWK→DER public-key construction, and base64url. OpenSSL is discovered via
+  `pkg-config` in the lakefile.
+- `Crypto.JOSE.Types` — JOSE/JWT/JWK data types: `JWSAlgorithm`, `ECCurve`,
+  `JWKKeyType`/`JWKKeyMaterial`, a proof-carrying `JWK` (`kty` coherent with its
+  material), `ClaimsSet`, `JWSHeader`, `JWTValidationSettings` (bounded skew),
+  and `JwtError` — with parse/round-trip laws.
+- `Crypto.JOSE.JWK` — JWK helpers over the FFI: `parseOctKey` (base64url →
+  symmetric key) and `toDerPublicKey` (RSA/EC JWK → DER public key via OpenSSL).
+
 ## Quick Start
 
 Add to your `lakefile.toml`:
@@ -490,6 +503,7 @@ open Data.Functor Control.Monad
 | `Linen.Data.Ord` | `Down` (reversed ordering) + proof-carrying `clamp` |
 | `Linen.Data.Proxy` | phantom-type proxy with `Functor`/`Monad` + verified laws |
 | `Linen.Data.Rat` | `Rat.round` (round-half-away-from-zero; `Data.Ratio` is core's `Rat`) |
+| `Linen.Data.IP` | IPv4/IPv6 addresses, CIDR `AddrRange` (bounded mask proof) with `isMatchedTo`, `parseIPv4`/`parseCIDR4` |
 | `Linen.Data.String` | `IsString` class + `String.words`/`unwords`/`unlines` (`lines` is core's `splitOn`) |
 | `Linen.Data.Traversable` | `Traversable` class (`traverse`/`sequence`) + `List`/`Option`/`NonEmpty`; `LawfulTraversable` |
 | `Linen.Data.Unique` | globally unique ids: `newUnique : IO Unique` from a global counter (`BEq`/`Ord`/`Hashable`) |
@@ -559,6 +573,9 @@ open Data.Functor Control.Monad
 | `Linen.Database.SQL.Decoders` | result decoders: `Value`/`Row`/`Result` levels, `singleRow`/`rowList`/`maybeRow`, row width laws |
 | `Linen.Database.SQL.Pool` | thread-safe connection pool (`IO.Ref`): `PoolSettings` (bounded proofs), `create`/`use`/`destroy`/`stats`, `PoolError` |
 | `Linen.Database.SQL.Statement` | type-safe `Statement p r` = `Params p` + `Result r`: `run`/`command`/`sql_`, `mapResult`/`contramapParams` |
+| `Linen.Crypto.JOSE.FFI` | `@[extern]` OpenSSL bindings: HMAC, RSA/EC verify, JWK→DER key build, base64url (`ffi/jose.c`) |
+| `Linen.Crypto.JOSE.Types` | JOSE/JWT/JWK types: `JWSAlgorithm`/`ECCurve`/`JWKKeyType`, proof-carrying `JWK`, `ClaimsSet`, `JWSHeader`, `JwtError` + laws |
+| `Linen.Crypto.JOSE.JWK` | JWK helpers: `parseOctKey` (base64url), `toDerPublicKey` (RSA/EC → DER via OpenSSL) |
 
 ## Build & Test
 
