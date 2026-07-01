@@ -82,6 +82,8 @@ import Tests.Linen.Database.SQL.StatementTest
 import Tests.Linen.Crypto.JOSE.FFITest
 import Tests.Linen.Crypto.JOSE.TypesTest
 import Tests.Linen.Crypto.JOSE.JWKTest
+import Tests.Linen.Crypto.JOSE.JWSTest
+import Tests.Linen.Crypto.JOSE.JWTTest
 import Tests.Linen.Network.HTTP2.Frame.TypesTest
 import Tests.Linen.Network.HTTP2.Frame.DecodeTest
 import Tests.Linen.Network.HTTP2.Frame.EncodeTest
@@ -112,3 +114,4 @@ import Tests.Linen.Network.Socket.TypesTest
 import Tests.Linen.Network.Socket.FFITest
 import Tests.Linen.Network.SocketTest
 import Tests.Linen.Network.Socket.EventDispatcherTest
+import Tests.Linen.Network.MimeTest

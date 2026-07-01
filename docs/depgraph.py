@@ -159,6 +159,11 @@ DONE = {
     "Hale.Jose.Crypto.JOSE.FFI",   # ported to Linen/Crypto/JOSE/FFI.lean + ffi/jose.c (linen_jose_* OpenSSL bindings: HMAC/RSA-verify/EC-verify/key-build/base64url); OpenSSL via pkg-config in lakefile (nativeLinkArgs = libpq++openssl), CI installs libssl-dev
     "Hale.Jose.Crypto.JOSE.Types",   # ported to Linen/Crypto/JOSE/Types.lean (namespace Crypto.JOSE): JWSAlgorithm/ECCurve/JWKKeyType/JWKKeyMaterial/JWK (coherence proof)/ClaimsSet/JWSHeader/JWTValidationSettings/JwtError + laws; kept local Repr ByteArray (stdlib lacks it); pure, verbatim
     "Hale.Jose.Crypto.JOSE.JWK",   # ported to Linen/Crypto/JOSE/JWK.lean (namespace Crypto.JOSE.JWK): parseOctKey + toDerPublicKey over the OpenSSL FFI; #eval IO tests exercise the real base64url FFI; verbatim
+    "Hale.Jose.Crypto.JOSE.JWS",   # ported to Linen/Crypto/JOSE/JWS.lean (namespace Crypto.JOSE.JWS): splitCompact + verifySignature (HMAC/RSA/EC via FFI); #eval IO tests do real HMAC verify round-trips; verbatim
+    "Hale.Jose.Crypto.JOSE.JWT",   # ported to Linen/Crypto/JOSE/JWT.lean (namespace Crypto.JOSE.JWT): pure validateClaims (exp/nbf/aud/iss + bounded skew) + IO verifyJWT (compact parse -> signature over candidate JWK set -> validateClaims); #guard covers validateClaims, #eval does a full HS256 round-trip via OpenSSL; verbatim
+    "Hale.Jose",   # aggregator: re-exports the 5 Crypto.JOSE.* modules; covered by linen's root; no file
+    "Hale.MimeTypes.Network.Mime",   # ported to Linen/Network/Mime.lean (namespace Network.Mime): MimeType/Extension/FileName/MimeMap, defaultMimeMap, fileNameExtensions (partial -> structural recursion on splitOn "." components), mimeByExt (List.findSome? + List.lookup instead of bespoke assocLookup), defaultMimeLookup; 24 #guard tests; verbatim table
+    "Hale.MimeTypes",   # aggregator: re-exports Network.Mime; covered by linen's root; no file
 }
 
 

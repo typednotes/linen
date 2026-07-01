@@ -162,15 +162,15 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 136. `Hale.Jose.Crypto.JOSE.FFI` -->
 <!-- 137. `Hale.Jose.Crypto.JOSE.Types` -->
 <!-- 138. `Hale.Jose.Crypto.JOSE.JWK` -->
-<!-- 139. `Hale.Network.Network.Socket.Types` -->
-<!-- 140. `Hale.Network.Network.Socket.FFI` -->
-<!-- 141. `Hale.Network.Network.Socket` -->
-<!-- 142. `Hale.Network.Network.Socket.EventDispatcher` -->
-143. `Hale.Jose.Crypto.JOSE.JWS`
-144. `Hale.Jose.Crypto.JOSE.JWT`
-145. `Hale.Jose`
-146. `Hale.MimeTypes.Network.Mime`
-147. `Hale.MimeTypes`
+<!-- 139. `Hale.Jose.Crypto.JOSE.JWS` -->
+<!-- 140. `Hale.Jose.Crypto.JOSE.JWT` -->
+<!-- 141. `Hale.Jose` -->
+<!-- 142. `Hale.MimeTypes.Network.Mime` -->
+<!-- 143. `Hale.MimeTypes` -->
+<!-- 144. `Hale.Network.Network.Socket.Types` -->
+<!-- 145. `Hale.Network.Network.Socket.FFI` -->
+<!-- 146. `Hale.Network.Network.Socket` -->
+<!-- 147. `Hale.Network.Network.Socket.EventDispatcher` -->
 148. `Hale.Mtl.Control.Monad.Except`
 149. `Hale.Mtl.Control.Monad.Reader`
 150. `Hale.Mtl.Control.Monad.State`

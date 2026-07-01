@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>107 modules</strong> · <strong>226 compile-time theorems</strong> · <strong>1936 <code>#guard</code> checks</strong>
+  <strong>110 modules</strong> · <strong>226 compile-time theorems</strong> · <strong>1975 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -350,6 +350,16 @@ Three rules hold across the whole library:
   instead of holding an OS thread**. This is what lets one worker pool serve many
   thousands of IO-bound connections.
 
+### `Network.Mime` — MIME type lookup
+
+- `Network.Mime` — a port of Haskell's `Network.Mime` (`mime-types`): a
+  `defaultMimeMap` (Apache/nginx/IANA extensions → MIME types), `mimeByExt`
+  and `defaultMimeLookup` for resolving a file name to its content type, and a
+  `fileNameExtensions` that yields the multi-part extensions most-specific-first
+  (`"foo.tar.gz" ↦ ["tar.gz", "gz"]`) — rewritten from the upstream `partial`
+  helper into **structural recursion** over the dot-separated components, and
+  using `List.lookup` / `List.findSome?` instead of a bespoke assoc scan.
+
 ### `DataFrame` — typed tabular data
 
 - `DataFrame.Internal.Types` — a `DataFrame` with a **proven rectangular
@@ -444,6 +454,13 @@ Three rules hold across the whole library:
   and `JwtError` — with parse/round-trip laws.
 - `Crypto.JOSE.JWK` — JWK helpers over the FFI: `parseOctKey` (base64url →
   symmetric key) and `toDerPublicKey` (RSA/EC JWK → DER public key via OpenSSL).
+- `Crypto.JOSE.JWS` — JWS compact-serialization verification (RFC 7515):
+  `splitCompact` and `verifySignature`, dispatching HMAC / RSA (PKCS1+PSS) / EC
+  to the OpenSSL FFI.
+- `Crypto.JOSE.JWT` — JWT verification (RFC 7519): pure `validateClaims`
+  (`exp`/`nbf` with bounded skew, `aud`/`iss` matching) and IO `verifyJWT`
+  (parse compact form, verify the signature over the candidate JWK set, then
+  validate the claims).
 
 ## Quick Start
 
@@ -554,6 +571,7 @@ open Data.Functor Control.Monad
 | `Linen.Network.Socket.FFI` | `@[extern]` C bindings: sockets, options, UDP, `getAddrInfo`, kqueue/epoll event loop |
 | `Linen.Network.Socket` | safe phantom-typed lifecycle API, `withSocket`/`listenTCP`/`withEventLoop`, `EventLoop` |
 | `Linen.Network.Socket.EventDispatcher` | kqueue/epoll → `Green` bridge: `waitReadable`/`waitWritable`/`recvGreen`/`sendAllGreen` |
+| `Linen.Network.Mime` | MIME lookup (`mime-types`): `defaultMimeMap`, `fileNameExtensions`, `mimeByExt`, `defaultMimeLookup` |
 | `Linen.Web.Cookie` | RFC 6265 cookie parse/render: `parseCookies`/`renderCookies`, `SetCookie` + `parseSetCookie`/`renderSetCookie` |
 | `Linen.DataFrame.Internal.Types` | typed tabular `DataFrame` with a proven rectangular invariant; `Value`/`Column`/`ColumnType` + smart constructors |
 | `Linen.DataFrame.IO.CSV` | RFC 4180 CSV `parseCsv`/`toCsv`/`readCsv`/`writeCsv` with type inference |
@@ -576,6 +594,8 @@ open Data.Functor Control.Monad
 | `Linen.Crypto.JOSE.FFI` | `@[extern]` OpenSSL bindings: HMAC, RSA/EC verify, JWK→DER key build, base64url (`ffi/jose.c`) |
 | `Linen.Crypto.JOSE.Types` | JOSE/JWT/JWK types: `JWSAlgorithm`/`ECCurve`/`JWKKeyType`, proof-carrying `JWK`, `ClaimsSet`, `JWSHeader`, `JwtError` + laws |
 | `Linen.Crypto.JOSE.JWK` | JWK helpers: `parseOctKey` (base64url), `toDerPublicKey` (RSA/EC → DER via OpenSSL) |
+| `Linen.Crypto.JOSE.JWS` | JWS compact verification (RFC 7515): `splitCompact`, `verifySignature` (HMAC/RSA/EC via OpenSSL) |
+| `Linen.Crypto.JOSE.JWT` | JWT verification (RFC 7519): `validateClaims` (exp/nbf/aud/iss, bounded skew), `verifyJWT` (signature + claims) |
 
 ## Build & Test
 
