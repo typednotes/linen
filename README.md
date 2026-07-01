@@ -935,6 +935,41 @@ holding an OS thread, so one small worker pool serves many connections. Adding
 an example is a new module under `Examples/` plus one line in the registry in
 `Examples/Main.lean`.
 
+### Running `postgrest` against a real database
+
+`lake exe examples postgrest` (no args) and `... postgrest spec` are fully
+self-contained — they run against a hand-built, in-memory `SchemaCache` and
+need no external services. `postgrest live` instead connects to a real
+PostgreSQL instance, introspects its `public` schema with the same catalog
+queries (`SchemaCache.tablesSql`/`columnsSql`) PostgREST itself runs at
+startup, and serves a couple of requests against the real tables.
+
+Start a disposable local Postgres with Docker:
+
+```bash
+docker run --rm -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres
+```
+
+Then, in another terminal:
+
+```bash
+lake exe examples postgrest live
+```
+
+This connects with `host=localhost port=5432 user=postgres password=postgres
+dbname=postgres` — matching the container above — prints every table found in
+`public`, serves `GET /` and `GET /<first table>` through the same
+`App.handleRequest` code path as the in-memory demo, and prints the live
+schema's OpenAPI spec. Pass a different libpq connection string as the next
+argument to point at another instance or database, e.g.:
+
+```bash
+lake exe examples postgrest live "host=localhost port=5432 user=postgres password=postgres dbname=mydb"
+```
+
+If nothing is listening, the example prints a short "could not connect" hint
+(with this same `docker run` command) and exits 1, rather than crashing.
+
 ## Documentation
 
 - [docs/module-dependencies.md](docs/module-dependencies.md) — module dependency

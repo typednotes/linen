@@ -160,7 +160,15 @@ static inline lean_obj_res mk_option_some(lean_obj_arg val) {
  * opaque pgConnectImpl : @& String -> IO PgConn
  *
  * Opens a new connection to a PostgreSQL server using the given
- * connection info string. Returns a PgConn handle on success.
+ * connection info string. Always returns a PgConn handle — including one
+ * with a bad `PQstatus` (e.g. authentication failure, unreachable host) —
+ * mirroring PQconnectdb itself, which only fails to produce a connection
+ * object on allocation failure. Callers must check `status`/`errorMessage`
+ * (as `Database.SQL.Connection.acquire` does) rather than relying on this
+ * throwing for a rejected connection; a thrown `IO` error here would give a
+ * failed connection no `PgConn` for the caller to inspect, matching how
+ * `exec`/`exec_params` only throw when `PQexec*` returns NULL, never for a
+ * bad `PQresultStatus`.
  */
 LEAN_EXPORT lean_obj_res linen_pg_connect(
     b_lean_obj_arg conninfo_obj,
@@ -173,12 +181,6 @@ LEAN_EXPORT lean_obj_res linen_pg_connect(
 
     if (!conn) {
         return mk_pg_io_error("PQconnectdb returned NULL");
-    }
-
-    if (PQstatus(conn) != CONNECTION_OK) {
-        lean_obj_res err = mk_pg_conn_error(conn);
-        PQfinish(conn);
-        return err;
     }
 
     lean_obj_res obj = mk_pg_conn(conn);
