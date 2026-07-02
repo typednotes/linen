@@ -212,10 +212,13 @@ def Frame.decode (buf : ByteArray) (offset : Nat := 0) : Option (Frame × Nat) :
   else none
 
 -- ============================================================================
--- HTTP/3 Settings (RFC 9114 Section 7.2.4.1)
+-- HTTP/3 Settings (RFC 9114 Section 7.2.4.1; QPACK identifiers from RFC 9204 Section 5)
 -- ============================================================================
 
-/-- HTTP/3 settings identifiers. -/
+/-- HTTP/3 settings identifiers.
+    `settingsMaxFieldSectionSize` is defined by RFC 9114 Section 7.2.4.1;
+    `settingsQpackMaxTableCapacity`/`settingsQpackBlockedStreams` are defined
+    by RFC 9204 (QPACK) Section 5. -/
 def settingsQpackMaxTableCapacity : UInt64 := 0x1
 def settingsMaxFieldSectionSize   : UInt64 := 0x6
 def settingsQpackBlockedStreams    : UInt64 := 0x7

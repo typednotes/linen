@@ -11,6 +11,7 @@
 import Examples.Echo
 import Examples.Bench
 import Examples.PostgREST
+import Examples.QUIC
 
 /-- Registry of runnable examples: `name`, one-line description, entry point. -/
 def examples : List (String × String × (List String → IO Unit)) :=
@@ -21,8 +22,11 @@ def examples : List (String × String × (List String → IO Unit)) :=
        "network round-trips with a few-ms server delay: Green vs blocking pool, same threads  [args: C delayMs total]",
        Examples.Bench.run),
     ("postgrest",
-       "in-memory PostgREST request handling + OpenAPI spec generation — self-checking demo; `postgrest spec` prints just the OpenAPI spec",
-       Examples.PostgREST.run) ]
+       "in-memory PostgREST request handling + OpenAPI spec generation — self-checking demo; `postgrest spec` prints just the OpenAPI spec, `postgrest live [connstr]` connects to a real Postgres",
+       Examples.PostgREST.run),
+    ("quic",
+       "QUIC types/config + HTTP/3 QPACK/frame wire round trip — self-checking demo; also verifies Client.connect/Server.run/accept fail with the documented \"not yet implemented\" errors (no TLS 1.3 FFI backend yet)",
+       Examples.QUIC.run) ]
 
 /-- Print usage and the list of available examples. -/
 def usage : IO Unit := do

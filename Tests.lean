@@ -167,3 +167,10 @@ import Tests.Linen.PostgREST.VersionTest
 import Tests.Linen.PostgREST.AppTest
 import Tests.Linen.PostgREST.CLITest
 import Tests.Linen.PostgREST.Response.OpenAPITest
+import Tests.Linen.Network.QUIC.TypesTest
+import Tests.Linen.Network.QUIC.ConfigTest
+import Tests.Linen.Network.QUIC.ConnectionTest
+import Tests.Linen.Network.QUIC.ClientTest
+import Tests.Linen.Network.QUIC.ServerTest
+import Tests.Linen.Network.QUIC.StreamTest
+import Tests.Linen.Network.HTTP3.ServerTest

@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>162 modules</strong> · <strong>263 compile-time theorems</strong> · <strong>2823 <code>#guard</code> checks</strong>
+  <strong>169 modules</strong> · <strong>263 compile-time theorems</strong> · <strong>2885 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -332,6 +332,11 @@ Three rules hold across the whole library:
   (prefix varint, recursing on a strictly-decreasing value), `encodeStringLiteral`,
   and `encodeHeaders` (compact indexed form where possible), verified by
   encode→decode round-trips.
+- `Network.HTTP3.Server` — the HTTP/3 request/response layer on top of a QUIC
+  connection: `H3Request`/`H3Response`, the `H3Handler` handler type,
+  `sendResponse` (QPACK-encodes and frames a response over a `QUICStream`),
+  and `handleRequestStream`/`handleConnection` (decode HEADERS, dispatch,
+  reply). `handleConnection` is stubbed pending QUIC stream-accept support.
 
 ### `Network.Socket` — POSIX sockets & event multiplexing
 
@@ -721,6 +726,27 @@ Three rules hold across the whole library:
   `generateOpenAPISpec` builds the full spec (paths, schemas) from a
   `SchemaCache`.
 
+### `Network.QUIC` — QUIC transport protocol (RFC 9000)
+
+- `Network.QUIC.Types` — core QUIC types: a proof-carrying `ConnectionId`
+  (`bytes.size ≤ 20`, RFC 9000 §17.2), `Version`, `TransportParams` with
+  RFC 9000 §18 defaults, `StreamId` with 2-bit type/directionality/initiator
+  classification, the `TransportError` code enum (RFC 9000 §20), and
+  `TLSConfig`.
+- `Network.QUIC.Config` — `ServerConfig`/`ClientConfig`, bundling a `TLSConfig`,
+  `TransportParams`, and host/port (or server-name) fields with sensible
+  defaults.
+- `Network.QUIC.Connection` — an opaque, only-internally-constructible
+  `Connection` handle plus `ConnectionState`; `sendStream`/`recvStream`/
+  `openStream`/`closeStream`/`getState`/`close` are stubbed pending TLS 1.3
+  FFI (to `quiche` or `ngtcp2`).
+- `Network.QUIC.Client` — `connect : ClientConfig → IO Connection`, stubbed
+  pending TLS 1.3 FFI.
+- `Network.QUIC.Server` — `run`/`accept : ServerConfig → IO Connection`
+  (or handler-dispatching loop), stubbed pending TLS 1.3 FFI.
+- `Network.QUIC.Stream` — `QUICStream`, a `Connection` + `StreamId` pair with
+  `send`/`recv`/`close` delegating to the underlying `Connection`.
+
 ## Quick Start
 
 Add to your `lakefile.toml`:
@@ -907,6 +933,13 @@ open Data.Functor Control.Monad
 | `Linen.PostgREST.App` | core request handler: `handleRequest`, `SimpleRequest`/`SimpleResponse`, `printBanner` |
 | `Linen.PostgREST.CLI` | command-line parsing: `Command`, `parseArgs`, `printUsage` |
 | `Linen.PostgREST.Response.OpenAPI` | OpenAPI 3.0 spec generation: `pgTypeToOpenAPI`, `columnSchema`, `generateOpenAPISpec` |
+| `Linen.Network.QUIC.Types` | QUIC (RFC 9000) core types: proof-carrying `ConnectionId`, `Version`, `TransportParams`, `StreamId`, `TransportError`, `TLSConfig` |
+| `Linen.Network.QUIC.Config` | `ServerConfig`/`ClientConfig` with TLS, transport-parameter, and host/port defaults |
+| `Linen.Network.QUIC.Connection` | opaque `Connection` handle, `ConnectionState`; stream/close/state ops stubbed pending TLS 1.3 FFI |
+| `Linen.Network.QUIC.Client` | `connect : ClientConfig → IO Connection`, stubbed pending TLS 1.3 FFI |
+| `Linen.Network.QUIC.Server` | `run`/`accept : ServerConfig → IO Connection`, stubbed pending TLS 1.3 FFI |
+| `Linen.Network.QUIC.Stream` | `QUICStream` (`Connection` + `StreamId`): `send`/`recv`/`close` |
+| `Linen.Network.HTTP3.Server` | HTTP/3 request/response layer: `H3Request`, `H3Response`, `H3Handler`, `sendResponse`, `handleRequestStream`, `handleConnection` |
 
 ## Build & Test
 
@@ -926,6 +959,7 @@ lake exe examples echo             # green-threaded echo server — self-checkin
 lake exe examples echo serve 9099  # run the echo server forever; then:  nc 127.0.0.1 9099
 lake exe examples bench            # network round-trips w/ a few-ms server delay: Green vs blocking pool (same #cores threads)
 lake exe examples postgrest        # in-memory PostgREST request handling + OpenAPI spec generation — self-checking demo
+lake exe examples quic             # QUIC types/config + HTTP/3 QPACK/frame wire round trip — self-checking demo
 ```
 
 The `echo` example exercises the whole socket stack end-to-end — a green accept
@@ -934,6 +968,15 @@ loop forks a green handler per connection, each suspending on
 holding an OS thread, so one small worker pool serves many connections. Adding
 an example is a new module under `Examples/` plus one line in the registry in
 `Examples/Main.lean`.
+
+The `quic` example demonstrates the HTTP/3-over-QUIC wire format end-to-end —
+`Network.HTTP3.QPACK.Encode`/`Frame.encode` producing bytes that
+`Frame.decode`/`Network.HTTP3.QPACK.Decode` reproduce exactly — without
+needing a live connection, since `Network.QUIC.Client`/`Server` are stubbed
+pending TLS 1.3 FFI. It also calls `Client.connect`/`Server.run`/`Server.accept`
+directly and checks that each fails with exactly its documented
+"not yet implemented" error, so the demo stays honest about what is and isn't
+wired up yet.
 
 ### Running `postgrest` against a real database
 

@@ -47,8 +47,12 @@ open Database.SQL.Session.Session (query run getRawConnection)
 
 -- ── Demo schema: one `public.users` table ──
 
+/-- The `public.users` table's qualified name, shared by its `Table` and
+every `Column` below so they agree on which table they belong to. -/
 def usersQi : QualifiedIdentifier := { qiSchema := "public", qiName := "users" }
 
+/-- A hand-built `public.users` table: `id` (int4, primary key), `name`
+(text, not null), and `email` (text, nullable). -/
 def usersTable : Table :=
   { tableSchema := "public"
     tableName := "users"
@@ -61,6 +65,8 @@ def usersTable : Table :=
       #[ { colTable := usersQi, colName := "id", colNullable := false, colType := "int4"
            , colIsPrimaryKey := true } ] }
 
+/-- The demo `SchemaCache`, containing only `usersTable` — everything the
+in-memory demo and `spec` mode need, with no database involved. -/
 def demoSchemaCache : SchemaCache :=
   { SchemaCache.empty with dbTables := [(usersQi, usersTable)] }
 

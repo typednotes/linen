@@ -158,3 +158,10 @@ import Linen.PostgREST.Version
 import Linen.PostgREST.App
 import Linen.PostgREST.CLI
 import Linen.PostgREST.Response.OpenAPI
+import Linen.Network.QUIC.Types
+import Linen.Network.QUIC.Config
+import Linen.Network.QUIC.Connection
+import Linen.Network.QUIC.Client
+import Linen.Network.QUIC.Server
+import Linen.Network.QUIC.Stream
+import Linen.Network.HTTP3.Server

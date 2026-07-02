@@ -229,15 +229,15 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 203. `Hale.PostgREST.PostgREST.CLI` -->
 <!-- 204. `Hale.PostgREST.PostgREST.Response.OpenAPI` -->
 <!-- 205. `Hale.PostgREST` -->
-206. `Hale.QUIC.Network.QUIC.Types`
-207. `Hale.QUIC.Network.QUIC.Config`
-208. `Hale.QUIC.Network.QUIC.Connection`
-209. `Hale.QUIC.Network.QUIC.Client`
-210. `Hale.QUIC.Network.QUIC.Server`
-211. `Hale.QUIC.Network.QUIC.Stream`
-212. `Hale.Http3.Network.HTTP3.Server`
-213. `Hale.Http3`
-214. `Hale.QUIC`
+<!-- 206. `Hale.QUIC.Network.QUIC.Types` -->
+<!-- 207. `Hale.QUIC.Network.QUIC.Config` -->
+<!-- 208. `Hale.QUIC.Network.QUIC.Connection` -->
+<!-- 209. `Hale.QUIC.Network.QUIC.Client` -->
+<!-- 210. `Hale.QUIC.Network.QUIC.Server` -->
+<!-- 211. `Hale.QUIC.Network.QUIC.Stream` -->
+<!-- 212. `Hale.Http3.Network.HTTP3.Server` -->
+<!-- 213. `Hale.Http3` -->
+<!-- 214. `Hale.QUIC` -->
 215. `Hale.Recv.Network.Socket.Recv`
 216. `Hale.Recv`
 217. `Hale.ResourceT.Control.Monad.Trans.Resource`
