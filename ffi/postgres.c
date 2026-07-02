@@ -151,6 +151,30 @@ static inline lean_obj_res mk_option_some(lean_obj_arg val) {
     return opt;
 }
 
+/* Build a libpq paramValues array (text format) from a Lean
+ * `Array (Option String)`: `none` becomes a NULL entry (SQL NULL), `some s`
+ * becomes a pointer into `s`'s UTF-8 data. The pointers borrow from
+ * `params_obj`, which the caller keeps alive for the duration of the libpq
+ * call (it's a `@&`-borrowed argument, never deallocated mid-call).
+ * `*out_count` is always set; the returned array must be `free`d unless
+ * NULL, which only happens when the array is empty. */
+static const char **build_param_values(b_lean_obj_arg params_obj, size_t *out_count) {
+    size_t n = lean_array_size(params_obj);
+    *out_count = n;
+    if (n == 0) return NULL;
+    const char **values = (const char **)calloc(n, sizeof(const char *));
+    if (!values) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        lean_object *opt = lean_array_get_core(params_obj, i);
+        if (lean_obj_tag(opt) == 0) {
+            values[i] = NULL; /* Option.none -> SQL NULL */
+        } else {
+            values[i] = lean_string_cstr(lean_ctor_get(opt, 0)); /* Option.some s */
+        }
+    }
+    return values;
+}
+
 /* ================================================================
  * CONNECTION MANAGEMENT
  * ================================================================ */
@@ -231,9 +255,23 @@ LEAN_EXPORT lean_obj_res linen_pg_error_message(
  *
  * Explicitly closes a connection before GC reclaims it.
  * Safe to call multiple times (idempotent).
+ *
+ * `conn` is declared `@&` (borrowed) on the Lean side, so the caller keeps
+ * its own reference and the compiler-generated call site decrements it
+ * exactly once, on its own, after this returns. This function used to take
+ * `conn_obj` as owned (`lean_obj_arg`) and additionally call
+ * `lean_dec_ref(conn_obj)` itself — a double decrement, since the borrowed
+ * call site's own decrement still ran afterwards. Once the object's
+ * refcount reached zero here, the external-class finalizer freed the
+ * wrapper (and its heap block); the caller's later decrement then touched
+ * already-freed memory, corrupting the allocator's free list. That
+ * corruption doesn't crash immediately — it manifests later, whenever the
+ * allocator next collects that thread's freed blocks (typically at thread
+ * exit), which is why this surfaced as a `mi_heap_collect_ex` segfault well
+ * after a successful, correct run rather than at the `close` call site.
  */
 LEAN_EXPORT lean_obj_res linen_pg_close(
-    lean_obj_arg conn_obj,
+    b_lean_obj_arg conn_obj,
     lean_obj_arg world
 ) {
     linen_pg_conn_t *wrapper = (linen_pg_conn_t *)lean_get_external_data(conn_obj);
@@ -241,7 +279,6 @@ LEAN_EXPORT lean_obj_res linen_pg_close(
         PQfinish(wrapper->conn);
         wrapper->conn = NULL;
     }
-    lean_dec_ref(conn_obj);
     return lean_io_result_mk_ok(lean_box(0));
 }
 
@@ -281,27 +318,27 @@ LEAN_EXPORT lean_obj_res linen_pg_exec(
 
 /*
  * @[extern "linen_pg_exec_params"]
- * opaque pgExecParamsImpl : @& PgConn -> @& String -> UInt32
- *     -> @& Array String -> @& Array UInt32 -> @& Array UInt32
- *     -> UInt32 -> IO PgResult
+ * opaque pgExecParamsImpl : @& PgConn -> @& String -> @& Array (Option String)
+ *     -> IO PgResult
  *
- * Executes a parameterized SQL query.
- *   conn          — connection handle
- *   query         — SQL with $1, $2, ... placeholders
- *   nparams       — number of parameters
- *   paramValues   — array of parameter value strings
- *   paramLengths  — array of parameter lengths (for binary)
- *   paramFormats  — array of format codes (0=text, 1=binary)
- *   resultFormat  — 0=text, 1=binary for result columns
+ * Executes a parameterized SQL query in text format.
+ *   conn    — connection handle
+ *   query   — SQL with $1, $2, ... placeholders
+ *   params  — parameter values; `none` encodes a SQL NULL
+ *
+ * (Previously this took 7 parameters — nparams, separate paramValues/
+ * paramLengths/paramFormats arrays, and resultFormat — matching a design
+ * this project never adopted on the Lean side, where `execParams` has
+ * always taken a single `Array (Option String)`. Since the `@[extern]`
+ * caller only ever passed the 3 arguments Lean declares, the extra
+ * parameters here were reading whatever was left on the stack/in
+ * registers — silently invalid, and fatal (`lean_is_array` assertion) the
+ * moment a real query supplied any parameters.)
  */
 LEAN_EXPORT lean_obj_res linen_pg_exec_params(
     b_lean_obj_arg conn_obj,
     b_lean_obj_arg query_obj,
-    uint32_t nparams,
-    b_lean_obj_arg param_values_obj,
-    b_lean_obj_arg param_lengths_obj,
-    b_lean_obj_arg param_formats_obj,
-    uint32_t result_format,
+    b_lean_obj_arg params_obj,
     lean_obj_arg world
 ) {
     PGconn *conn = get_pg_conn(conn_obj);
@@ -311,45 +348,22 @@ LEAN_EXPORT lean_obj_res linen_pg_exec_params(
 
     const char *query = lean_string_cstr(query_obj);
 
-    /* Build parameter arrays from Lean arrays */
-    const char **param_values = NULL;
-    int *param_lengths = NULL;
-    int *param_formats = NULL;
-
-    if (nparams > 0) {
-        param_values = (const char **)calloc(nparams, sizeof(const char *));
-        param_lengths = (int *)calloc(nparams, sizeof(int));
-        param_formats = (int *)calloc(nparams, sizeof(int));
-
-        if (!param_values || !param_lengths || !param_formats) {
-            free(param_values);
-            free(param_lengths);
-            free(param_formats);
-            return mk_pg_io_error("pg_exec_params: malloc failed");
-        }
-
-        for (uint32_t i = 0; i < nparams; i++) {
-            lean_object *val = lean_array_get_core(param_values_obj, i);
-            param_values[i] = lean_string_cstr(val);
-
-            lean_object *len_obj = lean_array_get_core(param_lengths_obj, i);
-            param_lengths[i] = (int)lean_unbox_uint32(len_obj);
-
-            lean_object *fmt_obj = lean_array_get_core(param_formats_obj, i);
-            param_formats[i] = (int)lean_unbox_uint32(fmt_obj);
-        }
+    size_t nparams = 0;
+    const char **param_values = build_param_values(params_obj, &nparams);
+    if (nparams > 0 && !param_values) {
+        return mk_pg_io_error("pg_exec_params: malloc failed");
     }
 
     PGresult *result = PQexecParams(
         conn, query, (int)nparams,
         NULL, /* paramTypes — let the server infer */
-        param_values, param_lengths, param_formats,
-        (int)result_format
+        param_values,
+        NULL, /* paramLengths — ignored for text-format parameters */
+        NULL, /* paramFormats — NULL means every parameter is text */
+        0     /* resultFormat — text */
     );
 
     free(param_values);
-    free(param_lengths);
-    free(param_formats);
 
     if (!result) {
         return mk_pg_conn_error(conn);
@@ -364,20 +378,22 @@ LEAN_EXPORT lean_obj_res linen_pg_exec_params(
 
 /*
  * @[extern "linen_pg_prepare"]
- * opaque pgPrepareImpl : @& PgConn -> @& String -> @& String -> UInt32
- *     -> IO PgResult
+ * opaque pgPrepareImpl : @& PgConn -> @& String -> @& String -> IO PgResult
  *
- * Creates a prepared statement.
+ * Creates a prepared statement, letting the server infer parameter types.
  *   conn      — connection handle
  *   stmtName  — name for the prepared statement (empty string = unnamed)
  *   query     — SQL with $1, $2, ... placeholders
- *   nparams   — number of parameters (0 lets server infer types)
+ *
+ * (Previously took a 4th `nparams : UInt32` argument the Lean side never
+ * declared or passed — the same real-vs-declared-arity mismatch as
+ * `linen_pg_exec_params` above, just never triggered since nothing calls
+ * `prepare` yet.)
  */
 LEAN_EXPORT lean_obj_res linen_pg_prepare(
     b_lean_obj_arg conn_obj,
     b_lean_obj_arg stmt_name_obj,
     b_lean_obj_arg query_obj,
-    uint32_t nparams,
     lean_obj_arg world
 ) {
     PGconn *conn = get_pg_conn(conn_obj);
@@ -389,7 +405,7 @@ LEAN_EXPORT lean_obj_res linen_pg_prepare(
     const char *query = lean_string_cstr(query_obj);
 
     PGresult *result = PQprepare(
-        conn, stmt_name, query, (int)nparams,
+        conn, stmt_name, query, 0, /* nparams — 0 lets the server infer types */
         NULL /* paramTypes — let the server infer */
     );
 
@@ -406,27 +422,23 @@ LEAN_EXPORT lean_obj_res linen_pg_prepare(
 
 /*
  * @[extern "linen_pg_exec_prepared"]
- * opaque pgExecPreparedImpl : @& PgConn -> @& String -> UInt32
- *     -> @& Array String -> @& Array UInt32 -> @& Array UInt32
- *     -> UInt32 -> IO PgResult
+ * opaque pgExecPreparedImpl : @& PgConn -> @& String -> @& Array (Option String)
+ *     -> IO PgResult
  *
- * Executes a previously prepared statement.
- *   conn          — connection handle
- *   stmtName      — name of the prepared statement
- *   nparams       — number of parameters
- *   paramValues   — array of parameter value strings
- *   paramLengths  — array of parameter lengths (for binary)
- *   paramFormats  — array of format codes (0=text, 1=binary)
- *   resultFormat  — 0=text, 1=binary for result columns
+ * Executes a previously prepared statement in text format.
+ *   conn      — connection handle
+ *   stmtName  — name of the prepared statement
+ *   params    — parameter values; `none` encodes a SQL NULL
+ *
+ * (Same real-vs-declared-arity mismatch as `linen_pg_exec_params` above —
+ * this took 6 parameters here against 2 declared on the Lean side; fixed the
+ * same way, and equally unreachable in practice since nothing calls
+ * `execPrepared` yet.)
  */
 LEAN_EXPORT lean_obj_res linen_pg_exec_prepared(
     b_lean_obj_arg conn_obj,
     b_lean_obj_arg stmt_name_obj,
-    uint32_t nparams,
-    b_lean_obj_arg param_values_obj,
-    b_lean_obj_arg param_lengths_obj,
-    b_lean_obj_arg param_formats_obj,
-    uint32_t result_format,
+    b_lean_obj_arg params_obj,
     lean_obj_arg world
 ) {
     PGconn *conn = get_pg_conn(conn_obj);
@@ -436,44 +448,21 @@ LEAN_EXPORT lean_obj_res linen_pg_exec_prepared(
 
     const char *stmt_name = lean_string_cstr(stmt_name_obj);
 
-    /* Build parameter arrays from Lean arrays */
-    const char **param_values = NULL;
-    int *param_lengths = NULL;
-    int *param_formats = NULL;
-
-    if (nparams > 0) {
-        param_values = (const char **)calloc(nparams, sizeof(const char *));
-        param_lengths = (int *)calloc(nparams, sizeof(int));
-        param_formats = (int *)calloc(nparams, sizeof(int));
-
-        if (!param_values || !param_lengths || !param_formats) {
-            free(param_values);
-            free(param_lengths);
-            free(param_formats);
-            return mk_pg_io_error("pg_exec_prepared: malloc failed");
-        }
-
-        for (uint32_t i = 0; i < nparams; i++) {
-            lean_object *val = lean_array_get_core(param_values_obj, i);
-            param_values[i] = lean_string_cstr(val);
-
-            lean_object *len_obj = lean_array_get_core(param_lengths_obj, i);
-            param_lengths[i] = (int)lean_unbox_uint32(len_obj);
-
-            lean_object *fmt_obj = lean_array_get_core(param_formats_obj, i);
-            param_formats[i] = (int)lean_unbox_uint32(fmt_obj);
-        }
+    size_t nparams = 0;
+    const char **param_values = build_param_values(params_obj, &nparams);
+    if (nparams > 0 && !param_values) {
+        return mk_pg_io_error("pg_exec_prepared: malloc failed");
     }
 
     PGresult *result = PQexecPrepared(
         conn, stmt_name, (int)nparams,
-        param_values, param_lengths, param_formats,
-        (int)result_format
+        param_values,
+        NULL, /* paramLengths — ignored for text-format parameters */
+        NULL, /* paramFormats — NULL means every parameter is text */
+        0     /* resultFormat — text */
     );
 
     free(param_values);
-    free(param_lengths);
-    free(param_formats);
 
     if (!result) {
         return mk_pg_conn_error(conn);
