@@ -63,6 +63,8 @@ namespace Tests.Json.Decode
 #guard (Decode.decode "{\"a\":}").toOption = none            -- missing value
 #guard (Decode.decode "-").toOption = none                   -- no digits after sign
 #guard (Decode.decode "@").toOption = none                   -- unexpected character
+#guard (Decode.decode "01").toOption = none                  -- leading zero
+#guard (Decode.decode "-01").toOption = none                 -- leading zero, negative
 
 -- ── decodeAs ──────────────────────────────────────────────────────────
 

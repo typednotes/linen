@@ -11,12 +11,19 @@
 
 namespace Rat
 
-/-- Round to the nearest integer, with halves rounding **away from zero**.
-    $$\text{round}(r) = \frac{2\,\text{num} \pm \text{den}}{2\,\text{den}}$$
-    (the sign of the `den` term follows the sign of `num`). -/
+/-- Round to the nearest integer, with halves rounding **to even** (banker's
+    rounding), matching GHC `base`'s `RealFrac.round`.
+    $$\text{round}(r) = \begin{cases}
+      \lfloor r \rfloor & r - \lfloor r \rfloor < 1/2 \\
+      \lceil r \rceil & r - \lfloor r \rfloor > 1/2 \\
+      \lfloor r \rfloor & r - \lfloor r \rfloor = 1/2 \text{ and } \lfloor r \rfloor \text{ even} \\
+      \lceil r \rceil & r - \lfloor r \rfloor = 1/2 \text{ and } \lfloor r \rfloor \text{ odd}
+    \end{cases}$$ -/
 def round (r : Rat) : Int :=
-  let doubled := 2 * r.num
-  let shifted := doubled + (if r.num ≥ 0 then (r.den : Int) else -(r.den : Int))
-  shifted / (2 * (r.den : Int))
+  let fl := r.floor
+  let diff := r - (fl : Rat)
+  if diff < (1 / 2 : Rat) then fl
+  else if diff > (1 / 2 : Rat) then fl + 1
+  else if fl % 2 == 0 then fl else fl + 1
 
 end Rat

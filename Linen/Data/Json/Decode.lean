@@ -284,7 +284,9 @@ private def parseExp (inp : List Char) :
   | [] => .ok (false, [], ⟨[], Nat.le_refl _⟩)
 
 /-- Parse a JSON number (integer or floating-point, possibly negative).
-    Grammar: `-?` digits (`.` digits)? (`[eE]` `[+-]?` digits)? -/
+    Grammar: `-?` digits (`.` digits)? (`[eE]` `[+-]?` digits)?, where the
+    integer part must be a single `0` or a non-zero digit followed by digits —
+    no leading zeros (RFC 8259 §6). -/
 private def parseNumber (inp : List Char) :
     Except String (Float × { r : List Char // r.length < inp.length }) :=
   let s := stripSign inp
@@ -292,6 +294,8 @@ private def parseNumber (inp : List Char) :
   let r0 := s.2.val
   have hr0 : r0.length ≤ inp.length := s.2.2
   if hd : (spanList isDigit r0).1 = [] then .error "expected digit"
+  else if (spanList isDigit r0).1.length > 1 ∧ (spanList isDigit r0).1.head? = some '0' then
+    .error "leading zeros are not allowed (RFC 8259 §6)"
   else
     match hf : parseFrac (spanList isDigit r0).2 with
     | .error e => .error e

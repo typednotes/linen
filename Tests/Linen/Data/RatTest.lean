@@ -8,14 +8,14 @@ import Linen.Data.Rat
 
 namespace Tests.Data.Rat
 
-/-! ### round — halves away from zero -/
+/-! ### round — halves to even (banker's rounding) -/
 
-#guard Rat.round (1 / 2 : Rat) == 1
-#guard Rat.round (-1 / 2 : Rat) == -1
+#guard Rat.round (1 / 2 : Rat) == 0    -- tie between 0 and 1; 0 is even
+#guard Rat.round (-1 / 2 : Rat) == 0   -- tie between -1 and 0; 0 is even
 #guard Rat.round (1 / 3 : Rat) == 0
 #guard Rat.round (2 / 3 : Rat) == 1
-#guard Rat.round (3 / 2 : Rat) == 2
-#guard Rat.round (-3 / 2 : Rat) == -2
+#guard Rat.round (3 / 2 : Rat) == 2    -- tie between 1 and 2; 2 is even
+#guard Rat.round (-3 / 2 : Rat) == -2  -- tie between -2 and -1; -2 is even
 #guard Rat.round (5 : Rat) == 5
 
 /-! ### Data.Ratio is core `Rat` (arithmetic, floor/ceil/abs, canonical form) -/

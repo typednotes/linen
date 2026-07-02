@@ -238,51 +238,51 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 212. `Hale.Http3.Network.HTTP3.Server` -->
 <!-- 213. `Hale.Http3` -->
 <!-- 214. `Hale.QUIC` -->
-215. `Hale.Recv.Network.Socket.Recv`
-216. `Hale.Recv`
-217. `Hale.ResourceT.Control.Monad.Trans.Resource`
-218. `Hale.ResourceT`
-219. `Hale.Conduit.Data.Conduit.Internal.Conduit`
-220. `Hale.Conduit.Data.Conduit.Combinators`
-221. `Hale.Conduit.Data.Conduit`
-222. `Hale.Conduit`
-223. `Hale.STM.Control.Monad.STM`
-224. `Hale.STM.Control.Concurrent.STM.TVar`
-225. `Hale.STM.Control.Concurrent.STM.TMVar`
-226. `Hale.STM.Control.Concurrent.STM.TQueue`
-227. `Hale.STM`
-228. `Hale.Scientific.Data.Scientific`
-229. `Hale.Scientific`
-230. `Hale.SimpleSendfile.Network.Sendfile`
-231. `Hale.SimpleSendfile`
-232. `Hale.StreamingCommons.Data.Streaming.Network`
-233. `Hale.StreamingCommons`
-234. `Hale.TLS.Network.TLS.Types`
-235. `Hale.TLS.Network.TLS.Context`
-236. `Hale.TLS`
-237. `Hale.HttpClient.Network.HTTP.Client.Connection`
-238. `Hale.HttpClient.Network.HTTP.Client.Redirect`
-239. `Hale.HttpClient`
-240. `Hale.HttpConduit.Network.HTTP.Client.Conduit`
-241. `Hale.HttpConduit.Network.HTTP.Simple`
-242. `Hale.HttpConduit`
-243. `Hale.Req.Network.HTTP.Req`
-244. `Hale.Req`
-245. `Hale.Text.Data.Text`
-246. `Hale.Text.Data.Text.Encoding`
-247. `Hale.Text`
-248. `Hale.Time.Data.Time.Clock`
-249. `Hale.Time`
-250. `Hale.TimeManager.System.TimeManager`
-251. `Hale.TimeManager`
-252. `Hale.UnixCompat.System.Posix.Compat`
-253. `Hale.UnixCompat`
-254. `Hale.UnliftIO.Control.Monad.IO.Unlift`
-255. `Hale.UnliftIO`
-256. `Hale.Vault.Data.Vault`
-257. `Hale.Vault`
-258. `Hale.Vector.Data.Vector`
-259. `Hale.Vector`
+<!-- 215. `Hale.Recv.Network.Socket.Recv` -->
+<!-- 216. `Hale.Recv` -->
+<!-- 217. `Hale.ResourceT.Control.Monad.Trans.Resource` -->
+<!-- 218. `Hale.ResourceT` -->
+<!-- 219. `Hale.Conduit.Data.Conduit.Internal.Conduit` -->
+<!-- 220. `Hale.Conduit.Data.Conduit.Combinators` -->
+<!-- 221. `Hale.Conduit.Data.Conduit` -->
+<!-- 222. `Hale.Conduit` -->
+<!-- 223. `Hale.STM.Control.Monad.STM` -->
+<!-- 224. `Hale.STM.Control.Concurrent.STM.TVar` -->
+<!-- 225. `Hale.STM.Control.Concurrent.STM.TMVar` -->
+<!-- 226. `Hale.STM.Control.Concurrent.STM.TQueue` -->
+<!-- 227. `Hale.STM` -->
+<!-- 228. `Hale.Scientific.Data.Scientific` -->
+<!-- 229. `Hale.Scientific` -->
+<!-- 230. `Hale.SimpleSendfile.Network.Sendfile` -->
+<!-- 231. `Hale.SimpleSendfile` -->
+<!-- 232. `Hale.StreamingCommons.Data.Streaming.Network` -->
+<!-- 233. `Hale.StreamingCommons` -->
+<!-- 234. `Hale.TLS.Network.TLS.Types` -->
+<!-- 235. `Hale.TLS.Network.TLS.Context` -->
+<!-- 236. `Hale.TLS` -->
+<!-- 237. `Hale.HttpClient.Network.HTTP.Client.Connection` -->
+<!-- 238. `Hale.HttpClient.Network.HTTP.Client.Redirect` -->
+<!-- 239. `Hale.HttpClient` -->
+<!-- 240. `Hale.HttpConduit.Network.HTTP.Client.Conduit` -->
+<!-- 241. `Hale.HttpConduit.Network.HTTP.Simple` -->
+<!-- 242. `Hale.HttpConduit` -->
+<!-- 243. `Hale.Req.Network.HTTP.Req` -->
+<!-- 244. `Hale.Req` -->
+<!-- 245. `Hale.Text.Data.Text` -->
+<!-- 246. `Hale.Text.Data.Text.Encoding` -->
+<!-- 247. `Hale.Text` -->
+<!-- 248. `Hale.Time.Data.Time.Clock` -->
+<!-- 249. `Hale.Time` -->
+<!-- 250. `Hale.TimeManager.System.TimeManager` -->
+<!-- 251. `Hale.TimeManager` -->
+<!-- 252. `Hale.UnixCompat.System.Posix.Compat` -->
+<!-- 253. `Hale.UnixCompat` -->
+<!-- 254. `Hale.UnliftIO.Control.Monad.IO.Unlift` -->
+<!-- 255. `Hale.UnliftIO` -->
+<!-- 256. `Hale.Vault.Data.Vault` -->
+<!-- 257. `Hale.Vault` -->
+<!-- 258. `Hale.Vector.Data.Vector` -->
+<!-- 259. `Hale.Vector` -->
 260. `Hale.WAI.Network.Wai.Internal`
 261. `Hale.WAI.Network.Wai`
 262. `Hale.WAI`

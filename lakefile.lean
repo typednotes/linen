@@ -1,9 +1,6 @@
 import Lake
 open System Lake DSL
 
-package linen where
-  version := v!"0.1.0"
-
 -- ── libpq discovery (cross-platform, no hardcoded machine paths) ──
 -- libpq (the PostgreSQL client library) is found differently per platform:
 --   • compile flags: resolved dynamically via `pkg-config --cflags libpq`,
@@ -58,6 +55,15 @@ run_cmd do
   mkDef `opensslLinkArgs ssl
   mkDef `nativeLinkArgs (pq ++ ssl)
 
+-- `moreLinkArgs` here also flows into `ExternLib.linkArgs` (`self.pkg.moreLinkArgs`),
+-- so `linenffi`'s `:shared` dynlib — loaded directly by the interpreter for `#eval` —
+-- is itself linked against Homebrew's OpenSSL. Without this, `tls.o`'s `SSL_CTX_new`
+-- is left as an unbound symbol that dyld's flat-namespace fallback can resolve to
+-- macOS's incompatible system `libboringssl.dylib` instead, crashing on the first call.
+package linen where
+  version := v!"0.1.0"
+  moreLinkArgs := nativeLinkArgs
+
 -- ── Native FFI (POSIX sockets + kqueue/epoll, PostgreSQL libpq) ──
 -- The C shims in `ffi/` are portable across macOS and Linux. `network.c`
 -- selects kqueue vs epoll via `#ifdef __APPLE__ / __linux__`; `postgres.c`
@@ -89,12 +95,22 @@ target jose.o pkg : FilePath := do
   let weakArgs := #["-I", (← getLeanIncludeDir).toString] ++ opensslCFlags
   buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
 
+/-- Compile `ffi/tls.c` (OpenSSL TLS bindings) into an object file.
+    OpenSSL's include path is discovered at build time via `pkg-config`. -/
+target tls.o pkg : FilePath := do
+  let oFile := pkg.buildDir / "ffi" / "tls.o"
+  let srcJob ← inputTextFile <| pkg.dir / "ffi" / "tls.c"
+  let opensslCFlags ← pkgConfig #["--cflags", "openssl"]
+  let weakArgs := #["-I", (← getLeanIncludeDir).toString] ++ opensslCFlags
+  buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
+
 /-- Bundle the FFI object(s) into a static lib that Lake links automatically. -/
 extern_lib linenffi pkg := do
   let networkObj ← network.o.fetch
   let postgresObj ← postgres.o.fetch
   let joseObj ← jose.o.fetch
-  buildStaticLib (pkg.staticLibDir / nameToStaticLib "linenffi") #[networkObj, postgresObj, joseObj]
+  let tlsObj ← tls.o.fetch
+  buildStaticLib (pkg.staticLibDir / nameToStaticLib "linenffi") #[networkObj, postgresObj, joseObj, tlsObj]
 
 @[default_target]
 lean_lib Linen where

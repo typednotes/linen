@@ -88,15 +88,13 @@ private def decodeBytes : List Char → Option (List UInt8)
         (group ++ ·) <$> decodeBytes rest
   | _ => none  -- a trailing 1–3 characters: length not a multiple of 4
 
-/-- Drop the whitespace characters `'\n'`, `'\r'`, `' '` from a string. -/
-private def stripWhitespace (s : String) : String :=
-  String.ofList (s.toList.filter fun c => c != '\n' && c != '\r' && c != ' ')
-
 /-- Decode a Base64 `String` back to a `ByteArray`, or `none` on invalid input.
+    Whitespace is **not** stripped: any character outside the alphabet
+    (including `'\n'`, `'\r'`, `' '`) makes the input invalid, matching
+    Haskell's `Data.ByteString.Base64.decode` (as opposed to `decodeLenient`).
     $$\text{decode} : \text{String} \to \text{Option}\ \text{ByteArray}$$ -/
 def decode (input : String) : Option ByteArray :=
-  let s := stripWhitespace input
-  if s.length % 4 != 0 then none
-  else (decodeBytes s.toList).map (fun bytes => bytes.foldl ByteArray.push ByteArray.empty)
+  if input.length % 4 != 0 then none
+  else (decodeBytes input.toList).map (fun bytes => bytes.foldl ByteArray.push ByteArray.empty)
 
 end Data.Base64

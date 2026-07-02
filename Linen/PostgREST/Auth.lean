@@ -16,8 +16,11 @@
   validation fails, the error is stored for later handling.
 -/
 import Linen.PostgREST.Auth.Types
+import Linen.Crypto.JOSE.JWT
 
 namespace PostgREST.Auth
+
+open Crypto.JOSE
 
 -- ── Token extraction ──────────────────────────────────────────
 
@@ -53,25 +56,45 @@ def extractRole (claimPath : String) (claims : List (String × String))
 /-- Authenticate a request given its headers and configuration. Returns
     either an error message or the auth result. The `anonRole` must be
     non-empty (enforced by proof parameter), matching PostgreSQL's
-    requirement for valid role names. -/
+    requirement for valid role names.
+
+    If a Bearer token is present, it is verified as a JWT via
+    `Crypto.JOSE.JWT.verifyJWT` — signature check against `jwtSecret` (used
+    as an HS256 symmetric key, as PostgREST does by default) plus `exp`/`nbf`
+    validation against `now` — mirroring PostgREST's `PostgREST.Auth`. The
+    role is then read from the claim named by `jwtRoleClaimKey`, falling
+    back to `anonRole` only when that claim is absent or empty. -/
 def authenticate (headers : List (String × String))
-    (jwtSecret : Option String) (_jwtRoleClaimKey : String)
-    (anonRole : String) (anonRole_nonempty : anonRole.length > 0)
-    : Except String AuthResult := do
+    (jwtSecret : Option String) (jwtRoleClaimKey : String)
+    (anonRole : String) (anonRole_nonempty : anonRole.length > 0) (now : Nat)
+    : IO (Except String AuthResult) := do
   match findAuthHeader headers with
   | none =>
     -- No auth header: use anonymous role
-    return { authRole := anonRole, authRole_nonempty := anonRole_nonempty, authClaims := [] }
+    return .ok { authRole := anonRole, authRole_nonempty := anonRole_nonempty, authClaims := [] }
   | some authValue =>
     match extractBearerToken authValue with
-    | none => .error "Invalid Authorization header format (expected Bearer token)"
-    | some _token =>
+    | none => return .error "Invalid Authorization header format (expected Bearer token)"
+    | some token =>
       match jwtSecret with
-      | none => .error "JWT secret not configured"
-      | some _secret =>
-        -- JWT validation would happen here (via JOSE library)
-        -- For now, extract role from anonymous context
-        -- In full implementation: validate token, extract claims, extract role
-        return { authRole := anonRole, authRole_nonempty := anonRole_nonempty, authClaims := [] }
+      | none => return .error "JWT secret not configured"
+      | some secret =>
+        let keyBytes := secret.toUTF8
+        let jwk : JWK := {
+          kty := .oct
+          material := .oct keyBytes
+          kty_material_coherent :=
+            ⟨fun h => absurd h (by decide), fun h => absurd h (by decide), fun _ => ⟨keyBytes, rfl⟩⟩
+        }
+        match ← JWT.verifyJWT token { keys := #[jwk] } now with
+        | .error e => return .error (toString e)
+        | .ok claims =>
+          let role := extractRole jwtRoleClaimKey claims.unregisteredClaims anonRole
+          if h : role.length > 0 then
+            return .ok { authRole := role, authRole_nonempty := h, authClaims := claims.unregisteredClaims }
+          else
+            return .ok
+              { authRole := anonRole, authRole_nonempty := anonRole_nonempty
+                authClaims := claims.unregisteredClaims }
 
 end PostgREST.Auth

@@ -15,6 +15,11 @@
   * **No lost wakeups:** Every `put` on an empty MVar with a taker wakes
     exactly one taker; every `take` on a full MVar with a putter wakes exactly
     one putter. Proof by case analysis on the match branches.
+  * **`read` atomicity:** `read` never removes the value, so it is a single
+    mutex-protected step (immediate return or promise registration) rather
+    than `take` followed by `put` — a concurrent `take` can never observe the
+    MVar as transiently empty because of a `read`, and every queued reader is
+    woken by the same `put`.
 
   ## Axiom-dependent properties (documented, not machine-checked)
 
@@ -58,14 +63,18 @@ abbrev Concurrent (α : Type) := BaseIO (Task α)
 **Structural invariant** (maintained by all operations):
 - If `value.isSome`, then `takers` is empty (no one waits when a value exists).
 - If `value.isNone`, then `putters` is empty (no one waits to put when empty).
+- If `value.isNone`, then `readers` may be nonempty; the instant a value is
+  stored (`value` goes from `none` to `some _`), every queued reader is
+  resolved with it and `readers` is cleared in the same atomic step.
 
 These are enforced by the `take`/`put` implementations: `take` on a full
-MVar checks putters; `put` on an empty MVar checks takers. No simultaneous
-value + waiters of the complementary kind can exist. -/
+MVar checks putters; `put` on an empty MVar checks takers, then readers.
+No simultaneous value + waiters of the complementary kind can exist. -/
 private structure MVarState (α : Type) where
   value : Option α
   takers : Std.Queue (IO.Promise α)
   putters : Std.Queue (α × IO.Promise Unit)
+  readers : Std.Queue (IO.Promise α)
 
 /-! ### MVar structure -/
 
@@ -92,13 +101,13 @@ namespace MVar
 
 $$\text{new} : \alpha \to \text{BaseIO}\ (\text{MVar}\ \alpha)$$ -/
 def new (a : α) : BaseIO (MVar α) := do
-  pure ⟨← Std.Mutex.new { value := some a, takers := ∅, putters := ∅ : MVarState α }⟩
+  pure ⟨← Std.Mutex.new { value := some a, takers := ∅, putters := ∅, readers := ∅ : MVarState α }⟩
 
 /-- Create a new empty $\text{MVar}$.
 
 $$\text{newEmpty} : \text{BaseIO}\ (\text{MVar}\ \alpha)$$ -/
 def newEmpty (α : Type) : BaseIO (MVar α) := do
-  pure ⟨← Std.Mutex.new { value := none, takers := ∅, putters := ∅ : MVarState α }⟩
+  pure ⟨← Std.Mutex.new { value := none, takers := ∅, putters := ∅, readers := ∅ : MVarState α }⟩
 
 /-! ### Internal helpers -/
 
@@ -118,7 +127,9 @@ private def consumeValue (st : MVarState α) (val : α) : Std.AtomicT (MVarState
     pure val
 
 /-- Deliver a value into an empty MVar. If a taker is queued, it receives
-the value directly (the MVar stays empty); otherwise the MVar becomes full.
+the value directly (the MVar stays empty); otherwise the MVar becomes full
+and every queued reader is woken with the same value (multi-wakeup, matching
+GHC's `readMVar` since it never actually removes the value from the box).
 
 Used by both `put` and `tryPut` to avoid duplicating the empty-MVar logic. -/
 private def deliverValue (st : MVarState α) (a : α) : Std.AtomicT (MVarState α) BaseIO Unit := do
@@ -127,7 +138,9 @@ private def deliverValue (st : MVarState α) (a : α) : Std.AtomicT (MVarState �
     set { st with takers := remaining }
     takerPromise.resolve a
   | none =>
-    set { st with value := some a }
+    set { st with value := some a, readers := ∅ }
+    for p in st.readers.toArray do
+      p.resolve a
 
 /-! ### Core async operations (non-blocking) -/
 
@@ -166,21 +179,37 @@ def put (mv : MVar α) (a : α) : BaseIO (Task Unit) :=
       set { st with putters := st.putters.enqueue (a, promise) }
       pure promise.result!
 
-/-- Read the value without removing it. If empty, waits like `take` then
-puts the value back.
+/-- Read the value without ever removing it. If the MVar already holds a
+value, it is returned immediately with no mutation; otherwise the caller
+becomes a dormant promise until a `put` actually stores a value (a value
+handed directly to a queued taker does **not** satisfy waiting readers,
+since it never becomes visible in the box).
+
+This is a single atomic step, unlike a naive `take`-then-`put`: because
+reading never removes the value, a concurrent `take` can never observe the
+MVar as transiently empty on account of a `read`, and any number of
+concurrent readers are all woken by the same `put` (matching GHC's
+`readMVar`, which has genuine multi-wakeup semantics since base 4.7 and is
+*not* implemented as `takeMVar` followed by `putMVar`).
 
 $$\text{read} : \text{MVar}\ \alpha \to \text{BaseIO}\ (\text{Task}\ \alpha)$$ -/
-def read [Nonempty α] (mv : MVar α) : BaseIO (Task α) := do
-  let takeTask ← mv.take
-  BaseIO.bindTask takeTask fun val => do
-    let putTask ← mv.put val
-    pure (putTask.map fun () => val)
+def read [Nonempty α] (mv : MVar α) : BaseIO (Task α) :=
+  mv.state.atomically do
+    let st ← get
+    match st.value with
+    | some val => pure (Task.pure val)
+    | none =>
+      let promise ← IO.Promise.new
+      set { st with readers := st.readers.enqueue promise }
+      pure promise.result!
 
 /-- Swap the value in the MVar: take the old, put the new.
 
 $$\text{swap} : \text{MVar}\ \alpha \to \alpha \to \text{BaseIO}\ (\text{Task}\ \alpha)$$
 
-Returns the old value. -/
+Returns the old value. Implemented as `take` then `put`, same as GHC's
+`swapMVar`: real GHC does not make this atomic against other threads'
+concurrent MVar operations either (only `readMVar` gets that guarantee). -/
 def swap [Nonempty α] (mv : MVar α) (newVal : α) : BaseIO (Task α) := do
   let takeTask ← mv.take
   BaseIO.bindTask takeTask fun old => do
@@ -192,7 +221,10 @@ def swap [Nonempty α] (mv : MVar α) (newVal : α) : BaseIO (Task α) := do
 $$\text{withMVar} : \text{MVar}\ \alpha \to (\alpha \to \text{BaseIO}\ (\alpha \times \beta)) \to \text{BaseIO}\ (\text{Task}\ \beta)$$
 
 Takes the value, applies $f$, puts back $\pi_1(f(a))$, returns $\pi_2(f(a))$.
-If $f$ throws, the MVar remains empty (matching Haskell semantics). -/
+If $f$ throws, the MVar remains empty (matching Haskell semantics).
+Implemented as `take` then `put`, same as GHC's `withMVar` — not atomic
+against other threads' concurrent MVar operations (only `readMVar` gets that
+guarantee in real GHC `base`). -/
 def withMVar [Nonempty α] (mv : MVar α) (f : α → BaseIO (α × β)) : BaseIO (Task β) := do
   let takeTask ← mv.take
   BaseIO.bindTask takeTask fun val => do

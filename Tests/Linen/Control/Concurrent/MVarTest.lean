@@ -39,4 +39,30 @@ namespace Tests.Control.Concurrent.MVar
   let _ ← IO.wait (← mv.modify_ (fun a => pure (a + 1)))
   unless (← mv.tryRead) == some 11 do throw (IO.userError "modify_ should yield 11")
 
+-- read on an empty MVar blocks, is woken by a put, and does not consume the
+-- value: it is still there for a subsequent read/take.
+#eval show IO Unit from do
+  let mv ← MVar.newEmpty Nat
+  let readTask ← mv.read
+  let _ ← mv.put 5
+  let v ← IO.wait readTask
+  unless v == 5 do throw (IO.userError s!"read expected 5, got {v}")
+  unless (← mv.tryRead) == some 5 do throw (IO.userError "read must not remove the value")
+  let t ← mv.takeSync
+  unless t == 5 do throw (IO.userError s!"take after read expected 5, got {t}")
+
+-- Multiple readers queued on an empty MVar are all woken by the same put
+-- (multi-wakeup, matching GHC's `readMVar`), and the value remains after.
+#eval show IO Unit from do
+  let mv ← MVar.newEmpty Nat
+  let r1 ← mv.read
+  let r2 ← mv.read
+  let _ ← mv.put 99
+  let v1 ← IO.wait r1
+  let v2 ← IO.wait r2
+  unless v1 == 99 && v2 == 99 do
+    throw (IO.userError s!"expected both readers to get 99, got {v1}, {v2}")
+  unless (← mv.tryRead) == some 99 do
+    throw (IO.userError "value should remain in the box after multi-reader wakeup")
+
 end Tests.Control.Concurrent.MVar

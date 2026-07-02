@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>169 modules</strong> · <strong>263 compile-time theorems</strong> · <strong>2885 <code>#guard</code> checks</strong>
+  <strong>194 modules</strong> · <strong>295 compile-time theorems</strong> · <strong>3125 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -84,6 +84,19 @@ Three rules hold across the whole library:
 - `Data.Conduit.Internal.Pipe` — conduit's core streaming `Pipe` type, ported
   **without `unsafe`**: a Freer-style `pipeM` (strictly positive) and a strict
   spine make it a total, kernel-checked `Functor`/`Monad` for any effect `m`.
+- `Data.Conduit.Internal.Conduit` — the `ConduitT` CPS/codensity wrapper over
+  `Pipe` (O(1) monadic bind): `await`/`yield`/`leftoverC`/`liftConduit`/
+  `awaitForever`, the `.|` fusion operator, `runConduit`/`runConduitPure`/
+  `runConduitRes`, and `bracketP` for resource-safe streaming (built on
+  `Control.Monad.Trans.Resource`). Marked `unsafe`: `awaitForever` recurses on
+  a runtime `await` result with no structural or well-founded measure — a
+  genuine unbounded corecursion, the same one Haskell accepts through laziness.
+- `Data.Conduit.Combinators` — the conduit combinator library over `ConduitT`:
+  sources (`sourceList`/`sourceArray`/`unfoldC`/`repeatC`/`replicateC`/
+  `enumFromToC`), sinks (`sinkList`/`sinkArray`/`foldlC`/`foldMC`/`headC`/
+  `lengthC`/`sumC`/`allC`/`anyC`/`findC`/`maximumC`/…), and transformers
+  (`mapC`/`mapMC`/`filterC`/`takeC`/`dropC`/`takeWhileC`/`concatMapC`/
+  `scanlC`/`intersperseC`/`chunksOfC`/…).
 - `Data.Configurator.Types` — a typed config `Value` (string/number/bool/list)
   with a structural (no-`partial`) `toString`, and `Config = HashMap String Value`.
 - `Data.Configurator` — a `key = value` config loader/parser (comments, dotted
@@ -141,6 +154,11 @@ Three rules hold across the whole library:
   instances and verified functor/monad laws.
 - `Data.Rat.round` — round-half-away-from-zero for core `Rat` (Haskell `Data.Ratio`
   is core's `Rat`, which already has the arithmetic, `floor`/`ceil`/`abs`).
+- `Data.Scientific` — arbitrary-precision scientific notation $c \times 10^{e}$
+  (Haskell's `scientific` package): `normalize`/`isZero`/`isInteger`,
+  `toRealFloat`/`fromFloatDigits`, `toBoundedInteger`, `toDecimalDigits`, and
+  `Add`/`Sub`/`Mul`/`Neg`/`BEq`/`Ord`/`OfScientific` instances, with verified
+  `isZero_iff`/`normalize_zero`/`neg_neg` laws.
 - `Data.String` — Haskell's `Data.String`: the `IsString` class for overloaded
   literals, plus `String.words`/`unwords`/`unlines` (`lines` is core's
   `splitOn "\n"`).
@@ -175,6 +193,11 @@ Three rules hold across the whole library:
   generically (core's `MonadLift`/`LawfulMonadLift` already generalize
   Haskell's `MonadTrans` class, with lawful instances for `ExceptT`,
   `ReaderT`, and `StateT`).
+- `Control.Monad.Trans.Resource` — deterministic, exception-safe LIFO resource
+  cleanup: `ResourceT = ReaderT (IO.Ref CleanupMap)` over core's own `ReaderT`
+  (only a `MonadLift IO` instance needed on top), `allocate`/`release`/
+  `runResourceT` (cleanup runs via `try`/`finally`, even on an exception), and
+  a verified `releaseKey_eq` law.
 - `Control.Category` / `LawfulCategory` — categories with identity and
   associative composition (`≫`, diagrammatic), with the lawful `Fun` instance.
 - `Control.Arrow` / `ArrowChoice` — arrows over a `Category`: `arr`, `first`,
@@ -201,6 +224,18 @@ Three rules hold across the whole library:
   `forkIO`, `forkFinally`, `forkGreen`, `killThread` (cooperative), `waitThread`,
   `threadDelay`, `yield`, and a monotonic `ThreadId`. All forks run as fair green
   threads started on Lean's task pool.
+- `Control.Monad.STM` — software transactional memory: `STM α = BaseIO
+  (STMResult α)`, with every transaction serialized on a single global
+  `Std.Mutex` (`atomically`/`retry`/`orElse`/`check`); `atomically`'s
+  retry-until-commit loop is a plain `while`, not `partial def`.
+- `Control.Concurrent.STM.TVar` — a transactional variable over `IO.Ref`:
+  `newTVarIO`/`newTVar`/`readTVar`/`writeTVar`/`modifyTVar'`.
+- `Control.Concurrent.STM.TMVar` — `TVar (Option α)`: `newTMVar(IO)`/
+  `newEmptyTMVar(IO)`/`takeTMVar`/`putTMVar`/`readTMVar`/`tryTakeTMVar`/
+  `tryPutTMVar`/`isEmptyTMVar`.
+- `Control.Concurrent.STM.TQueue` — a transactional, amortized-O(1) FIFO over
+  two `TVar`-held lists: `newTQueue(IO)`/`writeTQueue`/`readTQueue`/
+  `tryReadTQueue`/`isEmptyTQueue`/`peekTQueue`.
 
 ### `Data.Json` — a tiny JSON library
 
@@ -374,6 +409,13 @@ Three rules hold across the whole library:
   that doesn't need event-loop integration (production non-blocking I/O should
   use `EventDispatcher` instead). Every retry loop is a plain `while`, so the
   module needs no `partial def`.
+- `Network.Sendfile` — a portable `sendFile`/`sendFileSimple` for transferring
+  a file (or `FilePart` range) over a connected socket, via chunked read +
+  `Blocking.sendAll` (no platform `sendfile(2)` zero-copy syscall).
+- `Data.Streaming.Network` — Haskell's `Data.Streaming.Network`: `AppData`,
+  `bindPortTCP`/`getSocketTCP`/`mkAppData`/`runTCPServer`, and `acceptSafe`
+  (retry-on-transient-accept-error), with its retry loop a plain `while`
+  instead of the upstream `partial def`.
 
 ### `Network.Mime` — MIME type lookup
 
@@ -726,6 +768,20 @@ Three rules hold across the whole library:
   `generateOpenAPISpec` builds the full spec (paths, schemas) from a
   `SchemaCache`.
 
+### `Network.TLS` — TLS 1.2/1.3 over OpenSSL (FFI)
+
+- `Network.TLS.Types` — `TLSVersion` (`tls10`–`tls13`), a `CipherID` alias, and
+  `TLSOutcome α` — the `.ok`/`.wantRead`/`.wantWrite`/`.error` sum type every
+  non-blocking TLS operation returns on `SSL_ERROR_WANT_READ`/`WANT_WRITE`.
+- `Network.TLS.Context` — opaque `TLSContext`/`TLSSession` handles over
+  OpenSSL's `SSL_CTX`/`SSL` (`ffi/tls.c`, GC-finalized): server-side
+  `createContext`/`setAlpn`/`acceptSocket`/`read`/`write`/`close`/
+  `getVersion`/`getAlpn`, non-blocking `*NB` variants, and client-side
+  `createClientContext` (system CA trust) / `createClientContextWithCA`
+  (trust a specific CA file — e.g. a self-signed cert in tests) /
+  `connectSocket` (SNI + hostname verification, with a `while`-loop retry on
+  `WANT_READ`/`WANT_WRITE`, not `partial def`).
+
 ### `Network.QUIC` — QUIC transport protocol (RFC 9000)
 
 - `Network.QUIC.Types` — core QUIC types: a proof-carrying `ConnectionId`
@@ -785,6 +841,8 @@ open Data.Functor Control.Monad
 | `Linen.Data.ByteString.Builder` | difference-list builder (O(1) `append`): word/UTF-8/decimal/hex encoders + monoid laws |
 | `Linen.Data.CaseInsensitive` | `FoldCase` class + `CI α` wrapper: case-insensitive `BEq`/`Ord`/`Hashable`, original-preserving `ToString` |
 | `Linen.Data.Conduit.Internal.Pipe` | conduit's streaming `Pipe` (Freer `pipeM`, strict spine): total `Functor`/`Monad`, no `unsafe` |
+| `Linen.Data.Conduit.Internal.Conduit` | `ConduitT` CPS wrapper over `Pipe`: `await`/`yield`/`leftoverC`/`awaitForever`, `.\|` fusion, `runConduit`/`runConduitRes`, `bracketP` (`unsafe`) |
+| `Linen.Data.Conduit.Combinators` | conduit's combinator library over `ConduitT`: sources/sinks/transformers (`sourceList`/`sinkList`/`mapC`/`filterC`/`takeC`/`foldMC`/…) (`unsafe`) |
 | `Linen.Data.Configurator.Types` | config `Value` (string/number/bool/list) + `Config = HashMap String Value` |
 | `Linen.Data.Configurator` | `key = value` config parser/loader: `parseConfig`/`lookup`/`require`/`load` |
 | `Linen.Data.Default` | `Default` typeclass (sensible defaults) + instances for `Bool`/`Nat`/`String`/`List`/`Option`/… |
@@ -805,10 +863,16 @@ open Data.Functor Control.Monad
 | `Linen.Data.Ord` | `Down` (reversed ordering) + proof-carrying `clamp` |
 | `Linen.Data.Proxy` | phantom-type proxy with `Functor`/`Monad` + verified laws |
 | `Linen.Data.Rat` | `Rat.round` (round-half-away-from-zero; `Data.Ratio` is core's `Rat`) |
+| `Linen.Data.Scientific` | arbitrary-precision `coefficient * 10^exponent`: `normalize`/`toRealFloat`/`toBoundedInteger` + `Add`/`Sub`/`Mul`/`Neg`/`Ord` + laws |
 | `Linen.Data.IP` | IPv4/IPv6 addresses, CIDR `AddrRange` (bounded mask proof) with `isMatchedTo`, `parseIPv4`/`parseCIDR4` |
 | `Linen.Data.String` | `IsString` class + `String.words`/`unwords`/`unlines` (`lines` is core's `splitOn`) |
+| `Linen.Data.Text` | Haskell-compatible `Data.Text` API (`Text := String`): `chunksOf`/`isInfixOf`/`transpose`/… over Lean's UTF-8 `String`, no fuel counters |
+| `Linen.Data.Text.Encoding` | `Text`↔`ByteString` UTF-8 codec: `encodeUtf8`/`decodeUtf8'` (via `String.fromUTF8?`), `decodeUtf8With` (well-founded byte scanner, ≥1 byte consumed per step) |
+| `Linen.Data.Time.Clock` | UTC time/durations: `NominalDiffTime` (`Int` nanoseconds, `Add`/`Sub`/`Neg`/`Ord`), `UTCTime` (`getCurrentTime` via `IO.monoNanosNow`, `diffUTCTime`/`addUTCTime`) |
 | `Linen.Data.Traversable` | `Traversable` class (`traverse`/`sequence`) + `List`/`Option`/`NonEmpty`; `LawfulTraversable` |
 | `Linen.Data.Unique` | globally unique ids: `newUnique : IO Unique` from a global counter (`BEq`/`Ord`/`Hashable`) |
+| `Linen.Data.Vault` | type-safe heterogeneous map: `Key α` tokens (unique, `IO`-minted) over a `Std.HashMap Nat Erased`, `insert`/`lookup`/`delete`/`newKey` |
+| `Linen.Data.Vector` | the handful of `Data.Vector` combinators `Array` lacks: `generate`/`ifilter`/`foldl1'`/`ifoldl'`/`and`/`or`/`product`/`notElem`/`backpermute`/`slice` |
 | `Linen.Data.Void` | vacuous `Empty` instances (`BEq`/`Ord`/`Hashable`/`ToString`) + `Empty → α` singleton law |
 | `Linen.Control.Applicative` | `asum` |
 | `Linen.Control.Monad` | `join`, `replicateM`, `replicateM_`, `when`, `unless` |
@@ -816,6 +880,8 @@ open Data.Functor Control.Monad
 | `Linen.Control.Monad.Reader` | `Reader` alias + `mtl` names over core `ReaderT`/`read`/`adapt`: `ask`, `asks`, `local`, `runReaderT`, `runReader`, `mapReaderT` |
 | `Linen.Control.Monad.State` | `State` alias + `mtl` names over core `StateT`: `put`, `gets`, `runStateT`, `evalStateT`, `execStateT`, `runState`, `evalState`, `execState` (`get`/`set`/`modify` reused as-is) |
 | `Linen.Control.Monad.Trans` | `mtl` name `lift` over core `MonadLift`/`monadLift`, plus generic `lift_pure`/`lift_bind` laws (no bespoke `MonadTrans` class or per-transformer instances) |
+| `Linen.Control.Monad.Trans.Resource` | `ResourceT` (deterministic LIFO cleanup) over core `ReaderT`: `allocate`/`release`/`runResourceT`, `releaseKey_eq` |
+| `Linen.Control.Monad.IO.Unlift` | `MonadUnliftIO` (CPS `withRunInIO` over `MonadLiftT IO m`) + `toIO`/`liftIOOp`, `IO`/`ReaderT r IO` instances |
 | `Linen.Control.Category` | `Category`, `LawfulCategory`, `Fun`, the `≫` operator |
 | `Linen.Control.Arrow` | `Arrow`/`ArrowChoice`: `arr`/`first`/`split`/`left`/`right`/`fanin`, `Fun` instances |
 | `Linen.Control.Exception` | IO `bracket` / `onException` (resource safety & failure cleanup) |
@@ -826,10 +892,16 @@ open Data.Functor Control.Monad
 | `Linen.Control.Concurrent.QSemN` | generalised semaphore over arbitrary quantities |
 | `Linen.Control.Concurrent.Green` | fair green-thread monad (non-blocking `await`, cancellation) |
 | `Linen.Control.Concurrent` | thread management (`forkIO`/`forkFinally`/`forkGreen`/`killThread`/`waitThread`) |
+| `Linen.Control.Monad.STM` | STM = `BaseIO (STMResult _)`, global-mutex-serialized: `atomically`/`retry`/`orElse`/`check` |
+| `Linen.Control.Concurrent.STM.TVar` | transactional variable over `IO.Ref`: `newTVarIO`/`readTVar`/`writeTVar`/`modifyTVar'` |
+| `Linen.Control.Concurrent.STM.TMVar` | `TVar (Option α)`: `takeTMVar`/`putTMVar`/`readTMVar`/`tryTakeTMVar`/`tryPutTMVar`/`isEmptyTMVar` |
+| `Linen.Control.Concurrent.STM.TQueue` | transactional two-list FIFO: `writeTQueue`/`readTQueue`/`tryReadTQueue`/`isEmptyTQueue`/`peekTQueue` |
 | `Linen.Data.Json` | JSON AST, `ToJSON`/`FromJSON`, encode/decode + roundtrip proofs |
 | `Linen.System.Console.Ansi` | ANSI terminal colors and styles |
 | `Linen.System.Exit` | `ExitCode` (success/failure) + `exitWith`/`exitSuccess`/`exitFailure` over `IO.Process.exit` |
 | `Linen.System.Log.FastLogger` | buffered thread-safe logger (`Std.Mutex`): `newLoggerSet`/`pushLogStr`/`flushLogStr`/`withFastLogger` |
+| `Linen.System.TimeManager` | connection-timeout sweeper: `Manager` (dedicated-task cooperative-cancellation loop over `Std.CancellationToken`), `Handle.tickle`/`cancel`/`pause`/`resume` |
+| `Linen.System.Posix.Compat` | minimal POSIX compatibility: `Fd`/`closeFd`, `FileStatus`/`getFileStatus`/`fileExist` over `System.FilePath.metadata` |
 | `Linen.Network.HTTP.Chunked` | HTTP/1.1 chunked transfer encoding over `ByteArray` (`chunkedTransferEncoding`/`encodeChunked`) |
 | `Linen.Network.HTTP.Date` | HTTP date parsing/formatting (RFC 7231): `HTTPDate`, `parseHTTPDate` (IMF-fixdate/asctime), `formatHTTPDate` |
 | `Linen.Network.HTTP.Types.Header` | case-insensitive `HeaderName` (`CI String`), `Header`/`RequestHeaders`/`ResponseHeaders`, ~50 standard header constants |
@@ -840,6 +912,11 @@ open Data.Functor Control.Monad
 | `Linen.Network.HTTP.Client.Types` | HTTP/1.1 client types: transport `Connection` (TCP/TLS callbacks), `Request`, `Response` (`findHeader`/`contentLength`/`isSuccess`) |
 | `Linen.Network.HTTP.Client.Request` | HTTP/1.1 request serialization (`serializeRequest` — auto Host/Content-Length/Connection) + `sendRequest` |
 | `Linen.Network.HTTP.Client.Response` | HTTP/1.1 response parsing (`receiveResponse`/`performRequest`): status/headers + Content-Length/chunked/until-close bodies |
+| `Linen.Network.HTTP.Client.Connection` | HTTP/1.1 client connections: `connect` (TCP/TLS), `defaultPort`, `Connection.connClose` |
+| `Linen.Network.HTTP.Client.Redirect` | HTTP redirect following: `executeWithRedirects` (bounded hop count, relative/absolute `Location` resolution) |
+| `Linen.Network.HTTP.Client.Conduit` | conduit bridge for HTTP client bodies: `httpSource`/`httpSink` (streaming, `unsafe` via `ConduitT`), `withResponse` |
+| `Linen.Network.HTTP.Simple` | `http-conduit`-style convenience client: `parseUrl`/`parseUrl!`, `simpleHttp`/`httpBS`/`httpLbs` |
+| `Linen.Network.HTTP.Req` | type-safe `req` client (`req`/library): phantom `Scheme`-indexed `Url`/`ReqOption` (HTTPS-only auth), `HttpMethod`/`HttpBody`/`HttpBodyAllowed` compile-time method-body constraints, `Req` monad, `runReq` |
 | `Linen.Network.HTTP2.Frame.Types` | HTTP/2 (RFC 9113) framing types: 31-bit `StreamId`, `FrameType`/`ErrorCode`/`SettingsKeyId` + total conversions, `FrameFlags`, `Settings` |
 | `Linen.Network.HTTP2.Frame.Decode` | HTTP/2 frame parsing: header, SETTINGS/`applySettings`, GOAWAY/WINDOW_UPDATE/RST_STREAM/PRIORITY/padding, `validateFrameSize` |
 | `Linen.Network.HTTP2.Frame.Encode` | HTTP/2 frame serialisation: header/frame, builders (SETTINGS/PING/GOAWAY/HEADERS/DATA/…), `encodePriority`/`encodePadding`, `splitHeaderBlock` |
@@ -861,6 +938,8 @@ open Data.Functor Control.Monad
 | `Linen.Network.Socket` | safe phantom-typed lifecycle API, `withSocket`/`listenTCP`/`withEventLoop`, `EventLoop`, `sendAll`/`sendTo`/`recvFrom` |
 | `Linen.Network.Socket.EventDispatcher` | kqueue/epoll → `Green` bridge: `waitReadable`/`waitWritable`/`recvGreen`/`sendAllGreen` |
 | `Linen.Network.Socket.Blocking` | blocking-style `accept`/`connect`/`send`/`sendAll`/`recv` over the non-blocking API, retrying on `wouldBlock` |
+| `Linen.Network.Sendfile` | portable `sendFile`/`sendFileSimple` (chunked read + `Blocking.sendAll`, no zero-copy syscall) |
+| `Linen.Data.Streaming.Network` | `AppData`, `bindPortTCP`/`getSocketTCP`/`mkAppData`/`runTCPServer`, `acceptSafe` (retry loop, no `partial`) |
 | `Linen.Network.Mime` | MIME lookup (`mime-types`): `defaultMimeMap`, `fileNameExtensions`, `mimeByExt`, `defaultMimeLookup` |
 | `Linen.Web.Cookie` | RFC 6265 cookie parse/render: `parseCookies`/`renderCookies`, `SetCookie` + `parseSetCookie`/`renderSetCookie` |
 | `Linen.DataFrame.Internal.Types` | typed tabular `DataFrame` with a proven rectangular invariant; `Value`/`Column`/`ColumnType` + smart constructors |
@@ -933,6 +1012,8 @@ open Data.Functor Control.Monad
 | `Linen.PostgREST.App` | core request handler: `handleRequest`, `SimpleRequest`/`SimpleResponse`, `printBanner` |
 | `Linen.PostgREST.CLI` | command-line parsing: `Command`, `parseArgs`, `printUsage` |
 | `Linen.PostgREST.Response.OpenAPI` | OpenAPI 3.0 spec generation: `pgTypeToOpenAPI`, `columnSchema`, `generateOpenAPISpec` |
+| `Linen.Network.TLS.Types` | `TLSVersion` (`tls10`–`tls13`), `CipherID`, `TLSOutcome` (`.ok`/`.wantRead`/`.wantWrite`/`.error`) |
+| `Linen.Network.TLS.Context` | OpenSSL `SSL_CTX`/`SSL` FFI (`ffi/tls.c`): `createContext`/`acceptSocket`/`read`/`write`/`getVersion`/`getAlpn`, `createClientContext(WithCA)`/`connectSocket` |
 | `Linen.Network.QUIC.Types` | QUIC (RFC 9000) core types: proof-carrying `ConnectionId`, `Version`, `TransportParams`, `StreamId`, `TransportError`, `TLSConfig` |
 | `Linen.Network.QUIC.Config` | `ServerConfig`/`ClientConfig` with TLS, transport-parameter, and host/port defaults |
 | `Linen.Network.QUIC.Connection` | opaque `Connection` handle, `ConnectionState`; stream/close/state ops stubbed pending TLS 1.3 FFI |
@@ -960,6 +1041,18 @@ lake exe examples echo serve 9099  # run the echo server forever; then:  nc 127.
 lake exe examples bench            # network round-trips w/ a few-ms server delay: Green vs blocking pool (same #cores threads)
 lake exe examples postgrest        # in-memory PostgREST request handling + OpenAPI spec generation — self-checking demo
 lake exe examples quic             # QUIC types/config + HTTP/3 QPACK/frame wire round trip — self-checking demo
+lake exe examples recv             # Network.Socket.Blocking accept/connect/send/recv round trip — self-checking demo
+lake exe examples resourcet        # Control.Monad.Trans.Resource LIFO cleanup over real scratch files — self-checking demo
+lake exe examples conduit          # Data.Conduit / Data.Conduit.Combinators pipelines, incl. bracketP/runConduitRes — self-checking demo
+lake exe examples stm              # Control.Monad.STM + Concurrent.STM.{TVar,TMVar,TQueue} — self-checking demo
+lake exe examples streaming-commons        # Data.Streaming.Network bindPortTCP/getSocketTCP/acceptSafe/AppData round trip — self-checking demo
+lake exe examples streaming-commons serve 9098  # run it forever; then:  nc 127.0.0.1 9098
+lake exe examples tls              # Network.TLS.Context handshake over loopback against a self-signed cert — self-checking demo
+lake exe examples httpclient       # Network.HTTP.Client connect/request/response + redirect-following, over loopback — self-checking demo
+lake exe examples httpconduit      # Network.HTTP.Client.Conduit / Network.HTTP.Simple streaming HTTP, over loopback — self-checking demo
+lake exe examples req              # Network.HTTP.Req type-safe req/runReq (HttpBodyAllowed-checked GET/POST), over loopback — self-checking demo
+lake exe examples vault            # Data.Vault type-safe heterogeneous map: typed keys, adjust/delete/union — self-checking demo
+lake exe examples vector           # Data.Vector-derived Array combinators: generate/ifilter/folds/reductions/backpermute/slice — self-checking demo
 ```
 
 The `echo` example exercises the whole socket stack end-to-end — a green accept
@@ -977,6 +1070,47 @@ pending TLS 1.3 FFI. It also calls `Client.connect`/`Server.run`/`Server.accept`
 directly and checks that each fails with exactly its documented
 "not yet implemented" error, so the demo stays honest about what is and isn't
 wired up yet.
+
+The `stm` example puts ten green tasks through a thousand `atomically`
+increments each of a shared `TVar`, hands values between a producer and
+consumer through an empty `TMVar`, checks `TQueue`'s FIFO order survives its
+two-list representation, and shows `orElse` falling through to its alternative
+on `retry`.
+
+The `streaming-commons` example drives `Data.Streaming.Network`'s `AppData`
+abstraction over a real loopback connection; `streaming-commons serve <port>`
+runs `runTCPServer` forever for manual testing with `nc`.
+
+The `tls` example runs a full TLS 1.2/1.3 handshake over loopback against a
+self-signed `CN=localhost` certificate, trusting it directly as its own CA via
+`createClientContextWithCA` so the demo stays fully offline. It also documents
+a real API limitation: `getAlpn` always reports `none`, because `setAlpn` only
+registers the server's selection callback — nothing in the current client API
+calls `SSL_set_alpn_protos` to advertise a protocol list for it to select from.
+
+The `httpclient` and `httpconduit` examples each stand up a tiny hand-rolled
+HTTP/1.1 server over a real loopback socket and drive it with a different
+layer of the client stack: `httpclient` uses `Client.connectPlain` +
+`Client.performRequest` directly, then `Client.execute` to show a `302 Found`
+→ `/final` redirect followed automatically; `httpconduit` uses
+`Simple.parseUrl!`/`httpBS`, the callback-scoped `Client.Conduit.withResponse`,
+and `Client.Conduit.httpSource` streamed through a `.| sinkList` conduit
+pipeline.
+
+The `req` example exercises `Network.HTTP.Req`'s type-safe client — a `GET`
+with `NoReqBody` and a `POST` with a `ReqBodyBs` payload, both against a
+loopback server, both admitted by the `HttpBodyAllowed` typeclass at compile
+time (swapping a body onto the `GET` would instead fail to compile, since
+there is no `HttpBodyAllowed .NoBody .YesBody` instance).
+
+The `vault` example mints distinctly-typed keys with `Key.new` and stores
+unrelated payloads under each in the same `Vault`, showing that a key only
+ever yields back the type it was minted for, plus `adjust`/`delete`/`union`.
+
+The `vector` example runs through every combinator `Linen.Data.Vector` adds to
+`Array` (`generate`, `ifilter`, `foldl1'`/`foldr1`, `ifoldl'`/`ifoldr`,
+`and`/`or`/`product`, `notElem`, `backpermute`, `slice`) — everything else
+Haskell's `Data.Vector` offers already exists verbatim on `Array`.
 
 ### Running `postgrest` against a real database
 

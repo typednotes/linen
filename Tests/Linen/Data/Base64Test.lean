@@ -37,10 +37,11 @@ namespace Tests.Data.Base64
 #guard (decode (encode "any carnal pleasure.".toUTF8)).map (·.toList)
         == some "any carnal pleasure.".toUTF8.toList
 
-/-! ### decode ignores whitespace -/
+/-! ### decode rejects whitespace (matches `Data.ByteString.Base64.decode`,
+    as opposed to `decodeLenient`) -/
 
-#guard (decode "TW\nFu").map (·.toList) == some "Man".toUTF8.toList
-#guard (decode "TW Fu").map (·.toList) == some "Man".toUTF8.toList
+#guard (decode "TW\nFu").isNone
+#guard (decode "TW Fu").isNone
 
 /-! ### decode rejects invalid input -/
 
