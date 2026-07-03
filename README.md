@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>237 modules</strong> · <strong>327 compile-time theorems</strong> · <strong>3222 <code>#guard</code> checks</strong>
+  <strong>265 modules</strong> · <strong>371 compile-time theorems</strong> · <strong>3409 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -907,6 +907,71 @@ Three rules hold across the whole library:
   `apacheFormatWithDate` (pure) and `ApacheLogger.log` (IO, via a
   `getDate`/`output` callback pair).
 
+### `Network.WebApp.Server` — a WAI-style HTTP server
+
+A ground-up HTTP/1.1 server for `Network.WebApp.Application`s, over both
+blocking sockets and the `EventDispatcher`/`Green` non-blocking runtime.
+Named `Server` rather than the Haskell-specific `Warp`, matching this
+project's `Network.HTTP2.Server`/`Network.HTTP3.Server`/`Network.QUIC.Server`
+convention.
+
+- `Network.WebApp.Server.Types` — connection/error types shared across the
+  server.
+- `Network.WebApp.Server.Settings` — `Settings`/`defaultSettings`: port,
+  host, timeouts, backlog, graceful-shutdown timeout, auto `Date`/`Server`
+  headers.
+- `Network.WebApp.Server.Request` — HTTP request-line and header parsing off
+  a raw socket buffer, producing a `Network.WebApp.Request`.
+- `Network.WebApp.Server.Response` — status-line/header rendering and
+  response transmission, both blocking (`sendResponse`) and event-driven
+  (`sendResponseEL`).
+- `Network.WebApp.Server.Run` — `runSettings`/`runSettingsEventLoop`: the
+  accept loop and per-connection request/response cycle, keep-alive aware.
+- `Network.WebApp.Server.Conduit` — `ISource`: buffered incremental body
+  reading for known-length and chunked request bodies.
+- `Network.WebApp.Server.IO` — low-level connection byte-sending helpers.
+- `Network.WebApp.Server.SendFile` — portable `sendFile` response body
+  transmission.
+- `Network.WebApp.Server.WithApplication` — `withApplication`/
+  `withApplicationSettings`: run an `Application` on an OS-assigned free
+  port for the duration of an action — reads the real bound port back via
+  `Network.Socket.getSockName` (a correctness fix over the upstream source,
+  which always passed port `0` to the callback).
+- `Network.WebApp.Server` — the package aggregator plus `run`, a one-line
+  entry point (`run port app`).
+- `Network.WebApp.Server.QUIC` — bridges `Network.WebApp` to HTTP/3 over
+  `Network.QUIC` + `Network.HTTP3`; TLS 1.3 is mandatory, so `certFile`/
+  `keyFile` are required settings (not `Option`).
+- `Network.WebApp.Server.TLS` — HTTPS support via `Network.TLS.Context`
+  (OpenSSL FFI) over the `EventDispatcher`/`Green` runtime, with configurable
+  insecure-connection handling and optional ALPN negotiation.
+- `Network.WebApp.Server.TLS.Internal` — re-exports `Server.TLS` for advanced
+  usage.
+- `Network.WebApp.Server.WebSockets` — upgrades `Network.WebApp` requests to
+  `Network.WebSockets` connections via `responseRaw`, with a fallback path
+  for non-WebSocket requests (`websocketsApp`/`websocketsOr`).
+
+### `Network.WebSockets` — WebSocket protocol support (RFC 6455)
+
+- `Network.WebSockets.Types` — `Opcode`/`CloseCode`/`ConnectionState`/
+  `ConnectionOptions`/`Connection`/`PendingConnection`/`ServerApp`.
+- `Network.WebSockets.Frame` — frame encoding/decoding: FIN/opcode byte,
+  7/16/64-bit payload-length thresholds, and XOR masking (its own inverse).
+- `Network.WebSockets.Handshake` — the RFC 6455 §4 upgrade handshake:
+  `computeAcceptKey`/`isValidHandshake`/`buildHandshakeResponse`. The SHA-1
+  step is an honest non-functional placeholder (documented `TODO`,
+  no SHA-1 in the Lean stdlib) — not production-ready as-is.
+- `Network.WebSockets.Connection` — `mkConnection`: frames outgoing
+  text/binary/close/ping messages and auto-responds to incoming pings.
+
+### `Data.Word8` — ASCII byte classification
+
+`isUpper`/`isLower`/`isAlpha`/`isDigit`/`isAlphaNum`/`isSpace`/`isControl`/
+`isPrint`/`isHexDigit`/`isOctDigit`/`isAscii`, `toLower`/`toUpper`, and named
+byte constants (`_A`.._Z`, `_a`.._z`, `_0`.._9`, punctuation), with
+`native_decide`-proved idempotency and classification/conversion coherence
+over all 256 `UInt8` values.
+
 ## Quick Start
 
 Add to your `lakefile.toml`:
@@ -1172,6 +1237,33 @@ open Data.Functor Control.Monad
 | `Linen.Network.WebApp.Extra.Middleware.Push.Referer.Manager` | `PushManager.new`/`.record`/`.getPushes`, LRU-evicted |
 | `Linen.Network.WebApp.Extra.Middleware.Push.Referer` | `pushOnReferer`: HTTP/2 push-via-Referer prediction |
 | `Linen.Network.WebApp.Logger` | `apacheFormat`/`apacheFormatWithDate`/`ApacheLogger.log` |
+| `Linen.Network.WebApp.Server.Types` | connection/error types shared across the server: `InvalidRequest`, `Transport`, `Source`, `Connection` |
+| `Linen.Network.WebApp.Server.Counter` | atomic request counter used for keep-alive/`X-Request-Id`-style bookkeeping |
+| `Linen.Network.WebApp.Server.HashMap` | small case-insensitive header multimap helper |
+| `Linen.Network.WebApp.Server.Header` | header rendering/lookup helpers shared by `Request`/`Response` |
+| `Linen.Network.WebApp.Server.ReadInt` | fast byte-buffer integer parsing (chunk sizes, `Content-Length`) |
+| `Linen.Network.WebApp.Server.PackInt` | integer-to-`ByteArray` encoding for chunked transfer framing |
+| `Linen.Network.WebApp.Server.Date` | cached HTTP-date string generation for the `Date` response header |
+| `Linen.Network.WebApp.Server.Settings` | `Settings`/`defaultSettings`: port, host, timeouts, hooks |
+| `Linen.Network.WebApp.Server.Response` | status-line/header rendering and `sendResponse`/`sendResponseEL` connection writers |
+| `Linen.Network.WebApp.Server.Request` | HTTP request-line and header parsing off a buffered socket reader |
+| `Linen.Network.WebApp.Server.Conduit` | `ISource`: buffered incremental body reading (`mkKnown`/`mkChunked`) |
+| `Linen.Network.WebApp.Server.IO` | low-level connection byte-sending helpers |
+| `Linen.Network.WebApp.Server.SendFile` | portable `sendFile` response body streaming |
+| `Linen.Network.WebApp.Server.Internal` | re-exports the server's public surface |
+| `Linen.Network.WebApp.Server.Run` | `runSettings`/`runSettingsEventLoop`: the accept-loop/connection-handling core |
+| `Linen.Network.WebApp.Server.WithApplication` | `withApplication`/`withApplicationSettings`: run a server for the duration of an `IO` action |
+| `Linen.Network.WebApp.Server` | the package aggregator plus `run`, a one-line server entry point |
+| `Linen.Network.WebApp.Server.QUIC` | bridges `Network.WebApp` to HTTP/3 over `Network.QUIC` |
+| `Linen.Network.WebApp.Server.TLS` | HTTPS support via `Network.TLS.Context` |
+| `Linen.Network.WebApp.Server.TLS.Internal` | re-exports `Server.TLS` for advanced use |
+| `Linen.Network.WebApp.Server.WebSockets` | upgrades `Network.WebApp` requests to `Network.WebSockets` connections via `responseRaw` |
+| `Linen.Network.WebSockets.Types` | `Opcode`/`CloseCode`/`ConnectionState`/`ConnectionOptions`/`Connection`/`PendingConnection`/`ServerApp` |
+| `Linen.Network.WebSockets.Frame` | frame encoding/decoding: FIN/opcode byte, length variants, masking |
+| `Linen.Network.WebSockets.Handshake` | the RFC 6455 §4 upgrade handshake: `computeAcceptKey`/`isValidHandshake`/`buildHandshakeResponse` |
+| `Linen.Network.WebSockets.Connection` | `mkConnection`: frames outgoing sends, decodes/dispatches incoming frames |
+| `Linen.Network.WebSockets` | the package aggregator: `Types`/`Frame`/`Handshake`/`Connection` |
+| `Linen.Data.Word8` | ASCII byte classification (`isUpper`/`isDigit`/…), case conversion, named byte constants |
 
 ## Build & Test
 

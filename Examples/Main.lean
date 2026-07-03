@@ -23,6 +23,8 @@ import Examples.HTTPConduit
 import Examples.Req
 import Examples.WebApp
 import Examples.WebAppStatic
+import Examples.Server
+import Examples.WebSockets
 import Examples.Vault
 import Examples.Vector
 
@@ -79,6 +81,12 @@ unsafe def examples : List (String × String × (List String → IO Unit)) :=
     ("webappstatic",
        "Network.WebApp.Static: staticApp/static + defaultFileServerSettings over a real scratch directory — file hit, index redirect, 404, 403 dotfile rejection — self-checking demo",
        Examples.WebAppStatic.run),
+    ("server",
+       "Network.WebApp.Server (née Warp): the real EventDispatcher-driven HTTP/1.1 engine, running Examples.WebApp's demoApplication unmodified via withApplication — self-checking demo",
+       Examples.Server.run),
+    ("websockets",
+       "Network.WebSockets (RFC 6455) + Server.WebSockets.websocketsOr: a hand-rolled WS client speaks the opening handshake and frames directly against a real Server-hosted echo app — self-checking demo",
+       Examples.WebSockets.run),
     ("vault",
        "Data.Vault: Key.new-minted typed keys coexisting in one map, plus adjust/delete/union — self-checking demo",
        Examples.Vault.run),

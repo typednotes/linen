@@ -335,37 +335,37 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 309. `Hale.WaiHttp2Extra` -->
 <!-- 310. `Hale.WaiLogger.Network.Wai.Logger` -->
 <!-- 311. `Hale.WaiLogger` -->
-312. `Hale.Warp.Network.Wai.Handler.Warp.Counter`
-313. `Hale.Warp.Network.Wai.Handler.Warp.Date`
-314. `Hale.Warp.Network.Wai.Handler.Warp.HashMap`
-315. `Hale.Warp.Network.Wai.Handler.Warp.Header`
-316. `Hale.Warp.Network.Wai.Handler.Warp.PackInt`
-317. `Hale.Warp.Network.Wai.Handler.Warp.ReadInt`
-318. `Hale.Warp.Network.Wai.Handler.Warp.Request`
-319. `Hale.Warp.Network.Wai.Handler.Warp.Settings`
-320. `Hale.Warp.Network.Wai.Handler.Warp.Response`
-321. `Hale.Warp.Network.Wai.Handler.Warp.Run`
-322. `Hale.Warp.Network.Wai.Handler.Warp.Types`
-323. `Hale.Warp.Network.Wai.Handler.Warp.Conduit`
-324. `Hale.Warp.Network.Wai.Handler.Warp.IO`
-325. `Hale.Warp.Network.Wai.Handler.Warp.SendFile`
-326. `Hale.Warp.Network.Wai.Handler.Warp.Internal`
-327. `Hale.Warp.Network.Wai.Handler.Warp.WithApplication`
-328. `Hale.Warp.Network.Wai.Handler.Warp`
-329. `Hale.Warp`
-330. `Hale.WarpQUIC.Network.Wai.Handler.WarpQUIC`
-331. `Hale.WarpQUIC`
-332. `Hale.WarpTLS.Network.Wai.Handler.WarpTLS`
-333. `Hale.WarpTLS.Network.Wai.Handler.WarpTLS.Internal`
-334. `Hale.WarpTLS`
-335. `Hale.WebSockets.Network.WebSockets.Types`
-336. `Hale.WebSockets.Network.WebSockets.Frame`
-337. `Hale.WebSockets.Network.WebSockets.Connection`
-338. `Hale.WebSockets.Network.WebSockets.Handshake`
-339. `Hale.WebSockets`
-340. `Hale.WaiWebSockets.Network.Wai.Handler.WebSockets`
-341. `Hale.WaiWebSockets`
-342. `Hale.Word8.Data.Word8`
-343. `Hale.Word8`
-344. `Hale`
+<!-- 312. `Hale.Warp.Network.Wai.Handler.Warp.Counter` -->
+<!-- 313. `Hale.Warp.Network.Wai.Handler.Warp.Date` -->
+<!-- 314. `Hale.Warp.Network.Wai.Handler.Warp.HashMap` -->
+<!-- 315. `Hale.Warp.Network.Wai.Handler.Warp.Header` -->
+<!-- 316. `Hale.Warp.Network.Wai.Handler.Warp.PackInt` -->
+<!-- 317. `Hale.Warp.Network.Wai.Handler.Warp.ReadInt` -->
+<!-- 318. `Hale.Warp.Network.Wai.Handler.Warp.Request` -->
+<!-- 319. `Hale.Warp.Network.Wai.Handler.Warp.Settings` -->
+<!-- 320. `Hale.Warp.Network.Wai.Handler.Warp.Response` -->
+<!-- 321. `Hale.Warp.Network.Wai.Handler.Warp.Run` -->
+<!-- 322. `Hale.Warp.Network.Wai.Handler.Warp.Types` -->
+<!-- 323. `Hale.Warp.Network.Wai.Handler.Warp.Conduit` -->
+<!-- 324. `Hale.Warp.Network.Wai.Handler.Warp.IO` -->
+<!-- 325. `Hale.Warp.Network.Wai.Handler.Warp.SendFile` -->
+<!-- 326. `Hale.Warp.Network.Wai.Handler.Warp.Internal` -->
+<!-- 327. `Hale.Warp.Network.Wai.Handler.Warp.WithApplication` -->
+<!-- 328. `Hale.Warp.Network.Wai.Handler.Warp` -->
+<!-- 329. `Hale.Warp` -->
+<!-- 330. `Hale.WarpQUIC.Network.Wai.Handler.WarpQUIC` -->
+<!-- 331. `Hale.WarpQUIC` -->
+<!-- 332. `Hale.WarpTLS.Network.Wai.Handler.WarpTLS` -->
+<!-- 333. `Hale.WarpTLS.Network.Wai.Handler.WarpTLS.Internal` -->
+<!-- 334. `Hale.WarpTLS` -->
+<!-- 335. `Hale.WebSockets.Network.WebSockets.Types` -->
+<!-- 336. `Hale.WebSockets.Network.WebSockets.Frame` -->
+<!-- 337. `Hale.WebSockets.Network.WebSockets.Connection` -->
+<!-- 338. `Hale.WebSockets.Network.WebSockets.Handshake` -->
+<!-- 339. `Hale.WebSockets` -->
+<!-- 340. `Hale.WaiWebSockets.Network.Wai.Handler.WebSockets` -->
+<!-- 341. `Hale.WaiWebSockets` -->
+<!-- 342. `Hale.Word8.Data.Word8` -->
+<!-- 343. `Hale.Word8` -->
+<!-- 344. `Hale` -->
 

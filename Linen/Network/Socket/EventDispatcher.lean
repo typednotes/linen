@@ -128,12 +128,26 @@ def create (shards : Nat := 4) : IO EventDispatcher := do
     arr := arr.push sh
   pure (EventDispatcher.mk arr)
 
-/-- Stop all dispatch loops and close every shard's event loop. -/
+/-- Stop all dispatch loops, close every shard's event loop, and wake any
+`waitReadable`/`waitWritable` callers still parked on a shard (resolving their
+promise with a plain `()`, same as a real readiness event) so a shutdown
+during an idle wait doesn't strand the awaiting `Green` thread — and the
+`IO.asTask (prio := .dedicated)` thread underneath it — forever. Idempotent
+and safe to call from multiple places (e.g. both the owner of the dispatcher
+and a caller's own cleanup): each shard only drains/closes once, guarded by
+its `running` flag. -/
 def shutdown (disp : EventDispatcher) : IO Unit := do
   for sh in disp.shards do
-    sh.running.set false
-  for sh in disp.shards do
-    EventLoop.close sh.eventLoop
+    let wasRunning ← sh.running.modifyGet (fun r => (r, false))
+    if wasRunning then
+      let pending ← sh.waiters.atomically do
+        let ws ← get
+        set (∅ : Std.HashMap Nat (List Waiter))
+        pure ws
+      for (_, waiterList) in pending.toList do
+        for w in waiterList do
+          w.promise.resolve ()
+      EventLoop.close sh.eventLoop
 
 /-- Wait for a socket to become readable. Suspends the Green thread
     (frees the pool thread) and resumes when the socket is readable.
