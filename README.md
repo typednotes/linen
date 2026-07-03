@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>194 modules</strong> · <strong>295 compile-time theorems</strong> · <strong>3125 <code>#guard</code> checks</strong>
+  <strong>237 modules</strong> · <strong>327 compile-time theorems</strong> · <strong>3222 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -803,6 +803,110 @@ Three rules hold across the whole library:
 - `Network.QUIC.Stream` — `QUICStream`, a `Connection` + `StreamId` pair with
   `send`/`recv`/`close` delegating to the underlying `Connection`.
 
+### `Network.WebApp` — WAI-style web application interface
+
+- `Network.WebApp.Internal` — the core types: `Request`/`Response`/
+  `Application`/`Middleware`, and the `AppM .pending .sent` indexed monad
+  that enforces **exactly-once `respond`** at the type level (double-respond
+  and no-respond are both type errors).
+- `Network.WebApp` — the public API: response constructors (`responseLBS`/
+  `responseFile'`/`responseStream'`), request body accessors
+  (`getRequestBodyChunk`/`strictRequestBody`, non-idempotent one-shot
+  semantics), `defaultRequest`, header mappers, and verified middleware-
+  algebra laws (`idMiddleware_comp_left`/`_right`, `modifyRequest_id`,
+  `modifyResponse_id`, `ifRequest (fun _ => false) m = id`).
+- `Network.WebApp.Static.Types` — `Piece`, a refined path segment that
+  prevents directory-traversal attacks, plus `StaticSettings`.
+- `Network.WebApp.Static.Storage.Filesystem` — `defaultFileServerSettings`:
+  filesystem-backed static file storage.
+- `Network.WebApp.Static.Application` — `staticApp`/`static`: an
+  `Application` serving files per `StaticSettings`.
+- `Network.WebApp.Extra.Header` — request header convenience queries.
+- `Network.WebApp.Extra.Request` — request convenience queries (path,
+  method, content-type helpers).
+- `Network.WebApp.Extra.UrlMap` — dispatch to sub-applications by path
+  prefix.
+- `Network.WebApp.Extra.Parse` — URL-encoded form body parsing.
+- `Network.WebApp.Extra.Test` — a simulated testing harness (`SRequest`/
+  `SResponse`/`runSession`/`get`/`post`) with a genuine one-shot
+  request-body contract (full body on first read, empty on every
+  subsequent read).
+- `Network.WebApp.Extra.Test.Internal` — re-exports `Test`.
+- `Network.WebApp.Extra.EventSource` — Server-Sent Events (W3C, compatible
+  with the JS `EventSource` API): `ServerEvent`/`render`/`eventSourceApp`.
+- `Network.WebApp.Extra.EventSource.EventStream` — SSE framing helpers:
+  `dataEvent`/`namedEvent`/`retryEvent`/`commentEvent`.
+- `Network.WebApp.Extra.Middleware.AcceptOverride` — override the `Accept`
+  header from a query-string parameter.
+- `Network.WebApp.Extra.Middleware.AddHeaders` — add fixed headers to every
+  response.
+- `Network.WebApp.Extra.Middleware.Approot` — detect the application root
+  URL from headers or configuration.
+- `Network.WebApp.Extra.Middleware.Autohead` — convert `HEAD` requests to
+  `GET` and strip the response body.
+- `Network.WebApp.Extra.Middleware.CleanPath` — normalize double/trailing
+  slashes, redirecting to the canonical path.
+- `Network.WebApp.Extra.Middleware.CombineHeaders` — merge duplicate
+  response headers, joining values with commas.
+- `Network.WebApp.Extra.Middleware.ForceDomain` — redirect to a canonical
+  domain.
+- `Network.WebApp.Extra.Middleware.ForceSSL` — redirect HTTP to HTTPS.
+- `Network.WebApp.Extra.Middleware.Gzip` — gzip `Accept-Encoding`
+  negotiation (compression itself deferred pending zlib FFI, matching
+  Hale's own stub).
+- `Network.WebApp.Extra.Middleware.HealthCheckEndpoint` — a health-check
+  endpoint that returns 200 OK without hitting the wrapped app.
+- `Network.WebApp.Extra.Middleware.HttpAuth` — HTTP Basic Authentication.
+- `Network.WebApp.Extra.Middleware.Jsonp` — wrap JSON responses in a
+  callback function for cross-origin requests.
+- `Network.WebApp.Extra.Middleware.Local` — restrict access to localhost.
+- `Network.WebApp.Extra.Middleware.MethodOverride` — override the HTTP
+  method from a query-string parameter.
+- `Network.WebApp.Extra.Middleware.MethodOverridePost` — override the HTTP
+  method from a POST body's `_method` field.
+- `Network.WebApp.Extra.Middleware.RealIp` — update `remoteHost` from
+  `X-Forwarded-For`/`X-Real-IP` headers.
+- `Network.WebApp.Extra.Middleware.RequestLogger` — request logging to a
+  configurable destination, in Apache Combined or dev-friendly colorized
+  format.
+- `Network.WebApp.Extra.Middleware.RequestLogger.JSON` — structured JSON
+  request logging.
+- `Network.WebApp.Extra.Middleware.RequestSizeLimit` — reject requests
+  whose body exceeds a size limit, without ever buffering the excess.
+- `Network.WebApp.Extra.Middleware.RequestSizeLimit.Internal` — re-exports
+  `RequestSizeLimit`.
+- `Network.WebApp.Extra.Middleware.Rewrite` — rewrite request paths by
+  custom rule.
+- `Network.WebApp.Extra.Middleware.Routed` — apply a middleware only to
+  requests matching a path predicate.
+- `Network.WebApp.Extra.Middleware.Select` — conditionally apply a
+  middleware.
+- `Network.WebApp.Extra.Middleware.StreamFile` — convert `.responseFile`
+  into `.responseStream`, for servers without `sendfile(2)` support.
+- `Network.WebApp.Extra.Middleware.StripHeaders` — remove specified headers
+  from responses.
+- `Network.WebApp.Extra.Middleware.Timeout` — enforce a processing timeout,
+  returning 503 on expiry.
+- `Network.WebApp.Extra.Middleware.ValidateHeaders` — validate response
+  headers against HTTP spec constraints.
+- `Network.WebApp.Extra.Middleware.Vhost` — route requests to different
+  applications by `Host` header.
+- `Network.WebApp.Extra.Middleware.Push.Referer.LRU` — a list-backed LRU
+  cache (`empty`/`lookup`/`insert`/`size`) for push predictions.
+- `Network.WebApp.Extra.Middleware.Push.Referer.ParseURL` — `extractPath`/
+  `isStaticResource` for Referer-header analysis.
+- `Network.WebApp.Extra.Middleware.Push.Referer.Types` — `PushPath`/
+  `PushEntry`/`PushSettings`.
+- `Network.WebApp.Extra.Middleware.Push.Referer.Manager` — `PushManager`:
+  learns page → resource associations from Referer headers, capped by
+  `maxPushesPerPage` and LRU-evicted by `maxEntries`.
+- `Network.WebApp.Extra.Middleware.Push.Referer` — `pushOnReferer`: HTTP/2
+  server-push-via-Referer prediction, injecting `Link: …; rel=preload`
+  response headers for learned resources.
+- `Network.WebApp.Logger` — Apache Combined Log Format: `apacheFormat`/
+  `apacheFormatWithDate` (pure) and `ApacheLogger.log` (IO, via a
+  `getDate`/`output` callback pair).
+
 ## Quick Start
 
 Add to your `lakefile.toml`:
@@ -1021,6 +1125,53 @@ open Data.Functor Control.Monad
 | `Linen.Network.QUIC.Server` | `run`/`accept : ServerConfig → IO Connection`, stubbed pending TLS 1.3 FFI |
 | `Linen.Network.QUIC.Stream` | `QUICStream` (`Connection` + `StreamId`): `send`/`recv`/`close` |
 | `Linen.Network.HTTP3.Server` | HTTP/3 request/response layer: `H3Request`, `H3Response`, `H3Handler`, `sendResponse`, `handleRequestStream`, `handleConnection` |
+| `Linen.Network.WebApp.Internal` | core WAI-style types: `Request`/`Response`/`Application`/`Middleware`, `AppM .pending .sent` exactly-once-respond monad |
+| `Linen.Network.WebApp` | `responseLBS`/`responseFile'`/`responseStream'`, `getRequestBodyChunk`/`strictRequestBody`, `defaultRequest`, middleware-algebra laws |
+| `Linen.Network.WebApp.Static.Types` | `Piece` (traversal-safe path segment), `StaticSettings` |
+| `Linen.Network.WebApp.Static.Storage.Filesystem` | `defaultFileServerSettings`: filesystem-backed static storage |
+| `Linen.Network.WebApp.Static.Application` | `staticApp`/`static`: `Application` serving files per `StaticSettings` |
+| `Linen.Network.WebApp.Extra.Header` | request header convenience queries |
+| `Linen.Network.WebApp.Extra.Request` | request convenience queries (path/method/content-type) |
+| `Linen.Network.WebApp.Extra.UrlMap` | dispatch to sub-applications by path prefix |
+| `Linen.Network.WebApp.Extra.Middleware.AcceptOverride` | override `Accept` header from a query-string parameter |
+| `Linen.Network.WebApp.Extra.Middleware.AddHeaders` | add fixed headers to every response |
+| `Linen.Network.WebApp.Extra.Middleware.Autohead` | convert `HEAD` to `GET`, strip response body |
+| `Linen.Network.WebApp.Extra.Middleware.CleanPath` | normalize double/trailing slashes, redirect to canonical path |
+| `Linen.Network.WebApp.Extra.Middleware.CombineHeaders` | merge duplicate response headers, comma-joined |
+| `Linen.Network.WebApp.Extra.Middleware.ForceDomain` | redirect to a canonical domain |
+| `Linen.Network.WebApp.Extra.Middleware.ForceSSL` | redirect HTTP to HTTPS |
+| `Linen.Network.WebApp.Extra.Middleware.HealthCheckEndpoint` | health-check endpoint returning 200 OK without hitting the app |
+| `Linen.Network.WebApp.Extra.Middleware.Local` | restrict access to localhost |
+| `Linen.Network.WebApp.Extra.Middleware.MethodOverride` | override HTTP method from a query-string parameter |
+| `Linen.Network.WebApp.Extra.Middleware.MethodOverridePost` | override HTTP method from a POST body's `_method` field |
+| `Linen.Network.WebApp.Extra.Middleware.Rewrite` | rewrite request paths by custom rule |
+| `Linen.Network.WebApp.Extra.Middleware.Routed` | apply a middleware only to requests matching a path predicate |
+| `Linen.Network.WebApp.Extra.Middleware.Select` | conditionally apply a middleware |
+| `Linen.Network.WebApp.Extra.Middleware.StreamFile` | convert `.responseFile` to `.responseStream` |
+| `Linen.Network.WebApp.Extra.Middleware.StripHeaders` | remove specified headers from responses |
+| `Linen.Network.WebApp.Extra.Middleware.Timeout` | enforce a processing timeout, returning 503 on expiry |
+| `Linen.Network.WebApp.Extra.Middleware.ValidateHeaders` | validate response headers against HTTP spec constraints |
+| `Linen.Network.WebApp.Extra.Middleware.Vhost` | route requests to different applications by `Host` header |
+| `Linen.Network.WebApp.Extra.Middleware.HttpAuth` | HTTP Basic Authentication |
+| `Linen.Network.WebApp.Extra.Middleware.RequestSizeLimit` | reject over-limit request bodies without buffering the excess |
+| `Linen.Network.WebApp.Extra.Middleware.RealIp` | update `remoteHost` from `X-Forwarded-For`/`X-Real-IP` |
+| `Linen.Network.WebApp.Extra.Middleware.Jsonp` | wrap JSON responses in a callback for cross-origin requests |
+| `Linen.Network.WebApp.Extra.Middleware.Approot` | detect application root URL from headers/configuration |
+| `Linen.Network.WebApp.Extra.Middleware.RequestLogger` | request logging, Apache Combined or colorized dev format |
+| `Linen.Network.WebApp.Extra.Middleware.Gzip` | gzip `Accept-Encoding` negotiation |
+| `Linen.Network.WebApp.Extra.Middleware.RequestLogger.JSON` | structured JSON request logging |
+| `Linen.Network.WebApp.Extra.Middleware.RequestSizeLimit.Internal` | re-exports `RequestSizeLimit` |
+| `Linen.Network.WebApp.Extra.Parse` | URL-encoded form body parsing |
+| `Linen.Network.WebApp.Extra.Test` | simulated testing harness: `SRequest`/`SResponse`/`runSession`/`get`/`post` |
+| `Linen.Network.WebApp.Extra.Test.Internal` | re-exports `Test` |
+| `Linen.Network.WebApp.Extra.EventSource` | Server-Sent Events: `ServerEvent`/`render`/`eventSourceApp` |
+| `Linen.Network.WebApp.Extra.EventSource.EventStream` | SSE framing: `dataEvent`/`namedEvent`/`retryEvent`/`commentEvent` |
+| `Linen.Network.WebApp.Extra.Middleware.Push.Referer.LRU` | list-backed LRU cache: `empty`/`lookup`/`insert`/`size` |
+| `Linen.Network.WebApp.Extra.Middleware.Push.Referer.ParseURL` | `extractPath`/`isStaticResource` for Referer analysis |
+| `Linen.Network.WebApp.Extra.Middleware.Push.Referer.Types` | `PushPath`/`PushEntry`/`PushSettings` |
+| `Linen.Network.WebApp.Extra.Middleware.Push.Referer.Manager` | `PushManager.new`/`.record`/`.getPushes`, LRU-evicted |
+| `Linen.Network.WebApp.Extra.Middleware.Push.Referer` | `pushOnReferer`: HTTP/2 push-via-Referer prediction |
+| `Linen.Network.WebApp.Logger` | `apacheFormat`/`apacheFormatWithDate`/`ApacheLogger.log` |
 
 ## Build & Test
 
@@ -1051,6 +1202,8 @@ lake exe examples tls              # Network.TLS.Context handshake over loopback
 lake exe examples httpclient       # Network.HTTP.Client connect/request/response + redirect-following, over loopback — self-checking demo
 lake exe examples httpconduit      # Network.HTTP.Client.Conduit / Network.HTTP.Simple streaming HTTP, over loopback — self-checking demo
 lake exe examples req              # Network.HTTP.Req type-safe req/runReq (HttpBodyAllowed-checked GET/POST), over loopback — self-checking demo
+lake exe examples webapp           # Network.WebApp: Application/Middleware/AppM (composeMiddleware/ifRequest/modifyResponse), over loopback — self-checking demo
+lake exe examples webappstatic     # Network.WebApp.Static: staticApp/static + defaultFileServerSettings over a real scratch directory — self-checking demo
 lake exe examples vault            # Data.Vault type-safe heterogeneous map: typed keys, adjust/delete/union — self-checking demo
 lake exe examples vector           # Data.Vector-derived Array combinators: generate/ifilter/folds/reductions/backpermute/slice — self-checking demo
 ```
@@ -1102,6 +1255,27 @@ with `NoReqBody` and a `POST` with a `ReqBodyBs` payload, both against a
 loopback server, both admitted by the `HttpBodyAllowed` typeclass at compile
 time (swapping a body onto the `GET` would instead fail to compile, since
 there is no `HttpBodyAllowed .NoBody .YesBody` instance).
+
+The `webapp` example drives a `Network.WebApp.Application` through the same
+kind of hand-rolled loopback HTTP/1.1 server as `httpclient`/`req`, but this
+time the request handler itself is the thing under test: raw bytes are parsed
+into a `Request`, run through the application via `Green.block`, and the
+resulting `Response` serialized back. The demo application composes an echo
+handler with a `/health` route and a `Server` header, entirely from
+`Middleware` combinators — `composeMiddleware`, `ifRequest`,
+`modifyResponse`, `addHeader` — the same combinators the algebraic-law
+theorems in `Network.WebApp` (`idMiddleware_comp_left`/`_right`,
+`modifyResponse_id`, `ifRequest_false`) prove associative/identity laws for.
+
+The `webappstatic` example serves a real scratch directory through
+`Network.WebApp.Static.static` (`defaultFileServerSettings` + `staticApp`),
+reusing `webapp`'s loopback harness — including its `Sendfile.sendFile` path
+for `.responseFile`, since `defaultFileServerSettings` serves files that way
+rather than buffering them into a `.responseBuilder`. It checks a direct file
+hit (with its `Cache-Control: max-age=3600` default), a directory request
+redirected to `index.html`, a 404 for a missing path, and a 403 for a
+dotfile-shaped path segment (rejected by `Piece`'s `no_dot` invariant before
+any filesystem lookup runs).
 
 The `vault` example mints distinctly-typed keys with `Key.new` and stores
 unrelated payloads under each in the same `Vault`, showing that a key only

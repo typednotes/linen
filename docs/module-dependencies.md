@@ -283,58 +283,58 @@ Each module is listed after all modules it imports. The order is **prioritised t
 <!-- 257. `Hale.Vault` -->
 <!-- 258. `Hale.Vector.Data.Vector` -->
 <!-- 259. `Hale.Vector` -->
-260. `Hale.WAI.Network.Wai.Internal`
-261. `Hale.WAI.Network.Wai`
-262. `Hale.WAI`
-263. `Hale.WaiAppStatic.WaiAppStatic.Types`
-264. `Hale.WaiAppStatic.WaiAppStatic.Storage.Filesystem`
-265. `Hale.WaiAppStatic.Network.Wai.Application.Static`
-266. `Hale.WaiAppStatic`
-267. `Hale.WaiExtra.Network.Wai.EventSource`
-268. `Hale.WaiExtra.Network.Wai.EventSource.EventStream`
-269. `Hale.WaiExtra.Network.Wai.Header`
-270. `Hale.WaiExtra.Network.Wai.Middleware.AcceptOverride`
-271. `Hale.WaiExtra.Network.Wai.Middleware.AddHeaders`
-272. `Hale.WaiExtra.Network.Wai.Middleware.Approot`
-273. `Hale.WaiExtra.Network.Wai.Middleware.Autohead`
-274. `Hale.WaiExtra.Network.Wai.Middleware.CleanPath`
-275. `Hale.WaiExtra.Network.Wai.Middleware.CombineHeaders`
-276. `Hale.WaiExtra.Network.Wai.Middleware.ForceDomain`
-277. `Hale.WaiExtra.Network.Wai.Middleware.ForceSSL`
-278. `Hale.WaiExtra.Network.Wai.Middleware.Gzip`
-279. `Hale.WaiExtra.Network.Wai.Middleware.HealthCheckEndpoint`
-280. `Hale.WaiExtra.Network.Wai.Middleware.HttpAuth`
-281. `Hale.WaiExtra.Network.Wai.Middleware.Jsonp`
-282. `Hale.WaiExtra.Network.Wai.Middleware.Local`
-283. `Hale.WaiExtra.Network.Wai.Middleware.MethodOverride`
-284. `Hale.WaiExtra.Network.Wai.Middleware.MethodOverridePost`
-285. `Hale.WaiExtra.Network.Wai.Middleware.RealIp`
-286. `Hale.WaiExtra.Network.Wai.Middleware.RequestLogger`
-287. `Hale.WaiExtra.Network.Wai.Middleware.RequestLogger.JSON`
-288. `Hale.WaiExtra.Network.Wai.Middleware.RequestSizeLimit`
-289. `Hale.WaiExtra.Network.Wai.Middleware.RequestSizeLimit.Internal`
-290. `Hale.WaiExtra.Network.Wai.Middleware.Rewrite`
-291. `Hale.WaiExtra.Network.Wai.Middleware.Routed`
-292. `Hale.WaiExtra.Network.Wai.Middleware.Select`
-293. `Hale.WaiExtra.Network.Wai.Middleware.StreamFile`
-294. `Hale.WaiExtra.Network.Wai.Middleware.StripHeaders`
-295. `Hale.WaiExtra.Network.Wai.Middleware.Timeout`
-296. `Hale.WaiExtra.Network.Wai.Middleware.ValidateHeaders`
-297. `Hale.WaiExtra.Network.Wai.Middleware.Vhost`
-298. `Hale.WaiExtra.Network.Wai.Parse`
-299. `Hale.WaiExtra.Network.Wai.Request`
-300. `Hale.WaiExtra.Network.Wai.Test`
-301. `Hale.WaiExtra.Network.Wai.Test.Internal`
-302. `Hale.WaiExtra.Network.Wai.UrlMap`
-303. `Hale.WaiExtra`
-304. `Hale.WaiHttp2Extra.Network.Wai.Middleware.Push.Referer.LRU`
-305. `Hale.WaiHttp2Extra.Network.Wai.Middleware.Push.Referer.ParseURL`
-306. `Hale.WaiHttp2Extra.Network.Wai.Middleware.Push.Referer.Types`
-307. `Hale.WaiHttp2Extra.Network.Wai.Middleware.Push.Referer.Manager`
-308. `Hale.WaiHttp2Extra.Network.Wai.Middleware.Push.Referer`
-309. `Hale.WaiHttp2Extra`
-310. `Hale.WaiLogger.Network.Wai.Logger`
-311. `Hale.WaiLogger`
+<!-- 260. `Hale.WAI.Network.Wai.Internal` -->
+<!-- 261. `Hale.WAI.Network.Wai` -->
+<!-- 262. `Hale.WAI` -->
+<!-- 263. `Hale.WaiAppStatic.WaiAppStatic.Types` -->
+<!-- 264. `Hale.WaiAppStatic.WaiAppStatic.Storage.Filesystem` -->
+<!-- 265. `Hale.WaiAppStatic.Network.Wai.Application.Static` -->
+<!-- 266. `Hale.WaiAppStatic` -->
+<!-- 267. `Hale.WaiExtra.Network.Wai.EventSource` -->
+<!-- 268. `Hale.WaiExtra.Network.Wai.EventSource.EventStream` -->
+<!-- 269. `Hale.WaiExtra.Network.Wai.Header` -->
+<!-- 270. `Hale.WaiExtra.Network.Wai.Middleware.AcceptOverride` -->
+<!-- 271. `Hale.WaiExtra.Network.Wai.Middleware.AddHeaders` -->
+<!-- 272. `Hale.WaiExtra.Network.Wai.Middleware.Approot` -->
+<!-- 273. `Hale.WaiExtra.Network.Wai.Middleware.Autohead` -->
+<!-- 274. `Hale.WaiExtra.Network.Wai.Middleware.CleanPath` -->
+<!-- 275. `Hale.WaiExtra.Network.Wai.Middleware.CombineHeaders` -->
+<!-- 276. `Hale.WaiExtra.Network.Wai.Middleware.ForceDomain` -->
+<!-- 277. `Hale.WaiExtra.Network.Wai.Middleware.ForceSSL` -->
+<!-- 278. `Hale.WaiExtra.Network.Wai.Middleware.Gzip` -->
+<!-- 279. `Hale.WaiExtra.Network.Wai.Middleware.HealthCheckEndpoint` -->
+<!-- 280. `Hale.WaiExtra.Network.Wai.Middleware.HttpAuth` -->
+<!-- 281. `Hale.WaiExtra.Network.Wai.Middleware.Jsonp` -->
+<!-- 282. `Hale.WaiExtra.Network.Wai.Middleware.Local` -->
+<!-- 283. `Hale.WaiExtra.Network.Wai.Middleware.MethodOverride` -->
+<!-- 284. `Hale.WaiExtra.Network.Wai.Middleware.MethodOverridePost` -->
+<!-- 285. `Hale.WaiExtra.Network.Wai.Middleware.RealIp` -->
+<!-- 286. `Hale.WaiExtra.Network.Wai.Middleware.RequestLogger` -->
+<!-- 287. `Hale.WaiExtra.Network.Wai.Middleware.RequestLogger.JSON` -->
+<!-- 288. `Hale.WaiExtra.Network.Wai.Middleware.RequestSizeLimit` -->
+<!-- 289. `Hale.WaiExtra.Network.Wai.Middleware.RequestSizeLimit.Internal` -->
+<!-- 290. `Hale.WaiExtra.Network.Wai.Middleware.Rewrite` -->
+<!-- 291. `Hale.WaiExtra.Network.Wai.Middleware.Routed` -->
+<!-- 292. `Hale.WaiExtra.Network.Wai.Middleware.Select` -->
+<!-- 293. `Hale.WaiExtra.Network.Wai.Middleware.StreamFile` -->
+<!-- 294. `Hale.WaiExtra.Network.Wai.Middleware.StripHeaders` -->
+<!-- 295. `Hale.WaiExtra.Network.Wai.Middleware.Timeout` -->
+<!-- 296. `Hale.WaiExtra.Network.Wai.Middleware.ValidateHeaders` -->
+<!-- 297. `Hale.WaiExtra.Network.Wai.Middleware.Vhost` -->
+<!-- 298. `Hale.WaiExtra.Network.Wai.Parse` -->
+<!-- 299. `Hale.WaiExtra.Network.Wai.Request` -->
+<!-- 300. `Hale.WaiExtra.Network.Wai.Test` -->
+<!-- 301. `Hale.WaiExtra.Network.Wai.Test.Internal` -->
+<!-- 302. `Hale.WaiExtra.Network.Wai.UrlMap` -->
+<!-- 303. `Hale.WaiExtra` -->
+<!-- 304. `Hale.WaiHttp2Extra.Network.Wai.Middleware.Push.Referer.LRU` -->
+<!-- 305. `Hale.WaiHttp2Extra.Network.Wai.Middleware.Push.Referer.ParseURL` -->
+<!-- 306. `Hale.WaiHttp2Extra.Network.Wai.Middleware.Push.Referer.Types` -->
+<!-- 307. `Hale.WaiHttp2Extra.Network.Wai.Middleware.Push.Referer.Manager` -->
+<!-- 308. `Hale.WaiHttp2Extra.Network.Wai.Middleware.Push.Referer` -->
+<!-- 309. `Hale.WaiHttp2Extra` -->
+<!-- 310. `Hale.WaiLogger.Network.Wai.Logger` -->
+<!-- 311. `Hale.WaiLogger` -->
 312. `Hale.Warp.Network.Wai.Handler.Warp.Counter`
 313. `Hale.Warp.Network.Wai.Handler.Warp.Date`
 314. `Hale.Warp.Network.Wai.Handler.Warp.HashMap`

@@ -21,6 +21,8 @@ import Examples.TLS
 import Examples.HTTPClient
 import Examples.HTTPConduit
 import Examples.Req
+import Examples.WebApp
+import Examples.WebAppStatic
 import Examples.Vault
 import Examples.Vector
 
@@ -71,6 +73,12 @@ unsafe def examples : List (String × String × (List String → IO Unit)) :=
     ("req",
        "Network.HTTP.Req: type-safe req/runReq — GET/NoReqBody and POST/ReqBodyBs, both admitted by HttpBodyAllowed — against a loopback server — self-checking demo",
        Examples.Req.run),
+    ("webapp",
+       "Network.WebApp: Application/Middleware/AppM (composeMiddleware/ifRequest/modifyResponse) over a hand-rolled loopback HTTP/1.1 server — self-checking demo",
+       Examples.WebApp.run),
+    ("webappstatic",
+       "Network.WebApp.Static: staticApp/static + defaultFileServerSettings over a real scratch directory — file hit, index redirect, 404, 403 dotfile rejection — self-checking demo",
+       Examples.WebAppStatic.run),
     ("vault",
        "Data.Vault: Key.new-minted typed keys coexisting in one map, plus adjust/delete/union — self-checking demo",
        Examples.Vault.run),
