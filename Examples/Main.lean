@@ -27,6 +27,7 @@ import Examples.Server
 import Examples.WebSockets
 import Examples.Vault
 import Examples.Vector
+import Examples.Todo
 
 /-- Registry of runnable examples: `name`, one-line description, entry point.
 
@@ -92,7 +93,10 @@ unsafe def examples : List (String × String × (List String → IO Unit)) :=
        Examples.Vault.run),
     ("vector",
        "Data.Vector-derived Array combinators: generate/ifilter, foldl1'/foldr1/ifoldl'/ifoldr, and/or/product/notElem, backpermute/slice — self-checking demo",
-       Examples.Vector.run) ]
+       Examples.Vector.run),
+    ("todo",
+       "Web.Html/Web.Css (illegal nesting is a compile-time error) rendering an in-memory TODO list over Network.WebApp, over a hand-rolled loopback HTTP/1.1 server — self-checking demo",
+       Examples.Todo.run) ]
 
 /-- Print usage and the list of available examples. -/
 unsafe def usage : IO Unit := do

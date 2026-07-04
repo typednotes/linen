@@ -431,6 +431,24 @@ the project overview and quick start.
   `secure`/`httpOnly`/`sameSite`) with `renderSetCookie`/`parseSetCookie` for
   `Set-Cookie:` (pure parsers, no `Id.run`/`while`).
 
+### `Web.Css` / `Web.Html` — typed CSS and HTML5, illegal constructs are compile errors
+
+- `Web.Css` — every declaration comes from a typed smart constructor
+  (`color`/`margin`/`display`/…) that pins down both the property name and the
+  Lean type of its value; `Declaration`'s `private` constructor makes an
+  arbitrary `property := value` pairing a compile-time error. `Length`
+  (`px`/`pct`/`em`/`rem`/`vw`/`vh`/`auto`/`zero`) rules out unit-less values,
+  and `FontWeight.numeric`'s `by decide` proof rejects out-of-range weights.
+  Selectors, `Rule`s, and `Stylesheet`s compose, with `rule!` macro sugar for
+  building a `Rule` from a selector and a list of declarations.
+- `Web.Html` — `Html` is indexed by a `Category` (flow/phrasing/list-item/
+  table-row/table-cell) that encodes HTML5's content model: each element
+  constructor fixes the category of children it accepts, so a `<div>` inside a
+  `<p>`, a `<li>` outside a `<ul>`/`<ol>`, or children on a void element like
+  `<img>` are all Lean type errors, not browser auto-corrections. Attributes
+  go through the same `private`-constructor discipline as `Web.Css.Declaration`,
+  and `elem!` macro sugar builds elements from a tag/attrs/children triple.
+
 ### `Database.PostgreSQL` — libpq bindings
 
 - `Database.PostgreSQL.LibPQ.Types` — opaque `PgConn`/`PgResult` handles (external
@@ -1049,6 +1067,8 @@ over all 256 `UInt8` values.
 | `Linen.Data.Streaming.Network` | `AppData`, `bindPortTCP`/`getSocketTCP`/`mkAppData`/`runTCPServer`, `acceptSafe` (retry loop, no `partial`) |
 | `Linen.Network.Mime` | MIME lookup (`mime-types`): `defaultMimeMap`, `fileNameExtensions`, `mimeByExt`, `defaultMimeLookup` |
 | `Linen.Web.Cookie` | RFC 6265 cookie parse/render: `parseCookies`/`renderCookies`, `SetCookie` + `parseSetCookie`/`renderSetCookie` |
+| `Linen.Web.Css` | typed CSS: `private`-constructor `Declaration`/`FontWeight` (`by decide`-bounded), `Length`/`Color`/`Selector`/`Rule`/`Stylesheet`, `rule!` macro |
+| `Linen.Web.Html` | typed HTML5: `Category`-indexed `Html` encodes the content model at compile time; `private`-constructor `Attr`, `elem!` macro |
 | `Linen.DataFrame.Internal.Types` | typed tabular `DataFrame` with a proven rectangular invariant; `Value`/`Column`/`ColumnType` + smart constructors |
 | `Linen.DataFrame.IO.CSV` | RFC 4180 CSV `parseCsv`/`toCsv`/`readCsv`/`writeCsv` with type inference |
 | `Linen.DataFrame.Internal.Column` | column ops: `inferType`/`mk'`/`mapValues`/`filterByMask`/`toFloats`/`unique`/… |

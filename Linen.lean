@@ -41,6 +41,8 @@ import Linen.Data.IntMap
 import Linen.Data.Map
 import Linen.Data.Set
 import Linen.Web.Cookie
+import Linen.Web.Css
+import Linen.Web.Html
 import Linen.DataFrame.Internal.Types
 import Linen.DataFrame.Internal.Column
 import Linen.DataFrame.IO.CSV

@@ -47,6 +47,8 @@ import Tests.Linen.Data.MapTest
 import Tests.Linen.Data.SetTest
 import Tests.Linen.Data.DefaultTest
 import Tests.Linen.Web.CookieTest
+import Tests.Linen.Web.CssTest
+import Tests.Linen.Web.HtmlTest
 import Tests.Linen.DataFrame.Internal.TypesTest
 import Tests.Linen.DataFrame.Internal.ColumnTest
 import Tests.Linen.DataFrame.IO.CSVTest

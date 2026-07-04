@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>265 modules</strong> · <strong>371 compile-time theorems</strong> · <strong>3409 <code>#guard</code> checks</strong>
+  <strong>267 modules</strong> · <strong>371 compile-time theorems</strong> · <strong>3460 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -64,6 +64,9 @@ for the full per-module feature list and module table.
   green-thread event dispatcher, TLS 1.2/1.3 over OpenSSL, and WebSockets.
 - **`Network.WebApp` / `Network.WebApp.Server`** — a WAI-style application
   interface plus an HTTP server implementing it.
+- **`Web.Html` / `Web.Css`** — typed HTML5/CSS construction where illegal
+  nesting and property/value mismatches are compile-time errors, with `elem!`
+  and `rule!` macro sugar.
 - **`DataFrame`** — typed tabular data with a proven rectangular invariant,
   CSV I/O, joins, sorting, grouping/aggregation, and statistics.
 - **`Database.PostgreSQL` / `Database.SQL`** — libpq FFI bindings and a
@@ -102,7 +105,7 @@ open Data.Functor Control.Monad
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 265 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 267 modules).
 
 ## Build & Test
 
@@ -137,6 +140,8 @@ lake exe examples webapp           # Network.WebApp: Application/Middleware/AppM
 lake exe examples webappstatic     # Network.WebApp.Static: staticApp/static + defaultFileServerSettings over a real scratch directory — self-checking demo
 lake exe examples vault            # Data.Vault type-safe heterogeneous map: typed keys, adjust/delete/union — self-checking demo
 lake exe examples vector           # Data.Vector-derived Array combinators: generate/ifilter/folds/reductions/backpermute/slice — self-checking demo
+lake exe examples todo             # Web.Html/Web.Css typed TODO list over Network.WebApp.Server — self-checking demo
+lake exe examples todo serve       # run the TODO app forever on an OS-assigned port; then:  curl localhost:<port>
 ```
 
 The `echo` example exercises the whole socket stack end-to-end — a green accept
@@ -216,6 +221,17 @@ The `vector` example runs through every combinator `Linen.Data.Vector` adds to
 `Array` (`generate`, `ifilter`, `foldl1'`/`foldr1`, `ifoldl'`/`ifoldr`,
 `and`/`or`/`product`, `notElem`, `backpermute`, `slice`) — everything else
 Haskell's `Data.Vector` offers already exists verbatim on `Array`.
+
+The `todo` example is a small in-memory TODO list whose every page is built
+from `Web.Html`/`Web.Css` typed constructors — the `<ul>`/`<li>` nesting, each
+item's `<form>`s, and its inline `style` all go through the same
+illegal-construct-is-a-compile-error discipline as `Tests.Linen.Web.HtmlTest`/
+`CssTest` (e.g. a `<div>` inside a `<p>`, or a `color` declaration given a
+`Display` value, simply fails to compile). Routing and state reuse
+`Network.WebApp`'s `Application`/`AppM`, driven by the real
+`Network.WebApp.Server` engine via `withApplication`, exactly as the `server`
+example drives `webapp`'s `demoApplication`. `todo serve` runs it forever
+against an OS-assigned port for manual `curl` testing.
 
 ### Running `postgrest` against a real database
 
