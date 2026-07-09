@@ -140,8 +140,8 @@ lake exe examples webapp           # Network.WebApp: Application/Middleware/AppM
 lake exe examples webappstatic     # Network.WebApp.Static: staticApp/static + defaultFileServerSettings over a real scratch directory — self-checking demo
 lake exe examples vault            # Data.Vault type-safe heterogeneous map: typed keys, adjust/delete/union — self-checking demo
 lake exe examples vector           # Data.Vector-derived Array combinators: generate/ifilter/folds/reductions/backpermute/slice — self-checking demo
-lake exe examples todo             # Web.Html/Web.Css typed TODO list over Network.WebApp.Server — self-checking demo
-lake exe examples todo serve       # run the TODO app forever on an OS-assigned port; then:  curl localhost:<port>
+lake exe examples todo             # Web.Html/Web.Css typed TODO list over Network.WebApp.Server — self-checks, then keeps serving; try:  curl localhost:<port>
+lake exe examples todo check       # same self-check round trip, but exits instead of staying up (for scripting)
 ```
 
 The `echo` example exercises the whole socket stack end-to-end — a green accept
@@ -230,8 +230,11 @@ illegal-construct-is-a-compile-error discipline as `Tests.Linen.Web.HtmlTest`/
 `Display` value, simply fails to compile). Routing and state reuse
 `Network.WebApp`'s `Application`/`AppM`, driven by the real
 `Network.WebApp.Server` engine via `withApplication`, exactly as the `server`
-example drives `webapp`'s `demoApplication`. `todo serve` runs it forever
-against an OS-assigned port for manual `curl` testing.
+example drives `webapp`'s `demoApplication`. Unlike the other examples, `todo`
+doesn't exit after checking itself — it self-checks against its own live
+server and then keeps that same server (with its accumulated state) running
+on the printed OS-assigned port, so you can immediately `curl` it by hand;
+`todo check` runs the identical round trip but exits instead, for scripting.
 
 ### Running `postgrest` against a real database
 

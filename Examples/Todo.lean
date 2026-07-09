@@ -12,9 +12,11 @@
   by the real `Network.WebApp.Server` engine via `withApplication`, exactly
   as `Examples.Server` drives `Examples.WebApp`'s `demoApplication`.
 
-  Args: `serve` -- run forever on an OS-assigned port for manual `curl`
-  testing; with no args, runs a few round trips (add/toggle/delete) and
-  exits non-zero on any mismatch.
+  Args: (none) -- starts the server, runs a few self-check round trips
+  (add/toggle/delete) against it, then keeps the same server running on the
+  printed port for manual `curl` testing (`Ctrl-C` to stop); `check` runs
+  the same round trips and exits instead of staying up (non-zero on any
+  mismatch).
 -/
 import Linen.Network.WebApp.Extra.Parse
 import Linen.Network.WebApp.Server.WithApplication
@@ -133,48 +135,62 @@ def post (port : UInt16) (path : String) (body : String) : IO (Nat × String) :=
   Examples.WebApp.sendRequest port "POST" path
     "Content-Type: application/x-www-form-urlencoded\r\nConnection: close\r\n" body
 
+/-- Run the add/toggle/delete round trip against the already-listening
+    server at `port`, printing progress. -/
+def runChecks (port : UInt16) : IO Bool := do
+  let empty ← get port "/"
+  IO.println "  GET / -> empty list"
+  let ok1 := (empty.splitOn "<ul></ul>").length > 1
+
+  let (addStatus, afterAdd) ← post port "/add" "text=buy+milk"
+  IO.println s!"  POST /add text=buy milk -> {addStatus}"
+  let ok2 := addStatus == 200 && (afterAdd.splitOn "buy milk").length > 1 &&
+    (afterAdd.splitOn "[ ]").length > 1
+
+  let (toggleStatus, afterToggle) ← post port "/toggle/0" ""
+  IO.println s!"  POST /toggle/0 -> {toggleStatus}"
+  let ok3 := toggleStatus == 200 && (afterToggle.splitOn "[x]").length > 1 &&
+    (afterToggle.splitOn "line-through").length > 1
+
+  let (deleteStatus, afterDelete) ← post port "/delete/0" ""
+  IO.println s!"  POST /delete/0 -> {deleteStatus}"
+  let ok4 := deleteStatus == 200 && (afterDelete.splitOn "buy milk").length == 1
+
+  pure (ok1 && ok2 && ok3 && ok4)
+
+/-- Run the self-check round trip against a fresh server, then exit
+    non-zero on any mismatch instead of staying up. -/
 def demoRoundTrip : IO Bool := do
   IO.println "── Examples.Todo: typed Web.Html/Web.Css over Network.WebApp ──"
   withApplication mkApp fun port => do
     IO.println s!"  server listening on 127.0.0.1:{port}"
+    runChecks port
 
-    let empty ← get port "/"
-    IO.println "  GET / -> empty list"
-    let ok1 := (empty.splitOn "<ul></ul>").length > 1
-
-    let (addStatus, afterAdd) ← post port "/add" "text=buy+milk"
-    IO.println s!"  POST /add text=buy milk -> {addStatus}"
-    let ok2 := addStatus == 200 && (afterAdd.splitOn "buy milk").length > 1 &&
-      (afterAdd.splitOn "[ ]").length > 1
-
-    let (toggleStatus, afterToggle) ← post port "/toggle/0" ""
-    IO.println s!"  POST /toggle/0 -> {toggleStatus}"
-    let ok3 := toggleStatus == 200 && (afterToggle.splitOn "[x]").length > 1 &&
-      (afterToggle.splitOn "line-through").length > 1
-
-    let (deleteStatus, afterDelete) ← post port "/delete/0" ""
-    IO.println s!"  POST /delete/0 -> {deleteStatus}"
-    let ok4 := deleteStatus == 200 && (afterDelete.splitOn "buy milk").length == 1
-
-    pure (ok1 && ok2 && ok3 && ok4)
-
-/-- Run forever on an OS-assigned port, for manual `curl` testing, e.g.
-    `curl localhost:<port>` / `curl -X POST localhost:<port>/add -d text=milk`.
-    (`withApplication` always lets the OS pick the port, reporting the real
-    bound port back — see its docstring.) -/
+/-- Start the server, self-check it, then keep the very same `Application`
+    (and its accumulated state) running on the printed port forever, for
+    manual `curl` testing, e.g. `curl localhost:<port>` /
+    `curl -X POST localhost:<port>/add -d text=milk`. (`withApplication`
+    always lets the OS pick the port, reporting the real bound port back —
+    see its docstring.) -/
 def runServer : IO Unit :=
   withApplication mkApp fun port => do
-    IO.println s!"todo server listening on 127.0.0.1:{port}  ·  Ctrl-C to stop"
+    IO.println "── Examples.Todo: typed Web.Html/Web.Css over Network.WebApp ──"
+    IO.println s!"  server listening on 127.0.0.1:{port}"
+    if ← runChecks port then
+      IO.println "  self-check passed"
+    else
+      IO.println "  self-check FAILED"
+    IO.println s!"\ntodo server running on 127.0.0.1:{port}  ·  Ctrl-C to stop"
     (← IO.getStdout).flush
     IO.sleep (24 * 60 * 60 * 1000)
 
 def run (args : List String) : IO Unit := do
   match args with
-  | "serve" :: _ => runServer
-  | _ =>
+  | "check" :: _ =>
     if ← demoRoundTrip then
       IO.println "\ntodo demo done · all checks passed"
     else
       throw (IO.userError "todo demo done · some checks failed")
+  | _ => runServer
 
 end Examples.Todo

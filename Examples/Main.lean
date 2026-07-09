@@ -95,7 +95,7 @@ unsafe def examples : List (String × String × (List String → IO Unit)) :=
        "Data.Vector-derived Array combinators: generate/ifilter, foldl1'/foldr1/ifoldl'/ifoldr, and/or/product/notElem, backpermute/slice — self-checking demo",
        Examples.Vector.run),
     ("todo",
-       "Web.Html/Web.Css (illegal nesting is a compile-time error) rendering an in-memory TODO list over Network.WebApp, over a hand-rolled loopback HTTP/1.1 server — self-checking demo",
+       "Web.Html/Web.Css (illegal nesting is a compile-time error) rendering an in-memory TODO list over Network.WebApp.Server — self-checks then keeps serving; `todo check` self-checks and exits",
        Examples.Todo.run) ]
 
 /-- Print usage and the list of available examples. -/
