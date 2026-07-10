@@ -222,6 +222,25 @@ the project overview and quick start.
   buffer, auto-flush on full / on close) to stdout/stderr/file/callback:
   `newLoggerSet`/`pushLogStr`/`flushLogStr`/`withFastLogger`.
 
+### `System.Keychain` — OS credential-store access
+
+- Ports the Rust [`keyring`](https://crates.io/crates/keyring) crate
+  (`keyring-rs`), Lean-ified: the crate name only makes sense as a registry
+  identifier, so the stdlib's own `System.…` convention is used instead of
+  mirroring it (`AGENTS.md`'s `WaiAppStatic` → `WebApp.Static` treatment).
+- `Entry`/`Credential` façade over a small handle identifying a secret by
+  `(service, account)`: `setPassword`/`getPassword`/`deleteCredential`
+  (UTF-8 text) and `setSecret`/`getSecret` (raw bytes), dispatching in C
+  (`ffi/keychain.c`, symbols `linen_keychain_*`) to whichever native store
+  the platform provides — macOS Security.framework Keychain, Linux D-Bus
+  Secret Service (via libsecret, only linked when its `.pc` file is
+  present), or the Windows Credential Manager. Only the macOS backend is
+  exercised by this repository's CI; Linux/Windows are written against the
+  real APIs but unverified in this environment.
+- All three operations raise a plain `IO.Error` on failure (matching every
+  other native FFI module here), including on a missing entry — mirroring
+  upstream's `Err(Error::NoEntry)` rather than degrading to `Option`.
+
 ### `Network.HTTP` — HTTP wire framing
 
 - `Network.HTTP.Chunked` — HTTP/1.1 chunked transfer encoding over `ByteArray`:
@@ -523,6 +542,130 @@ the project overview and quick start.
   (`exp`/`nbf` with bounded skew, `aud`/`iss` matching) and IO `verifyJWT`
   (parse compact form, verify the signature over the candidate JWK set, then
   validate the claims).
+
+### `Crypto.Zlib` / `Crypto.MD5` / `Crypto.RC4` / `Crypto.AES` — primitives for PDF encryption
+
+- `Crypto.Zlib.FFI` — a `@[extern]` opaque handle wrapping zlib's `z_stream *`
+  for raw zlib/RFC 1950 *inflate* (decompress) only, ported from Hackage's
+  `zlib` (`Codec.Zlib`'s low-level FFI surface). Modeled on
+  `Network.TLS.Context`'s OpenSSL-handle pattern: `ffi/zlib.c` allocates the
+  stream and registers a GC finalizer (`inflateEnd`) so it is freed exactly
+  once, whether via an explicit `finish` or by being dropped.
+- `Crypto.MD5` — a pure, structurally-recursive port of `cryptohash`'s
+  `Crypto.Hash.MD5.hash` (RFC 1321), scoped to MD5 alone since it is the
+  only digest the PDF Standard Security Handler's key derivation needs.
+  Padding fixes the block count before the compression loop starts, so the
+  64-round loop is a plain `Array.foldl` — no `partial def` or fuel.
+- `Crypto.RC4` — Hackage's `cipher-rc4` stream cipher: `initCtx` (key
+  scheduling, a 256-round structural fold building the S-box permutation)
+  and `combine` (the pseudo-random generation algorithm, structurally
+  recursive over the input bytes), feeding the PDF `AESV2`/RC4 decryptor.
+- `Crypto.AES` — the scoped slice of `cipher-aes` (AES-128 key schedule +
+  CBC decrypt only, no ECB/CTR/GCM, no encrypt, no other key sizes) plus
+  `crypto-api`'s `unpadPKCS5`, folded into one module since PKCS5 unpadding
+  has a single caller here. Every function operates on fixed-size data or
+  recurses structurally on a length-derived `Nat`.
+
+### `Data.PDF.Stream` — buffer-resident `io-streams` port
+
+- Ports the scoped slice of Hackage's `io-streams` actually used by
+  `pdf-toolbox-*` (`docs/imports/IoStreams/dependencies.md`). Every real
+  call site reads a fully-resident PDF file/buffer, never an unbounded
+  network source, so `InputStream`/`OutputStream` are `ByteArray`-backed
+  cursor-plus-pushback types rather than upstream's general lazy/incremental
+  stream machinery.
+- Constructors (`fromByteString`, `fromList`, `makeInputStream`,
+  `countInput`/`countOutput`, `takeBytes`, `decompress`) are `mkRef`-backed
+  closures; the one unbounded drain (`toList`) is a `while` loop over local
+  mutable state, matching this project's established idiom elsewhere
+  (`Network.WebApp.strictRequestBody`) rather than upstream's `partial`
+  recursive drain.
+
+### `Data.PDF.Core` — PDF object model, parsing, xref, encryption (`pdf-toolbox-core`)
+
+19 modules porting Hackage's `pdf-toolbox-core`
+(`docs/imports/PdfToolboxCore/dependencies.md`), the low-level layer every
+higher PDF module builds on:
+
+- `Name`/`Exception`/`Parsers.Util`/`IO.Buffer` lay the groundwork: atomic
+  PDF names (§7.3.5) over `Data.ByteString`, structured `corrupted`/
+  `unexpected` errors rendered through `IO.Error.userError`, shared
+  `Std.Internal.Parsec.ByteArray` combinators, and a cursor-based `Buffer`
+  abstraction that adapts directly onto `Data.PDF.Stream.InputStream`.
+- `Object`/`Object.Util`/`Object.Builder` are the object model (§7.3):
+  `Object` is ported as a genuinely recursive sum type — no flattening or
+  un-decoding to dodge a termination proof, per `AGENTS.md`'s explicit
+  warning — with `Dict = Std.HashMap Name Object` exposed publicly while
+  stored internally as an `Array (Name × Object)` to satisfy Lean's
+  positivity checker. `buildObject`'s upstream `error`-on-`Stream` partial
+  function becomes a total `Except String Builder`.
+- `Parsers.Object`/`Parsers.XRef`/`Util` parse objects and the xref
+  table/trailer against `Std.Internal.Parsec`, wrapping every
+  input-consuming alternative in `attempt` (attoparsec's `<|>` always
+  backtracks fully; `Parsec`'s only backtracks on zero consumption) and
+  using a fuel parameter for `startXRef`'s otherwise-unbounded
+  scan-and-take-last search.
+- `Stream.Filter.Type`/`Stream.Filter.FlateDecode`/`Stream` implement stream
+  decoding: `FlateDecode` (§7.4.4) drives `Crypto.Zlib.FFI` and reverses the
+  PNG-Up (`12`) or no-op (`1`) predictor — the only two predictors upstream
+  itself implements.
+- `XRef`/`Encryption`/`File` tie everything together: the cross-reference
+  index (§7.5.4/§7.5.8, table or stream form, `/Prev`-chained), the Standard
+  Security Handler (§7.6.3.3, revisions 2–4, real RC4/AES-128-CBC over the
+  `Crypto.*` primitives above — not a stub), and `File.findObject`
+  resolving indirect references through both.
+- `Core`/`Types`/`Writer` round out the package: a thin re-export
+  aggregator, compound types (generic `Rectangle`, §7.9), and a PDF writer
+  supporting both fresh files and incremental updates.
+
+### `Data.PDF.Content` — content-stream operators, fonts, text encoding (`pdf-toolbox-content`)
+
+13 modules porting Hackage's `pdf-toolbox-content`
+(`docs/imports/PdfToolboxContent/dependencies.md`):
+
+- `Transform`/`Ops` — 2D affine transforms for the `cm` operator (§8.3.4),
+  and the closed enumeration of every content-stream operator keyword
+  (Annex A) plus an `UnknownOp` catch-all.
+- `FontDescriptor`/`GlyphList`/`TexGlyphList`/`Encoding.WinAnsi`/
+  `Encoding.MacRoman`/`Encoding.PdfDoc` — font metrics (§9.8) and four fixed
+  lookup tables transcribed verbatim from upstream: the ~4280-entry Adobe
+  Glyph List, the ~284-entry supplementary TeX glyph list, and the
+  WinAnsi/MacRoman/PDFDoc single-byte encodings (Annex D).
+- `UnicodeCMap`/`Parser`/`Processor` — parsing a `ToUnicode` CMap's
+  codespace ranges and `bfchar`/`bfrange` mappings, parsing a content
+  stream into `Operator`s, and `processOp` interpreting them against a
+  tracked graphics state (upstream's own doc-comment calls this module
+  "pretty experimental" — carried forward as-is).
+- `FontInfo` ties the package together: simple vs. composite (Type 0/CID)
+  font decoding into Unicode text, and `Content` is the thin re-export
+  aggregator.
+
+### `Data.PDF.Document` — document/page-tree API, text extraction (`pdf-toolbox-document`)
+
+11 modules porting Hackage's `pdf-toolbox-document`
+(`docs/imports/PdfToolboxDocument/dependencies.md`), the highest-level PDF
+layer:
+
+- `Types`/`Internal.Types`/`Internal.Util`/`Pdf`/`Document`/`Info` build the
+  document handle: a cached `lookupObject`/`deref` wrapper around
+  `Data.PDF.Core.File`, `document`'s encryption check, and single-indirection
+  trailer/info-dictionary accessors (§14.3.3).
+- `Catalog`/`FontDict` are further single-indirection accessors — `/Pages`
+  (§7.7.2) and font-dictionary decoding (§9.6) via `Data.PDF.Content.FontInfo`.
+- `PageNode`/`Page` are the one place in this batch with genuine
+  **untrusted-graph recursion**: a malformed PDF's `/Kids` or `/Parent`
+  entries can point back at an ancestor, and upstream has no cycle guard at
+  all. Both are ported against a **fuel parameter *and* an explicit
+  visited-`Ref` set**: the fuel is seeded from the trailer's own `/Size`
+  entry (a genuine, file-declared upper bound on distinct object
+  references), consumed once per new tree node descended into (an ordinary
+  structurally-decreasing `Nat`, so Lean's termination checker accepts it
+  outright); the visited set turns a repeat visit into a "cycle detected"
+  error instead of an infinite loop — a deliberate, documented improvement
+  over upstream's behaviour on malformed input, not a change on any
+  well-formed file. `pageNodePageByNum` descends `/Kids` this way;
+  `pageMediaBox`'s `mediaBoxRec` ascends `/Parent` the same way.
+- `Document` is the thin re-export aggregator for the whole batch.
 
 ### `Options.Applicative` — command-line argument parsing
 
@@ -1090,6 +1233,7 @@ over all 256 `UInt8` values.
 | `Linen.Data.Json` | JSON AST, `ToJSON`/`FromJSON`, encode/decode + roundtrip proofs |
 | `Linen.System.Console.Ansi` | ANSI terminal colors and styles |
 | `Linen.System.Exit` | `ExitCode` (success/failure) + `exitWith`/`exitSuccess`/`exitFailure` over `IO.Process.exit` |
+| `Linen.System.Keychain` | OS credential store (`keyring` crate): `Entry`, `setPassword`/`getPassword`/`deleteCredential`, `setSecret`/`getSecret` (macOS Keychain / libsecret / Credential Manager FFI) |
 | `Linen.System.Log.FastLogger` | buffered thread-safe logger (`Std.Mutex`): `newLoggerSet`/`pushLogStr`/`flushLogStr`/`withFastLogger` |
 | `Linen.System.TimeManager` | connection-timeout sweeper: `Manager` (dedicated-task cooperative-cancellation loop over `Std.CancellationToken`), `Handle.tickle`/`cancel`/`pause`/`resume` |
 | `Linen.System.Posix.Compat` | minimal POSIX compatibility: `Fd`/`closeFd`, `FileStatus`/`getFileStatus`/`fileExist` over `System.FilePath.metadata` |
@@ -1159,6 +1303,54 @@ over all 256 `UInt8` values.
 | `Linen.Crypto.JOSE.JWK` | JWK helpers: `parseOctKey` (base64url), `toDerPublicKey` (RSA/EC → DER via OpenSSL) |
 | `Linen.Crypto.JOSE.JWS` | JWS compact verification (RFC 7515): `splitCompact`, `verifySignature` (HMAC/RSA/EC via OpenSSL) |
 | `Linen.Crypto.JOSE.JWT` | JWT verification (RFC 7519): `validateClaims` (exp/nbf/aud/iss, bounded skew), `verifyJWT` (signature + claims) |
+| `Linen.Crypto.Zlib.FFI` | `@[extern]` zlib inflate-only FFI (`ffi/zlib.c`): opaque `Inflate` handle, `initInflate`/`feedInflate`/`finishInflate`, one-shot `decompress` |
+| `Linen.Crypto.MD5` | RFC 1321 MD5 digest: pure, structurally-recursive `hash` (64-round compression over fixed 64-byte blocks) |
+| `Linen.Crypto.RC4` | RC4 stream cipher: `initCtx` (KSA, 256-byte S-box) + `combine` (PRGA keystream XOR), both structurally recursive |
+| `Linen.Crypto.AES` | AES-128 block cipher: Rijndael key schedule (`initAES`), CBC `decryptCBC`, PKCS5 `unpadPKCS5` |
+| `Linen.Data.PDF.Stream` | buffer-resident `io-streams` port: `InputStream`/`OutputStream` over `ByteArray`, `fromByteString`/`makeInputStream`/`countInput`/`takeBytes`/`decompress` |
+| `Linen.Data.PDF.Core.Name` | atomic PDF name objects (§7.3.5): byte-string wrapper `Name`, `make`/`toByteString` |
+| `Linen.Data.PDF.Core.Exception` | structured parse-error reporting: `corrupted`/`unexpected` tagged `Exc`, rendered into `IO.Error.userError` with growing `details` context |
+| `Linen.Data.PDF.Core.Parsers.Util` | shared low-level parsing combinators over `Std.Internal.Parsec.ByteArray`: `isSpace_w8`, eof-tolerant `skipWhile'` |
+| `Linen.Data.PDF.Core.IO.Buffer` | cursor-based file/byte-source abstraction: `read`/`size`/`seek`/`back`/`tell`, `toInputStream` bridge to `Data.PDF.Stream` |
+| `Linen.Data.PDF.Core.Object` | PDF object model (§7.3): recursive `Object` sum type (number/bool/name/dict/array/string/stream/ref/null), `Dict = HashMap Name Object` |
+| `Linen.Data.PDF.Core.Object.Util` | safe `Object` accessors: `intValue`/`stringValue`/`nameValue`/`dictValue`/… total `Option`-returning views |
+| `Linen.Data.PDF.Core.Object.Builder` | render `Object` to bytes: total `buildObject`/`buildDict`/`buildArray` (`Except String Builder`, stream case errors instead of panicking) |
+| `Linen.Data.PDF.Core.Parsers.Object` | parse `Object` values: numbers/strings/names/dicts/arrays/refs/streams, `attempt`-wrapped backtracking over `Std.Internal.Parsec` |
+| `Linen.Data.PDF.Core.Parsers.XRef` | parsers for the xref table/trailer: classic table rows plus `startXRef`'s fuel-bounded scan-and-take-last search |
+| `Linen.Data.PDF.Core.Util` | unclassified parsing tools: `readCompressedObject` (object-stream header pairs), totality-safe `last` |
+| `Linen.Data.PDF.Core.Stream.Filter.Type` | the `StreamFilter` type: filter name + `/DecodeParms`-driven decoder function |
+| `Linen.Data.PDF.Core.Stream.Filter.FlateDecode` | the `FlateDecode` filter (§7.4.4): zlib inflate + PNG-Up (`Predictor 12`) / no-op (`1`) predictor reversal |
+| `Linen.Data.PDF.Core.Stream` | stream-related tools: `readStream`, `knownFilters`, decode dispatch tying dict + raw data + filters together |
+| `Linen.Data.PDF.Core.XRef` | cross-reference index (§7.5.4/§7.5.8): table/stream variants, `/Prev`-chained incremental updates |
+| `Linen.Data.PDF.Core.Encryption` | PDF Standard Security Handler (§7.6.3.3, revisions 2–4): RC4/AES-128-CBC decryptor construction over `Crypto.RC4`/`Crypto.MD5`/`Crypto.AES` |
+| `Linen.Data.PDF.Core.File` | a PDF file as a set of objects: `findObject` (xref-chain resolution, object streams, decryption), `streamContent`/`rawStreamContent` |
+| `Linen.Data.PDF.Core` | thin re-export aggregator: `Object`, `File`, `Encryption` |
+| `Linen.Data.PDF.Core.Types` | compound data structures (§7.9): generic `Rectangle`, date/matrix helpers |
+| `Linen.Data.PDF.Core.Writer` | write PDF files: `writeHeader`/`writeObject`/`writeStream`/`writeXRefTable`/`writeXRefStream`, incremental-update support |
+| `Linen.Data.PDF.Content.Transform` | 2D affine transforms (§8.3.4 `cm` matrices): compose/apply row-vector matrix algebra |
+| `Linen.Data.PDF.Content.Ops` | content stream operators (Annex A): closed `Op` enum + `UnknownOp` fallback, `toOp` classifier |
+| `Linen.Data.PDF.Content.FontDescriptor` | font metrics beyond glyph widths (§9.8): `FontDescriptor` record, flags, weight/stretch |
+| `Linen.Data.PDF.Content.GlyphList` | the Adobe Glyph List: ~4280-entry glyph-name → Unicode table |
+| `Linen.Data.PDF.Content.TexGlyphList` | supplementary TeX glyph-name table (~284 entries) not covered by the AGL |
+| `Linen.Data.PDF.Content.Encoding.WinAnsi` | the WinAnsiEncoding table (Annex D.2): code → Unicode for simple fonts |
+| `Linen.Data.PDF.Content.Encoding.MacRoman` | the MacRomanEncoding table (Annex D.5) |
+| `Linen.Data.PDF.Content.Encoding.PdfDoc` | the PDFDocEncoding table (Annex D.3), codes 127/159/173 left undefined |
+| `Linen.Data.PDF.Content.UnicodeCMap` | `ToUnicode` CMap parsing: codespace ranges + `bfchar`/`bfrange` big-endian UTF-16 decoding |
+| `Linen.Data.PDF.Content.Parser` | parse a content stream into operators: `parseContent`, glue operand runs into complete `Operator`s |
+| `Linen.Data.PDF.Content.Processor` | interpret content-stream operators, tracking graphics state (`processOp`, text position/matrices) |
+| `Linen.Data.PDF.Content.FontInfo` | font metadata for glyph decoding: simple vs. composite (Type 0/CID) `FontInfo`, `fontInfoDecodeGlyphs` |
+| `Linen.Data.PDF.Content` | thin re-export aggregator: content-stream operators, parsing, processing, font info |
+| `Linen.Data.PDF.Document.Types` | thin re-export of `Data.PDF.Core.Types` |
+| `Linen.Data.PDF.Document.Internal.Types` | internal `Pdf`/`Document`/`Info` record declarations shared across the document API |
+| `Linen.Data.PDF.Document.Internal.Util` | internal utilities: `ensureType`/`dictionaryType`, `decodeTextString` (UTF-16BE/PDFDocEncoding text strings, §7.9.2.2) |
+| `Linen.Data.PDF.Document.Pdf` | the top-level PDF handle: cached `lookupObject`/`deref`, `document` (checks encryption first) |
+| `Linen.Data.PDF.Document.Document` | trailer-dictionary accessors: `documentCatalog`/`documentInfo`/`documentEncryption` |
+| `Linen.Data.PDF.Document.Info` | the document information dictionary (§14.3.3): `infoTitle`/`infoAuthor`/`infoSubject`/`infoKeywords`/`infoCreator`/`infoProducer` |
+| `Linen.Data.PDF.Document.Catalog` | the document catalog: `catalogPageNode` (§7.7.2 `/Pages` entry) |
+| `Linen.Data.PDF.Document.PageNode` | page-tree nodes (§7.7.3.2): `pageNodeKids`/`pageNodeParent`, fuel + visited-`Ref`-set `pageNodePageByNum` descent guarding against cyclic `/Kids` |
+| `Linen.Data.PDF.Document.FontDict` | font dictionaries (§9.6): `fontDictSubtype`, `fontDictLoadInfo` (simple/composite dispatch into `Data.PDF.Content.FontInfo`) |
+| `Linen.Data.PDF.Document.Page` | PDF document pages: `pageMediaBox` (fuel-bounded `/Parent` ascent), `pageExtractText`/`pageExtractGlyphs`, Form-XObject `/Resources` resolution |
+| `Linen.Data.PDF.Document` | thin re-export aggregator: `Pdf`, `Document`, `Catalog`, `PageNode`, `Page`, `Info`, `FontDict` |
 | `Linen.Options.Applicative.Types` | `optparse-applicative` core types: `ReadM`, `Mod` (right-biased modifier monoid), `InfoMod`/`ParserInfo`, `OptDescr`, functional `Parser` |
 | `Linen.Options.Applicative.Builder` | builder API: `option`/`strOption`/`switch`/`flag`/`flag'`/`argument`/`subparser`, `Pure`/`Functor`/`Seq`/`Applicative`/`OrElse` for `Parser`, `withDefault`/`command` |
 | `Linen.Options.Applicative.Extra` | execution API: `renderHelp`, `helper`, `info`, `hsubparser`, `execParser`, `execParserPure` |

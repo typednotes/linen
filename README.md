@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>317 modules</strong> · <strong>393 compile-time theorems</strong> · <strong>5511 <code>#guard</code> checks</strong>
+  <strong>366 modules</strong> · <strong>396 compile-time theorems</strong> · <strong>5823 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -72,6 +72,17 @@ for the full per-module feature list and module table.
 - **`Database.PostgreSQL` / `Database.SQL`** — libpq FFI bindings and a
   hasql-style typed client (encoders/decoders, sessions, pooling).
 - **`Crypto.JOSE`** — JOSE/JWT verification (HMAC/RSA/EC) over OpenSSL.
+- **`Crypto.Zlib` / `Crypto.MD5` / `Crypto.RC4` / `Crypto.AES`** — zlib
+  inflate, RFC 1321 MD5, the RC4 stream cipher, and AES-128 CBC decryption
+  + PKCS5 unpadding — the primitives behind the PDF Standard Security
+  Handler.
+- **`System.Keychain`** — OS credential-store access (macOS Keychain,
+  Linux Secret Service, Windows Credential Manager).
+- **`Data.PDF.Stream` / `Data.PDF.Core` / `Data.PDF.Content` /
+  `Data.PDF.Document`** — PDF parsing, rendering, and text extraction: a
+  buffer-resident `io-streams` port, the low-level object model/parser/
+  xref/encryption layer, content-stream operators and font/text-encoding
+  handling, and a document/page-tree API with text extraction.
 - **`Options.Applicative`** — `optparse-applicative`-style command-line
   argument parsing.
 - **`PostgREST`** — a Lean port of PostgREST's request/response pipeline:
@@ -108,7 +119,7 @@ open Data.Functor Control.Monad
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 317 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 366 modules).
 
 ## Build & Test
 

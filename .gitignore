@@ -1,9 +1,11 @@
 # cache and other artifacts produced by Lean's Lake build tool
 .lake/
-/.lake
 
 # Output files
 out/*
 
 # MacOS
 .DS_Store
+
+# Claude
+.claude/

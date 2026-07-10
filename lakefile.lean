@@ -39,6 +39,42 @@ def pkgLinkFlags (pkg : String) : IO (Array String) := do
   let libdir ← pkgConfig #["--variable=libdir", pkg]
   return (libdir.filter (· != "")).map ("-L" ++ ·) ++ libs
 
+/-- On macOS, `libz` ships only as a versioned dylib in `/usr/lib`
+    (`libz.1.dylib`, no unversioned `libz.dylib` symlink) plus a linkable
+    `.tbd` stub inside the Xcode/Command Line Tools SDK — so `-lz` only
+    resolves with `-L<sdk>/usr/lib` pointing at that stub. `pkg-config
+    --variable=libdir zlib` reports plain `/usr/lib`, which lacks the stub,
+    so `zlib`'s link flags need this extra directory alongside the ones
+    `pkgLinkFlags` already returns. On Linux this returns `#[]` (there is no
+    `xcrun`), and `pkgLinkFlags`'s ordinary `-lz` resolution is sufficient. -/
+def macSdkLibArgs : IO (Array String) := do
+  try
+    let out ← IO.Process.output { cmd := "xcrun", args := #["--show-sdk-path"] }
+    if out.exitCode != 0 then
+      return #[]
+    return #["-L" ++ out.stdout.trim ++ "/usr/lib"]
+  catch _ =>
+    return #[]
+
+/-- On macOS, resolve the active SDK's framework search path via `xcrun` and
+    return `-F<sdk>/System/Library/Frameworks -isysroot <sdk> -L<sdk>/usr/lib`,
+    so `-framework Security`/`-framework CoreFoundation` (`keychain.o`'s link
+    flags) resolve against Lean's bundled `ld.lld`, which — unlike a
+    system-provided `cc`/`ld` — has no default framework search path baked
+    in. Returns `#[]` (a harmless no-op) if `xcrun` is unavailable, e.g. on
+    Linux/Windows, where these flags are never used anyway. -/
+def macSdkFrameworkArgs : IO (Array String) := do
+  try
+    let out ← IO.Process.output { cmd := "xcrun", args := #["--show-sdk-path"] }
+    if out.exitCode != 0 then
+      return #[]
+    let sdk := out.stdout.trim
+    if sdk.isEmpty then
+      return #[]
+    return #["-F", sdk ++ "/System/Library/Frameworks", "-isysroot", sdk, "-L", sdk ++ "/usr/lib"]
+  catch _ =>
+    return #[]
+
 -- Resolve the native link flags at lakefile-elaboration time via `pkg-config`.
 -- This runs on the build machine (Lake recompiles the lakefile per checkout),
 -- so the Ubuntu runner gets Linux paths and dev boxes get their own — with no
@@ -51,9 +87,29 @@ run_cmd do
     elabCommand (← `(def $(mkIdent n) : Array String := #[$lits,*]))
   let pq ← pkgLinkFlags "libpq"
   let ssl ← pkgLinkFlags "openssl"
+  let zlib ← pkgLinkFlags "zlib"
+  let macSdk ← macSdkLibArgs
+  -- Keychain link flags are OS-conditional: frameworks on macOS and system
+  -- libraries on Windows have no `pkg-config` file, so — unlike `libpq`/
+  -- `openssl`/`zlib` above — they're picked via the pure, compile-time
+  -- `System.Platform.isOSX`/`isWindows` constants (the same ones Lake's own
+  -- config code, e.g. `Lake/Config/LeanLib.lean`, uses for this kind of
+  -- per-platform link decision) rather than any `pkg-config` probe. Linux is
+  -- the one branch with a `.pc` file (`libsecret-1`), so it still goes
+  -- through `pkgLinkFlags`, which degrades to `#[]` if that package is
+  -- absent — matching every other optional native dependency in this file.
+  let keychainLinkArgs : Array String ←
+    if System.Platform.isOSX then
+      macSdkFrameworkArgs.map (· ++ #["-framework", "Security", "-framework", "CoreFoundation"])
+    else if System.Platform.isWindows then
+      pure #["-ladvapi32", "-lcredui"]
+    else
+      pkgLinkFlags "libsecret-1"
   mkDef `libpqLinkArgs pq
   mkDef `opensslLinkArgs ssl
-  mkDef `nativeLinkArgs (pq ++ ssl)
+  mkDef `zlibLinkArgs (macSdk ++ zlib)
+  mkDef `keychainLinkArgs keychainLinkArgs
+  mkDef `nativeLinkArgs (pq ++ ssl ++ macSdk ++ zlib ++ keychainLinkArgs)
 
 -- `moreLinkArgs` here also flows into `ExternLib.linkArgs` (`self.pkg.moreLinkArgs`),
 -- so `linenffi`'s `:shared` dynlib — loaded directly by the interpreter for `#eval` —
@@ -104,13 +160,36 @@ target tls.o pkg : FilePath := do
   let weakArgs := #["-I", (← getLeanIncludeDir).toString] ++ opensslCFlags
   buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
 
+/-- Compile `ffi/zlib.c` (zlib inflate bindings) into an object file.
+    zlib's include path is discovered at build time via `pkg-config`. -/
+target zlib.o pkg : FilePath := do
+  let oFile := pkg.buildDir / "ffi" / "zlib.o"
+  let srcJob ← inputTextFile <| pkg.dir / "ffi" / "zlib.c"
+  let zlibCFlags ← pkgConfig #["--cflags", "zlib"]
+  let weakArgs := #["-I", (← getLeanIncludeDir).toString] ++ zlibCFlags
+  buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
+
+/-- Compile `ffi/keychain.c` (OS credential-store bindings) into an object
+    file. `libsecret-1`'s include path (used only by the Linux `#ifdef`
+    branch) is discovered at build time via `pkg-config`; this is a no-op
+    `#[]` on macOS/Windows, where that branch is never compiled. -/
+target keychain.o pkg : FilePath := do
+  let oFile := pkg.buildDir / "ffi" / "keychain.o"
+  let srcJob ← inputTextFile <| pkg.dir / "ffi" / "keychain.c"
+  let libsecretCFlags ← pkgConfig #["--cflags", "libsecret-1"]
+  let weakArgs := #["-I", (← getLeanIncludeDir).toString] ++ libsecretCFlags
+  buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
+
 /-- Bundle the FFI object(s) into a static lib that Lake links automatically. -/
 extern_lib linenffi pkg := do
   let networkObj ← network.o.fetch
   let postgresObj ← postgres.o.fetch
   let joseObj ← jose.o.fetch
   let tlsObj ← tls.o.fetch
-  buildStaticLib (pkg.staticLibDir / nameToStaticLib "linenffi") #[networkObj, postgresObj, joseObj, tlsObj]
+  let zlibObj ← zlib.o.fetch
+  let keychainObj ← keychain.o.fetch
+  buildStaticLib (pkg.staticLibDir / nameToStaticLib "linenffi")
+    #[networkObj, postgresObj, joseObj, tlsObj, zlibObj, keychainObj]
 
 @[default_target]
 lean_lib Linen where

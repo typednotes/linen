@@ -68,3 +68,36 @@ it depends on).
     ([source](https://github.com/haskell/network-uri)), a prerequisite of `cdp`.
 58. [`cdp`](cdp/dependencies.md) (done) — Chrome DevTools Protocol client
     ([source](https://github.com/arsalan0c/cdp-hs)), 45 module(s).
+59. [`zlib`](Zlib/dependencies.md) (done) — raw zlib/RFC 1950 inflate (FFI), a
+    prerequisite of `io-streams`.
+60. [`io-streams`](IoStreams/dependencies.md) (done) — scoped
+    `InputStream`/`OutputStream` plumbing, a prerequisite of
+    `pdf-toolbox-core`.
+61. [`cryptohash`](Cryptohash/dependencies.md) (done) — MD5 only, a
+    prerequisite of `pdf-toolbox-core`'s encryption support.
+62. [`cipher-rc4`](CipherRc4/dependencies.md) (done) — RC4 stream cipher, a
+    prerequisite of `pdf-toolbox-core`'s encryption support.
+63. [`cipher-aes`](CipherAes/dependencies.md) (done) — AES-128-CBC block
+    cipher, a prerequisite of `pdf-toolbox-core`'s encryption support.
+64. [`crypto-api`](CryptoApi/dependencies.md) (done) — PKCS5 unpadding only,
+    folded into the `cipher-aes` port.
+65. [`pdf-toolbox-core`](PdfToolboxCore/dependencies.md) (done) — PDF object
+    model, parser, xref, and encryption
+    ([source](https://github.com/Yuras/pdf-toolbox)), 19 module(s).
+66. [`pdf-toolbox-content`](PdfToolboxContent/dependencies.md) (done) — PDF
+    content-stream operators, fonts, and text encoding
+    ([source](https://github.com/Yuras/pdf-toolbox)), 13 module(s).
+67. [`pdf-toolbox-document`](PdfToolboxDocument/dependencies.md) (done) — PDF
+    document/page-tree API and text extraction
+    ([source](https://github.com/Yuras/pdf-toolbox)), 11 module(s).
+
+## Crates (crates.io)
+
+Same convention as above, applied to Rust crates per AGENTS.md's
+crates.io-import section.
+
+1. [`keyring`](Keyring/dependencies.md) (done) — cross-platform OS
+   credential-store client (macOS Keychain / Linux Secret Service / Windows
+   Credential Manager)
+   ([source](https://github.com/open-source-cooperative/keyring-rs)),
+   1 module.
