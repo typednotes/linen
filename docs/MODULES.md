@@ -388,6 +388,22 @@ the project overview and quick start.
   helper into **structural recursion** over the dot-separated components, and
   using `List.lookup` / `List.findSome?` instead of a bespoke assoc scan.
 
+### `Network.URI` — RFC 3986 URI parsing, rendering, and resolution
+
+- `Network.URI` — a port of the `network-uri` package's `Network.URI`: the
+  `URI`/`URIAuth` types, `parseURI`/`parseURIReference`/`parseRelativeReference`/
+  `parseAbsoluteURI`, `isURI`-style classifiers, percent-encoding
+  (`escapeURIString`/`unEscapeString`), rendering (`uriToString`, a
+  password-masking `ToString` instance), `pathSegments`, dot-segment removal, and
+  relative-URI resolution (`relativeTo`/`relativeFrom`, matching every case in
+  RFC 3986 section 5.4's worked example table). The upstream parser is built on
+  `parsec`; here the grammar is a direct structurally-recursive recursive-descent
+  parser over `List Char` instead. Two documented simplifications: bracketed
+  IP-literal hosts (`[::1]`) are accepted at the character-class level rather
+  than RFC 3986's full IPv6 group-count grammar, and `unEscapeString` decodes
+  each `%XX` to its raw byte rather than reassembling multi-byte UTF-8 (unneeded
+  by anything currently in `linen`).
+
 ### `DataFrame` — typed tabular data
 
 - `DataFrame.Internal.Types` — a `DataFrame` with a **proven rectangular
@@ -1066,6 +1082,7 @@ over all 256 `UInt8` values.
 | `Linen.Network.Sendfile` | portable `sendFile`/`sendFileSimple` (chunked read + `Blocking.sendAll`, no zero-copy syscall) |
 | `Linen.Data.Streaming.Network` | `AppData`, `bindPortTCP`/`getSocketTCP`/`mkAppData`/`runTCPServer`, `acceptSafe` (retry loop, no `partial`) |
 | `Linen.Network.Mime` | MIME lookup (`mime-types`): `defaultMimeMap`, `fileNameExtensions`, `mimeByExt`, `defaultMimeLookup` |
+| `Linen.Network.URI` | RFC 3986 URI parsing/rendering/resolution (`network-uri`): `parseURI`, percent-encoding, `relativeTo`/`relativeFrom` |
 | `Linen.Web.Cookie` | RFC 6265 cookie parse/render: `parseCookies`/`renderCookies`, `SetCookie` + `parseSetCookie`/`renderSetCookie` |
 | `Linen.Web.Css` | typed CSS: `private`-constructor `Declaration`/`FontWeight` (`by decide`-bounded), `Length`/`Color`/`Selector`/`Rule`/`Stylesheet`, `rule!` macro |
 | `Linen.Web.Html` | typed HTML5: `Category`-indexed `Html` encodes the content model at compile time; `private`-constructor `Attr`, `elem!` macro |

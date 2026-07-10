@@ -38,17 +38,26 @@ accurate.
 ## Importing external code
 
 When importing external code into the library — designated by a **local path**
-or a **GitHub link** (e.g. a Haskell package, another Lean project, or a single
-module):
+or a **GitHub link** (e.g. a Haskell package, a Rust crate, another Lean
+project, or a single module):
 
-- **Before porting anything, check whether it already exists** — either as a Lean
-  standard-library equivalent, or as something `linen` itself already ported
-  (search `Linen/` first). Do not port a bespoke copy of something the stdlib
-  or `linen` already provides; import/reuse the existing definition instead.
-  Stdlib examples: use `Id` for the identity monad, `Option`/`Except` rather
-  than re-declared `Maybe`/`Either`, `· >=> ·` / `· <=< ·` for Kleisli
-  composition, `List.foldlM` for `foldM`, `Functor.discard` for `void`. Only
-  add what neither the stdlib nor `linen` already has.
+- **Before porting anything, check whether it already exists — or already has
+  a suitable source — in this order of precedence: Lean standard library >
+  Haskell/Hackage > the new source (e.g. a Rust crate).** Search `Linen/`
+  first: do not port a bespoke copy of something the stdlib or an
+  already-ported Haskell package already provides in `linen`; import/reuse the
+  existing definition instead. But the precedence doesn't stop at what's
+  *already* ported — if the functionality isn't in `linen` yet, prefer
+  bringing it in from a suitable Hackage package (following the
+  Hackage-import convention below) over porting it fresh from the Rust
+  source. So for a Rust crate being imported: if the Lean stdlib already has
+  it, use that; else if `linen` already has it via an earlier Haskell import,
+  reuse that; else if a suitable Hackage package covers it, import that
+  package instead; only port directly from the Rust source what has no
+  suitable Haskell counterpart. Stdlib examples: use `Id` for the identity
+  monad, `Option`/`Except` rather than re-declared `Maybe`/`Either`/Rust's
+  `Option`/`Result`, `· >=> ·` / `· <=< ·` for Kleisli composition,
+  `List.foldlM` for `foldM`, `Functor.discard` for `void`.
 - **Follow Lean standard-library principles for the module hierarchy and
   namespaces.** Place modules and choose namespaces the way the Lean stdlib
   would (e.g. `Data.…`, `Control.…`, `System.…`), not by mirroring the source
@@ -78,11 +87,30 @@ recursively** to each one: before porting a dependency that itself pulls in
 further Hackage libraries, first write its own topologically-ordered
 dependency list under `docs/imports/`, then import those in turn.
 
+### Importing from crates.io
+
+The same convention applies when asked to import a Rust crate: write
+`docs/imports/<crate>/dependencies.md` (topological module order) before
+porting any code, list it in `docs/imports/index.md`, and recurse into its own
+further dependencies the same way. The one difference from a Hackage import is
+the precedence rule above — check the Lean stdlib, whatever `linen` already
+has from Haskell, and whether a suitable Hackage package could be imported
+instead, before porting anything fresh from the crate itself.
+
 ## Coding conventions
 
 - **No `partial def`.** All recursion must be structural or have a proven
   termination argument — never use `partial` and never rely on a fuel
   parameter to dodge termination.
+- **The requirement of proving everything (termination, etc.) must not lead to
+  abusive simplifications.** If a genuine, faithful port needs a real
+  termination proof (e.g. a self-referential type, mutual recursion), do that
+  proof — don't weaken the port's type or behavior just to dodge the proof
+  work (e.g. replacing a recursively-typed field with raw/undecoded data
+  because the recursive decoder was hard to prove terminating). Simplifications
+  are for cases upstream itself doesn't fully specify or that are genuinely
+  out of scope (see the existing documented examples in this codebase), not a
+  substitute for doing the proof.
 - **No `sorry`.** Do not leave `sorry` in committed code unless it is genuinely
   unavoidable; if so, call it out explicitly.
 - Prefer Lean standard-library objects over re-wrapping them (e.g. use `Id` for

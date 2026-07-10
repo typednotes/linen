@@ -76,6 +76,12 @@ private def sample : Value :=
 #guard ToJSON.toJSON (3.25 : Float) = Value.number 3.25
 #guard ToJSON.toJSON true = Value.bool true
 #guard ToJSON.toJSON (Value.null) = Value.null  -- ToJSON Value is the identity
+#guard FromJSON.parseJSON (α := Value) (Value.bool true) = .ok (Value.bool true)  -- likewise FromJSON
+
+-- Pairs encode as 2-element JSON arrays, matching Haskell's `(a, b)` instances.
+#guard ToJSON.toJSON (("k", "v") : String × String) = Value.array #[Value.string "k", Value.string "v"]
+#guard FromJSON.parseJSON (α := String × String) (Value.array #[Value.string "k", Value.string "v"])
+  = .ok ("k", "v")
 
 #guard ToJSON.toJSON (some (9 : Int)) = Value.number 9
 #guard ToJSON.toJSON (none : Option Int) = Value.null

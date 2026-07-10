@@ -140,6 +140,7 @@ import Linen.Data.Streaming.Network
 import Linen.Network.TLS.Types
 import Linen.Network.TLS.Context
 import Linen.Network.Mime
+import Linen.Network.URI
 import Linen.Options.Applicative.Types
 import Linen.Options.Applicative.Builder
 import Linen.Options.Applicative.Extra
@@ -267,3 +268,18 @@ import Linen.Network.WebSockets.Handshake
 import Linen.Network.WebSockets.Connection
 import Linen.Network.WebSockets
 import Linen.Network.WebApp.Server.WebSockets
+import Linen.CDP.Internal.Utils
+import Linen.CDP.Definition
+import Linen.CDP.Domains.CacheStorage
+import Linen.CDP.Domains.Cast
+import Linen.CDP.Domains.DOMStorage
+import Linen.CDP.Domains.Database
+import Linen.CDP.Domains.DeviceOrientation
+import Linen.CDP.Domains.EventBreakpoints
+import Linen.CDP.Domains.HeadlessExperimental
+import Linen.CDP.Domains.Input
+import Linen.CDP.Domains.Inspector
+import Linen.CDP.Domains.Media
+import Linen.CDP.Domains.Memory
+import Linen.CDP.Domains.Performance
+import Linen.CDP.Domains.Runtime

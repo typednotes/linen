@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>267 modules</strong> · <strong>371 compile-time theorems</strong> · <strong>3460 <code>#guard</code> checks</strong>
+  <strong>271 modules</strong> · <strong>371 compile-time theorems</strong> · <strong>3464 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -105,7 +105,7 @@ open Data.Functor Control.Monad
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 267 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 271 modules).
 
 ## Build & Test
 

@@ -80,6 +80,66 @@ def getFieldOpt (obj : Value) (key : String) : Except String (Option Value) :=
   | some v => .ok (some v)
   | none => .ok none
 
+/-- A successful `List.lookup` witnesses membership of the `(key, value)` pair. -/
+private theorem _list_lookup_mem {α : Type} {key : String} {fields : List (String × α)} {v : α}
+    (h : fields.lookup key = some v) : (key, v) ∈ fields := by
+  induction fields with
+  | nil => simp at h
+  | cons hd tl ih =>
+    obtain ⟨k, val⟩ := hd
+    simp only [List.lookup] at h
+    split at h
+    · simp only [Option.some.injEq] at h
+      subst h
+      rename_i heq
+      simp only [beq_iff_eq] at heq
+      subst heq
+      exact List.mem_cons_self
+    · exact List.mem_cons_of_mem _ (ih h)
+
+/-- A successful `getField` always returns a strictly structurally-smaller
+    `Value` than the object it was looked up in. Lets a self-referential JSON
+    record type (one with a field of its own list-of-self type, e.g. a tree —
+    `CDP.Domains.Media.PlayerError.cause` is one example) write a plain
+    recursive `FromJSON` instance and discharge its `termination_by`/
+    `decreasing_by` obligations with this lemma, instead of needing to
+    re-derive a `sizeOf` argument through `getField` from scratch. -/
+theorem getField_sizeOf_lt {obj : Value} {key : String} {v : Value}
+    (h : obj.getField key = .ok v) : sizeOf v < sizeOf obj := by
+  cases obj with
+  | object fields =>
+    simp only [getField, lookup] at h
+    cases hl : fields.lookup key with
+    | none => rw [hl] at h; simp at h
+    | some v' =>
+      rw [hl] at h
+      simp only [Except.ok.injEq] at h
+      subst h
+      have hmem := _list_lookup_mem hl
+      have h1 := List.sizeOf_lt_of_mem hmem
+      simp only [Prod.mk.sizeOf_spec] at h1
+      show sizeOf v' < sizeOf (Value.object fields)
+      simp only [Value.object.sizeOf_spec]
+      omega
+  | _ => simp [getField, lookup] at h
+
+/-- Like `getField_sizeOf_lt`, but for a field accessed via plain `lookup`
+    (e.g. an optional self-referential field, where the caller wants to treat
+    a missing key or explicit `null` as `none` directly rather than going
+    through `getFieldOpt`). -/
+theorem lookup_sizeOf_lt {obj : Value} {key : String} {v : Value}
+    (h : obj.lookup key = some v) : sizeOf v < sizeOf obj := by
+  cases obj with
+  | object fields =>
+    simp only [lookup] at h
+    have hmem := _list_lookup_mem h
+    have h1 := List.sizeOf_lt_of_mem hmem
+    simp only [Prod.mk.sizeOf_spec] at h1
+    show sizeOf v < sizeOf (Value.object fields)
+    simp only [Value.object.sizeOf_spec]
+    omega
+  | _ => simp [lookup] at h
+
 end Value
 
 -- ── DecidableEq for Float ────────────────────────────────────────────
@@ -208,6 +268,10 @@ instance : FromJSON Bool where
     | .bool b => .ok b
     | v => .error s!"expected bool, got {repr v}"
 
+/-- The identity decoding, for callers that want the raw JSON tree of an
+    open-ended field (symmetric with the `ToJSON Value` instance above). -/
+instance : FromJSON Value where parseJSON := .ok
+
 -- ── Option instances ──────────────────────────────────────────────────
 
 instance [FromJSON α] : FromJSON (Option α) where
@@ -239,6 +303,16 @@ instance [FromJSON α] : FromJSON (List α) where
   parseJSON
     | .array arr => arr.toList.mapM FromJSON.parseJSON
     | v => .error s!"expected array, got {repr v}"
+
+/-- A pair is encoded as a 2-element JSON array, matching Haskell's `(a, b)`
+    `ToJSON`/`FromJSON` instances. -/
+instance [ToJSON α] [ToJSON β] : ToJSON (α × β) where
+  toJSON p := .array #[ToJSON.toJSON p.1, ToJSON.toJSON p.2]
+
+instance [FromJSON α] [FromJSON β] : FromJSON (α × β) where
+  parseJSON
+    | .array #[a, b] => return (← FromJSON.parseJSON a, ← FromJSON.parseJSON b)
+    | v => .error s!"expected a 2-element array, got {repr v}"
 
 -- ── Construction helpers ──────────────────────────────────────────────
 

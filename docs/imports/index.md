@@ -64,7 +64,7 @@ it depends on).
 54. [`WebSockets`](WebSockets/dependencies.md) (done) — 5 module(s)
 55. [`WaiWebSockets`](WaiWebSockets/dependencies.md) (done) — 2 module(s)
 56. [`Word8`](Word8/dependencies.md) (done) — 2 module(s)
-57. [`cdp`](cdp/dependencies.md) — Chrome DevTools Protocol client
-    ([source](https://github.com/arsalan0c/cdp-hs)). Blocked on 3 new prerequisite
-    packages not yet imported: `monad-loops`, `network-uri`, `random` (see
-    [`cdp/dependencies.md`](cdp/dependencies.md) for details).
+57. [`network-uri`](network-uri/dependencies.md) (done) — RFC 3986 URI parsing
+    ([source](https://github.com/haskell/network-uri)), a prerequisite of `cdp`.
+58. [`cdp`](cdp/dependencies.md) — Chrome DevTools Protocol client
+    ([source](https://github.com/arsalan0c/cdp-hs)).

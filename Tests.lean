@@ -147,6 +147,7 @@ import Tests.Linen.Data.Streaming.NetworkTest
 import Tests.Linen.Network.TLS.TypesTest
 import Tests.Linen.Network.TLS.ContextTest
 import Tests.Linen.Network.MimeTest
+import Tests.Linen.Network.URITest
 import Tests.Linen.Options.Applicative.TypesTest
 import Tests.Linen.Options.Applicative.BuilderTest
 import Tests.Linen.Options.Applicative.ExtraTest
@@ -275,3 +276,18 @@ import Tests.Linen.Network.WebSockets.ConnectionTest
 import Tests.Linen.Network.WebSocketsTest
 import Tests.Linen.Network.WebApp.Server.WebSocketsTest
 import Tests.Linen.Data.Word8Test
+import Tests.Linen.CDP.Internal.UtilsTest
+import Tests.Linen.CDP.DefinitionTest
+import Tests.Linen.CDP.Domains.CacheStorageTest
+import Tests.Linen.CDP.Domains.CastTest
+import Tests.Linen.CDP.Domains.DOMStorageTest
+import Tests.Linen.CDP.Domains.DatabaseTest
+import Tests.Linen.CDP.Domains.DeviceOrientationTest
+import Tests.Linen.CDP.Domains.EventBreakpointsTest
+import Tests.Linen.CDP.Domains.HeadlessExperimentalTest
+import Tests.Linen.CDP.Domains.InputTest
+import Tests.Linen.CDP.Domains.InspectorTest
+import Tests.Linen.CDP.Domains.MediaTest
+import Tests.Linen.CDP.Domains.MemoryTest
+import Tests.Linen.CDP.Domains.PerformanceTest
+import Tests.Linen.CDP.Domains.RuntimeTest

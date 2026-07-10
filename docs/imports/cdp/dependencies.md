@@ -37,33 +37,42 @@ excluded code generator (`gen/Main.hs`) — not by anything under `src/` or
 be covered directly by Lean's `System.FilePath` core module (no import needed, per
 AGENTS.md's stdlib-substitution rule).
 
-**Not yet imported — need their own `docs/imports/<library>/dependencies.md` first,
-per AGENTS.md's recursive rule, before the `CDP` modules that use them can be
-ported:**
+`monad-loops` and `random` are imported by nearly every module in `src/` (leftover
+from the code generator's shared per-domain template) but **not one function from
+either is ever called** — verified by grepping the whole `src/` tree for every
+public name each exports (`whileM`/`untilM`/`iterateUntilM`/… and
+`randomRIO`/`getStdGen`/`StdGen`/…): zero non-import hits. Both are dead
+dependencies of the upstream library and are skipped entirely (nothing to import,
+per AGENTS.md's "check whether it already exists"/only-port-what's-needed spirit —
+this also matches how `random`'s functionality is separately already covered by
+Lean's own `Init.Data.Random`, so it would have been redundant regardless).
 
-- `monad-loops` (`Control.Monad.Loops`)
-- `network-uri` (`Network.URI`) — distinct from the already-ported
+**Now imported** (was the one real prerequisite, per AGENTS.md's recursive rule —
+see [`../network-uri/dependencies.md`](../network-uri/dependencies.md)):
+
+- `network-uri` (`Network.URI`, ported to `Linen/Network/URI.lean`) — genuinely used by `CDP.Endpoints`
+  (`parseURI`/`uriAuthority`/`uriPort`/`uriRegName`/`uriPath`, to pull host/port/path
+  out of the browser's debugger URL). Distinct from the already-ported
   `HttpTypes.Network.HTTP.Types.URI` (query-string/URL-encoding only, not full
-  RFC 3986 URI parsing)
-- `random` (`System.Random`)
+  RFC 3986 URI parsing).
 
 ## Topologically sorted modules
 
-1. `CDP.Definition`
-2. `CDP.Internal.Utils`
-3. `CDP.Domains.CacheStorage`
-4. `CDP.Domains.Cast`
-5. `CDP.Domains.DOMStorage`
-6. `CDP.Domains.Database`
-7. `CDP.Domains.DeviceOrientation`
-8. `CDP.Domains.EventBreakpoints`
-9. `CDP.Domains.HeadlessExperimental`
-10. `CDP.Domains.Input`
-11. `CDP.Domains.Inspector`
-12. `CDP.Domains.Media`
-13. `CDP.Domains.Memory`
-14. `CDP.Domains.Performance`
-15. `CDP.Domains.Runtime`
+<!-- 1. `CDP.Definition` -->
+<!-- 2. `CDP.Internal.Utils` -->
+<!-- 3. `CDP.Domains.CacheStorage` -->
+<!-- 4. `CDP.Domains.Cast` -->
+<!-- 5. `CDP.Domains.DOMStorage` -->
+<!-- 6. `CDP.Domains.Database` -->
+<!-- 7. `CDP.Domains.DeviceOrientation` -->
+<!-- 8. `CDP.Domains.EventBreakpoints` -->
+<!-- 9. `CDP.Domains.HeadlessExperimental` -->
+<!-- 10. `CDP.Domains.Input` -->
+<!-- 11. `CDP.Domains.Inspector` -->
+<!-- 12. `CDP.Domains.Media` -->
+<!-- 13. `CDP.Domains.Memory` -->
+<!-- 14. `CDP.Domains.Performance` -->
+<!-- 15. `CDP.Domains.Runtime` -->
 16. `CDP.Domains.Debugger`
 17. `CDP.Domains.HeapProfiler`
 18. `CDP.Domains.IO`
