@@ -1,7 +1,7 @@
 /-
   Tests for `Linen.Control.Monad.IO.Unlift`.
 
-  Mirrors Hale's own `Tests/UnliftIO/TestUnliftIO.lean` coverage: the `IO`
+  Mirrors the upstream `unliftio` package's own test coverage: the `IO`
   instance, the `ReaderT r IO` instance (environment capture/preservation),
   and `toIO`. All are IO-effectful, so checked with `#eval`.
 -/

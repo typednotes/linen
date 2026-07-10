@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebApp.Server.TLS.Internal — Internal TLS types
 
-  Ports Hale's `Network.Wai.Handler.WarpTLS.Internal`. Currently a pure
+  Ports `Network.Wai.Handler.WarpTLS.Internal`. Currently a pure
   re-export of `Network.WebApp.Server.TLS` for advanced usage; carries no
   additional content of its own.
 -/

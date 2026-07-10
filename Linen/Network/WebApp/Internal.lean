@@ -5,7 +5,7 @@
 
   ## Design
 
-  Ports Hale's `Network.Wai.Internal` (itself mirroring Haskell's
+  Ports `Network.Wai.Internal` (itself mirroring Haskell's
   `Network.Wai.Internal`), renamed from the Haskell-specific acronym `WAI`
   to `WebApp` per this project's naming convention of adapting identifiers
   to read as idiomatic Lean rather than mirroring the source project's

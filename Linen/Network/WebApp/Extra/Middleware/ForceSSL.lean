@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebApp.Extra.Middleware.ForceSSL — redirect HTTP to HTTPS
 
-  Ports Hale's `Network.Wai.Middleware.ForceSSL`.
+  Ports `Network.Wai.Middleware.ForceSSL`.
 -/
 import Linen.Network.WebApp
 

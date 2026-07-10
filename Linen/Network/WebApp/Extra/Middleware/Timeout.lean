@@ -3,7 +3,7 @@
 
   Enforces a timeout on request processing. If the inner application takes
   longer than the specified duration, returns 503 Service Unavailable.
-  Ports Hale's `Network.Wai.Middleware.Timeout`.
+  Ports `Network.Wai.Middleware.Timeout`.
 -/
 import Linen.Network.WebApp
 import Linen.Control.Concurrent.Green

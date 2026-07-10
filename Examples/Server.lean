@@ -1,6 +1,6 @@
 /-
   Examples.Server — `Network.WebApp.Server`, the concurrent HTTP/1.1 engine
-  ported from Hale's `Warp` (renamed to fit this project's naming
+  ported from the `warp` Hackage package (renamed to fit this project's naming
   convention: `Network.Wai.Handler.Warp` → `Network.WebApp.Server`).
 
   Where `Examples.WebApp` drives its `Application` over a hand-rolled,

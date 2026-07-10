@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebApp.Server.Settings — Server configuration
 
-  Ports Hale's `Network.Wai.Handler.Warp.Settings`.
+  Ports `Network.Wai.Handler.Warp.Settings`.
 
   ## Design
 

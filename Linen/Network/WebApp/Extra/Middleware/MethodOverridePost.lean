@@ -3,7 +3,7 @@
   from a POST body
 
   For POST requests, reads the `_method` parameter from the URL-encoded
-  body. Ports Hale's `Network.Wai.Middleware.MethodOverridePost`.
+  body. Ports `Network.Wai.Middleware.MethodOverridePost`.
 -/
 import Linen.Network.WebApp
 

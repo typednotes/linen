@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.StripHeaders — remove specified
   headers from responses
 
-  Ports Hale's `Network.Wai.Middleware.StripHeaders`.
+  Ports `Network.Wai.Middleware.StripHeaders`.
 -/
 import Linen.Network.WebApp
 

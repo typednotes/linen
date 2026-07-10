@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebApp.Extra.Middleware.Local — restrict access to localhost
 
-  Ports Hale's `Network.Wai.Middleware.Local`.
+  Ports `Network.Wai.Middleware.Local`.
 -/
 import Linen.Network.WebApp
 

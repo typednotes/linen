@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.Push.Referer.LRU — LRU cache for push
   predictions
 
-  Ports Hale's `Network.Wai.Middleware.Push.Referer.LRU`. Simple LRU cache
+  Ports `Network.Wai.Middleware.Push.Referer.LRU`. Simple LRU cache
   backed by a list. Evicts the least recently used entry when the cache is
   full.
 

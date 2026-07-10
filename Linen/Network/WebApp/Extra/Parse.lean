@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebApp.Extra.Parse — request body parsing
 
-  Parses URL-encoded form data from request bodies. Ports Hale's
+  Parses URL-encoded form data from request bodies. Ports
   `Network.Wai.Parse` (whose multipart branch and percent-decoding were
   already `TODO` stubs there — ported as-is, no new stubs introduced here).
 -/
@@ -29,7 +29,7 @@ inductive BackEnd where
   | tempFile (dir : String)
 
 /-- Percent-decode a `+`-for-space encoded token (full `%XX` decoding is not
-    yet implemented, matching Hale's source). -/
+    yet implemented, matching the upstream source). -/
 private def urlDecode (s : String) : String :=
   s.map fun c => if c == '+' then ' ' else c
 
@@ -45,7 +45,7 @@ def parseUrlEncoded (body : String) : List Param :=
 
 /-- Parse request body parameters. For URL-encoded bodies, parses directly;
     multipart bodies are not yet parsed (returns no params/files), matching
-    Hale's source. Returns `(params, files)`.
+    the upstream source. Returns `(params, files)`.
     $$\text{parseRequestBody} : \text{Request} \to \text{IO}(\text{List Param} \times \text{List}(\text{String} \times \text{FileInfo}))$$ -/
 def parseRequestBody (req : Request) : IO (List Param × List (String × FileInfo)) := do
   let body ← Network.WebApp.getRequestBodyChunk req

@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.Push.Referer.ParseURL — URL parsing
   for push middleware
 
-  Ports Hale's `Network.Wai.Middleware.Push.Referer.ParseURL`. Extracts path
+  Ports `Network.Wai.Middleware.Push.Referer.ParseURL`. Extracts path
   components from Referer header values for push prediction.
 -/
 namespace Network.WebApp.Extra.Middleware.Push.Referer

@@ -41,16 +41,24 @@ When importing external code into the library — designated by a **local path**
 or a **GitHub link** (e.g. a Haskell package, another Lean project, or a single
 module):
 
-- **Replace every concept that has a Lean standard-library equivalent** with that
-  equivalent, and adapt the surrounding code accordingly. Do not port a bespoke
-  copy of something the stdlib already provides. Examples: use `Id` for the
-  identity monad, `Option`/`Except` rather than re-declared `Maybe`/`Either`,
-  `· >=> ·` / `· <=< ·` for Kleisli composition, `List.foldlM` for `foldM`,
-  `Functor.discard` for `void`. Only keep what the stdlib genuinely lacks.
+- **Before porting anything, check whether it already exists** — either as a Lean
+  standard-library equivalent, or as something `linen` itself already ported
+  (search `Linen/` first). Do not port a bespoke copy of something the stdlib
+  or `linen` already provides; import/reuse the existing definition instead.
+  Stdlib examples: use `Id` for the identity monad, `Option`/`Except` rather
+  than re-declared `Maybe`/`Either`, `· >=> ·` / `· <=< ·` for Kleisli
+  composition, `List.foldlM` for `foldM`, `Functor.discard` for `void`. Only
+  add what neither the stdlib nor `linen` already has.
 - **Follow Lean standard-library principles for the module hierarchy and
   namespaces.** Place modules and choose namespaces the way the Lean stdlib
   would (e.g. `Data.…`, `Control.…`, `System.…`), not by mirroring the source
   project's layout or naming. Adapt identifiers to Lean naming conventions.
+- **Lean-ify names that reference Haskell/GHC itself.** If a package, module,
+  or identifier is named after Haskell-the-language or a GHC-specific concept
+  (e.g. a `-hs` suffix, `GHC.*`, a name that only makes sense relative to
+  Haskell), rename it to something Lean-appropriate instead of carrying the
+  Haskell branding over — the same treatment as any other naming adaptation
+  (e.g. `WaiAppStatic` → `WebApp.Static`, `Warp` → `Server`).
 - After substitution, the result should read as idiomatic Lean built on the
   standard library — and still satisfy every rule below (tests, no `partial`,
   no `sorry`).

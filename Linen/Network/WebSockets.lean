@@ -4,7 +4,7 @@
   Aggregates the WebSocket protocol modules: connection/frame types, frame
   encoding/decoding, the upgrade handshake, and the high-level connection API.
 
-  Ports Hale's `Network.WebSockets` package aggregator.
+  Ports `Network.WebSockets` package aggregator.
 -/
 import Linen.Network.WebSockets.Types
 import Linen.Network.WebSockets.Frame

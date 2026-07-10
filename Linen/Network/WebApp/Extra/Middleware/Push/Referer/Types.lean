@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebApp.Extra.Middleware.Push.Referer.Types — HTTP/2 push types
 
-  Ports Hale's `Network.Wai.Middleware.Push.Referer.Types`. Types for the
+  Ports `Network.Wai.Middleware.Push.Referer.Types`. Types for the
   referer-based HTTP/2 server push prediction system.
 -/
 namespace Network.WebApp.Extra.Middleware.Push.Referer

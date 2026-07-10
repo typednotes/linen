@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.Vhost — virtual host routing
 
   Routes requests to different applications based on the Host header. Ports
-  Hale's `Network.Wai.Middleware.Vhost`.
+   `Network.Wai.Middleware.Vhost`.
 -/
 import Linen.Network.WebApp
 

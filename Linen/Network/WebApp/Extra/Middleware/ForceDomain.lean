@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.ForceDomain — redirect to a
   canonical domain
 
-  Ports Hale's `Network.Wai.Middleware.ForceDomain`.
+  Ports `Network.Wai.Middleware.ForceDomain`.
 -/
 import Linen.Network.WebApp
 

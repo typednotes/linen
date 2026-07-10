@@ -4,14 +4,14 @@
   Run a WAI Application on a free port for testing.
   The server is automatically shut down after the action completes.
 
-  Ports Hale's `Network.Wai.Handler.Warp.WithApplication`.
+  Ports `Network.Wai.Handler.Warp.WithApplication`.
 
   ## Guarantees
   - Server is always cleaned up (via try/finally)
   - Port is chosen by the OS (no conflicts), and the actual bound port is
     read back via `getSockName` and handed to `action` (binding with port 0
     but reporting the literal `0` back would defeat the purpose of this
-    helper — this is a correctness fix over the Hale source, using the
+    helper — this is a correctness fix over the upstream source, using the
     `getSockName` primitive already available in Linen)
   - Action runs only after server is listening
 -/

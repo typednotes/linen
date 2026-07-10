@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebSockets.Handshake — WebSocket upgrade handshake (RFC 6455 §4)
 
-  Ports Hale's `Network.WebSockets.Handshake`.
+  Ports `Network.WebSockets.Handshake`.
 
   The WebSocket handshake uses SHA-1 hash of the client's key concatenated
   with a magic GUID, Base64-encoded.

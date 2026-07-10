@@ -3,7 +3,7 @@
   response headers
 
   Combines response headers with the same name, joining values with commas.
-  Ports Hale's `Network.Wai.Middleware.CombineHeaders`.
+  Ports `Network.Wai.Middleware.CombineHeaders`.
 -/
 import Linen.Network.WebApp
 

@@ -3,7 +3,7 @@
 
   Upgrade `Network.WebApp` requests to WebSocket connections.
 
-  Ports Hale's `Network.Wai.Handler.WebSockets`, renamed from the
+  Ports `Network.Wai.Handler.WebSockets`, renamed from the
   Haskell-specific `WaiWebSockets` to `Server.WebSockets` per this project's
   naming convention.
 -/

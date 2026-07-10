@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebApp.Extra.Middleware.HttpAuth — HTTP Basic Authentication
 
-  Ports Hale's `Network.Wai.Middleware.HttpAuth`.
+  Ports `Network.Wai.Middleware.HttpAuth`.
 -/
 import Linen.Network.WebApp
 import Linen.Data.Base64

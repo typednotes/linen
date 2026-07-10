@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.EventSource — Server-Sent Events (SSE)
 
   Implements the W3C Server-Sent Events protocol, compatible with the
-  JavaScript `EventSource` API. Ports Hale's `Network.Wai.EventSource`.
+  JavaScript `EventSource` API. Ports `Network.Wai.EventSource`.
 -/
 import Linen.Network.WebApp
 

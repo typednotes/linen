@@ -6,7 +6,7 @@
   static files based on `StaticSettings`, and `static` as a convenience
   for filesystem-backed serving.
 
-  Ports Hale's `Network.Wai.Application.Static`.
+  Ports `Network.Wai.Application.Static`.
 
   ## Design
 
@@ -16,7 +16,7 @@
 
   ## Totality
 
-  Hale's `tryIndices` is a `private partial def`, but it is already
+  `wai-app-static`'s `tryIndices` is a `private partial def`, but it is already
   structurally recursive on the shrinking `List Piece` of remaining index
   names to try — no `partial` is needed; it is ported here as a plain
   pattern-matching `def`.

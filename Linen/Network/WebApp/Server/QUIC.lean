@@ -5,7 +5,7 @@
   Analogous to `Network.WebApp.Server` for HTTP/1.1+HTTP/2 over TCP, but uses
   QUIC/HTTP/3.
 
-  Ports Hale's `Network.Wai.Handler.WarpQUIC`, renamed from the
+  Ports `Network.Wai.Handler.WarpQUIC`, renamed from the
   Haskell-specific `WarpQUIC` to `Server.QUIC` per this project's naming
   convention (matching `Network.QUIC.Server`).
 

@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.Jsonp — JSONP (JSON with Padding)
 
   Wraps JSON responses in a callback function for cross-origin requests.
-  Ports Hale's `Network.Wai.Middleware.Jsonp`.
+  Ports `Network.Wai.Middleware.Jsonp`.
 -/
 import Linen.Network.WebApp
 

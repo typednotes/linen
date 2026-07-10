@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.ValidateHeaders — validate response
   headers
 
-  Ensures response headers conform to HTTP specifications. Ports Hale's
+  Ensures response headers conform to HTTP specifications. Ports
   `Network.Wai.Middleware.ValidateHeaders`.
 -/
 import Linen.Network.WebApp

@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.Push.Referer — HTTP/2 server push via
   referer prediction
 
-  Ports Hale's `Network.Wai.Middleware.Push.Referer`. Watches Referer headers
+  Ports `Network.Wai.Middleware.Push.Referer`. Watches Referer headers
   to learn which resources are commonly requested together with a page, then
   suggests them for HTTP/2 server push.
 

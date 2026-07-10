@@ -80,8 +80,8 @@ example (a b c : ReqOption .Http) :
 
 /-! ### `req`'s `HttpBodyAllowed` obligation
 
-    `req`'s full IO roundtrip isn't exercised here, matching Hale's own
-    upstream test suite: it needs real network access. But the compile-time
+    `req`'s full IO roundtrip isn't exercised here, matching the upstream
+    project's own test suite: it needs real network access. But the compile-time
     obligation — that `req` type-checks for a method/body pair exactly when
     `HttpBodyAllowed` allows it — is exercised directly below. -/
 

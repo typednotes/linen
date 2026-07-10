@@ -1,6 +1,6 @@
-# `Hale.TLS` module dependencies
+# `TLS` module dependencies
 
-Topological order of every module of the `TLS` Hackage package as vendored under [`Hale.TLS`](../../../../hale/Hale/TLS) (derived from `import Hale.*` statements; see [`../module-dependencies.dot`](../module-dependencies.dot) for the full cross-package graph).
+Topological order of every module of the `TLS` Hackage package imported into `linen`, per [AGENTS.md](../../../AGENTS.md)'s Hackage-import convention.
 
 An edge **A → B** means *module A imports module B*, so **B must be built before A**.
 
@@ -8,7 +8,7 @@ An edge **A → B** means *module A imports module B*, so **B must be built befo
 
 All modules below are ported (or covered by the stdlib) — kept commented out as a completed checklist.
 
-<!-- 1. `Hale.TLS.Network.TLS.Types` -->
-<!-- 2. `Hale.TLS.Network.TLS.Context` -->
-<!-- 3. `Hale.TLS` -->
+<!-- 1. `Network.TLS.Types` -->
+<!-- 2. `Network.TLS.Context` -->
+<!-- 3. *(`TLS` package root — no upstream module; covered by `linen`'s own root)* -->
 

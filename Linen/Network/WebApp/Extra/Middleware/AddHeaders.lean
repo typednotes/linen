@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.AddHeaders — add headers to every
   response
 
-  Ports Hale's `Network.Wai.Middleware.AddHeaders`.
+  Ports `Network.Wai.Middleware.AddHeaders`.
 -/
 import Linen.Network.WebApp
 

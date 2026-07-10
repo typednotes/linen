@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebApp.Extra.Header — request header convenience queries
 
-  Ports Hale's `Network.Wai.Header`.
+  Ports `Network.Wai.Header`.
 -/
 import Linen.Network.WebApp
 

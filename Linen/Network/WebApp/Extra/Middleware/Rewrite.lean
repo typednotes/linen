@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebApp.Extra.Middleware.Rewrite — URL rewriting
 
-  Rewrites request paths based on custom rules. Ports Hale's
+  Rewrites request paths based on custom rules. Ports
   `Network.Wai.Middleware.Rewrite`.
 -/
 import Linen.Network.WebApp

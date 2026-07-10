@@ -11,7 +11,7 @@
 
   Lean 4 core has no portable wall-clock/epoch-time accessor, only
   `IO.monoNanosNow` (monotonic, not calendar time). This module preserves
-  Hale's own honest placeholder — an epoch-seconds string derived from the
+  the upstream's own honest placeholder — an epoch-seconds string derived from the
   monotonic clock — rather than dressing it up with fake-precision RFC 7231
   calendar formatting that the underlying clock cannot actually back, matching
   this project's established convention (e.g. `Data.Time.Clock.getCurrentTime`,

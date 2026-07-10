@@ -4,7 +4,7 @@
   Public API. Re-exports the core types from `Network.WebApp.Internal` and
   provides convenience functions.
 
-  Ports Hale's `Network.Wai`, renamed from the Haskell-specific acronym
+  Ports `Network.Wai`, renamed from the Haskell-specific acronym
   `WAI` to `WebApp` per this project's naming convention.
 
   ## Design
@@ -79,7 +79,7 @@ def requestHeader (name : HeaderName)
     **Warning:** This consumes the request body. Future calls return empty.
     Consider using `getRequestBodyChunk` for streaming when possible.
 
-    Hale's original is a `partial def` (an unbounded chunk-reading loop with
+    The upstream original is a `partial def` (an unbounded chunk-reading loop with
     no decreasing measure to prove termination against — the `IO ByteArray`
     action can in principle keep returning nonempty chunks forever). Here the
     same unbounded reading is expressed as a `while` loop over local mutable

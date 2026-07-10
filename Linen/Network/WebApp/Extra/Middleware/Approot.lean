@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.Approot — application root detection
 
   Detects the application root URL from headers or configuration. Ports
-  Hale's `Network.Wai.Middleware.Approot`.
+   `Network.Wai.Middleware.Approot`.
 -/
 import Linen.Network.WebApp
 

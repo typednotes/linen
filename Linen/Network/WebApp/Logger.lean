@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Logger — WebApp request/response logging
 
   Formats HTTP request/response data in Apache Combined Log Format.
-  Ports Hale's `Network.Wai.Logger`.
+  Ports `Network.Wai.Logger`.
 
   ## Format
 

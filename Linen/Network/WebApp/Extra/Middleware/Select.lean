@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.Select — conditionally apply a
   middleware
 
-  Ports Hale's `Network.Wai.Middleware.Select`.
+  Ports `Network.Wai.Middleware.Select`.
 -/
 import Linen.Network.WebApp
 

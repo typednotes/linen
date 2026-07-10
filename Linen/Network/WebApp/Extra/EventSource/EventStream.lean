@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebApp.Extra.EventSource.EventStream — SSE event stream framing
 
-  Ports Hale's `Network.Wai.EventSource.EventStream`.
+  Ports `Network.Wai.EventSource.EventStream`.
 -/
 import Linen.Network.WebApp.Extra.EventSource
 

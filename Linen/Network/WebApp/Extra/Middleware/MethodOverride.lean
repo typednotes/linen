@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.MethodOverride — override HTTP
   method from the query string
 
-  Ports Hale's `Network.Wai.Middleware.MethodOverride`.
+  Ports `Network.Wai.Middleware.MethodOverride`.
 -/
 import Linen.Network.WebApp
 

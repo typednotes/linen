@@ -5,7 +5,7 @@
   project's naming convention (matching `Network.HTTP2.Server`,
   `Network.HTTP3.Server`, `Network.QUIC.Server`).
 
-  Ports Hale's `Network.Wai.Handler.Warp` (package root).
+  Ports `Network.Wai.Handler.Warp` (package root).
 -/
 import Linen.Network.WebApp.Server.Types
 import Linen.Network.WebApp.Server.Internal

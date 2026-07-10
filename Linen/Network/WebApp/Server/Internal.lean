@@ -4,7 +4,7 @@
   This module exposes internal types for downstream packages (Server.TLS,
   Server.QUIC). Application code should use `Network.WebApp.Server` instead.
 
-  Ports Hale's `Network.Wai.Handler.Warp.Internal`.
+  Ports `Network.Wai.Handler.Warp.Internal`.
 -/
 import Linen.Network.WebApp.Server.Types
 import Linen.Network.WebApp.Server.Settings

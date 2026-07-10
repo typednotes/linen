@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.RequestLogger.JSON — JSON request
   logging
 
-  Ports Hale's `Network.Wai.Middleware.RequestLogger.JSON`.
+  Ports `Network.Wai.Middleware.RequestLogger.JSON`.
 -/
 import Linen.Network.WebApp
 import Linen.System.Log.FastLogger

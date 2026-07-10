@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebSockets.Types — WebSocket protocol types (RFC 6455)
 
-  Ports Hale's `Network.WebSockets.Types`.
+  Ports `Network.WebSockets.Types`.
 
   ## Guarantees
   - Opcode is bounded to 4 bits (0-15)

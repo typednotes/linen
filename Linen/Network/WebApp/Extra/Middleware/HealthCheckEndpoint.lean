@@ -3,7 +3,7 @@
   check endpoint
 
   Adds a health check endpoint at the specified path that returns 200 OK.
-  Ports Hale's `Network.Wai.Middleware.HealthCheckEndpoint`.
+  Ports `Network.Wai.Middleware.HealthCheckEndpoint`.
 -/
 import Linen.Network.WebApp
 

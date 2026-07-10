@@ -5,7 +5,7 @@
   which provides transport-agnostic I/O operations (TCP, TLS, QUIC all implement
   the same interface).
 
-  Ports Hale's `Network.Wai.Handler.Warp.Types`, renamed from the
+  Ports `Network.Wai.Handler.Warp.Types`, renamed from the
   Haskell-specific `Warp` to `Server` per this project's naming convention
   (matching `Network.HTTP2.Server`/`Network.HTTP3.Server`/`Network.QUIC.Server`).
 

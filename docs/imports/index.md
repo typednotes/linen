@@ -1,15 +1,10 @@
-# Hale import index
+# Hackage import index
 
-`Hale` is a personal umbrella of Hackage packages vendored under [`Hale/`](../../../hale/Hale) and imported into `linen` one package at a time, per [AGENTS.md](../../AGENTS.md)'s Hackage-import convention. This file lists the 56 packages in **topological order** (a package appears only after every package it depends on); each links to its own module-level dependency list.
-
-The root `Hale.lean` aggregator (which imports all packages below) has no dedicated `linen` counterpart — `Linen.lean` already plays that role.
-
-The full cross-package module graph is in [`module-dependencies.dot`](module-dependencies.dot) / [`module-dependencies.svg`](module-dependencies.svg); regenerate everything on this page with:
-
-```sh
-python3 docs/depgraph.py            # rebuild per-package dependencies.md + index.md + .dot
-dot -Tsvg docs/imports/module-dependencies.dot -o docs/imports/module-dependencies.svg
-```
+This file indexes every Hackage package imported into `linen`, per
+[AGENTS.md](../../AGENTS.md)'s Hackage-import convention: each package gets its own
+`docs/imports/<package>/dependencies.md` topologically-ordered module list. Packages
+below are listed in **topological order** (a package appears only after every package
+it depends on).
 
 ## Packages
 
@@ -69,4 +64,7 @@ dot -Tsvg docs/imports/module-dependencies.dot -o docs/imports/module-dependenci
 54. [`WebSockets`](WebSockets/dependencies.md) (done) — 5 module(s)
 55. [`WaiWebSockets`](WaiWebSockets/dependencies.md) (done) — 2 module(s)
 56. [`Word8`](Word8/dependencies.md) (done) — 2 module(s)
-
+57. [`cdp`](cdp/dependencies.md) — Chrome DevTools Protocol client
+    ([source](https://github.com/arsalan0c/cdp-hs)). Blocked on 3 new prerequisite
+    packages not yet imported: `monad-loops`, `network-uri`, `random` (see
+    [`cdp/dependencies.md`](cdp/dependencies.md) for details).

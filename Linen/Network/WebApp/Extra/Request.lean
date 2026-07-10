@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebApp.Extra.Request — request convenience queries
 
-  Ports Hale's `Network.Wai.Request`.
+  Ports `Network.Wai.Request`.
 -/
 import Linen.Network.WebApp
 

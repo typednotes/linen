@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebSockets.Connection — WebSocket connection management
 
-  Ports Hale's `Network.WebSockets.Connection`.
+  Ports `Network.WebSockets.Connection`.
 
   High-level API for sending/receiving WebSocket messages.
 -/

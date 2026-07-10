@@ -1,12 +1,12 @@
 /-
   Examples.Recv — `Network.Socket.Blocking`'s retry-loop wrappers end-to-end.
 
-  Hale's `recv` package (`Hale.Recv.Network.Socket.Recv`) is a pair of thin
+  The `recv` Hackage package (`Network.Socket.Recv`) is a pair of thin
   wrappers — `recv`/`recvString` — around a blocking-style socket `recv`. That
   functionality already exists in `linen` as
-  `Network.Socket.Blocking.recv` (see `docs/depgraph.py`, where the Hale
-  module is marked a duplicate rather than re-ported), so this demo exercises
-  that module directly instead of a redundant copy:
+  `Network.Socket.Blocking.recv` (see `docs/imports/Recv/dependencies.md`,
+  where it is marked a duplicate rather than re-ported), so this demo
+  exercises that module directly instead of a redundant copy:
 
   * a background `Task` blocks in `Blocking.accept` and then loops in
     `Blocking.recv`, echoing every chunk back with `Blocking.sendAll`, until

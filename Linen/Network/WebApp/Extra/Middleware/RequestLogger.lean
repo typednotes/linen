@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.RequestLogger — HTTP request logging
 
   Logs HTTP requests to a configurable destination (stdout, file, etc.) in
-  Apache Combined Log Format or a developer-friendly format. Ports Hale's
+  Apache Combined Log Format or a developer-friendly format. Ports
   `Network.Wai.Middleware.RequestLogger`.
 -/
 import Linen.Network.WebApp

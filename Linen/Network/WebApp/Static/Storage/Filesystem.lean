@@ -5,7 +5,7 @@
   Provides `defaultFileServerSettings` which creates a `StaticSettings`
   that reads files from a given root directory on the filesystem.
 
-  Ports Hale's `WaiAppStatic.Storage.Filesystem`.
+  Ports `WaiAppStatic.Storage.Filesystem`.
 
   ## Design
 

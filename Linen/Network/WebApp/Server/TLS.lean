@@ -4,7 +4,7 @@
   Provides TLS (HTTPS) support for the server using OpenSSL via FFI.
   Uses the EventDispatcher and Green monad for non-blocking I/O.
 
-  Ports Hale's `Network.Wai.Handler.WarpTLS`, renamed from the
+  Ports `Network.Wai.Handler.WarpTLS`, renamed from the
   Haskell-specific `WarpTLS` to `Server.TLS` per this project's naming
   convention.
 

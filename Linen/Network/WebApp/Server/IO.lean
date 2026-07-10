@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebApp.Server.IO — Low-level I/O helpers
 
-  Ports Hale's `Network.Wai.Handler.Warp.IO`.
+  Ports `Network.Wai.Handler.Warp.IO`.
 -/
 import Linen.Network.WebApp.Server.Types
 

@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.AcceptOverride — override Accept
   header from the query string
 
-  Ports Hale's `Network.Wai.Middleware.AcceptOverride`.
+  Ports `Network.Wai.Middleware.AcceptOverride`.
 -/
 import Linen.Network.WebApp
 

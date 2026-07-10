@@ -1,6 +1,6 @@
-# `Hale.FastLogger` module dependencies
+# `FastLogger` module dependencies
 
-Topological order of every module of the `FastLogger` Hackage package as vendored under [`Hale.FastLogger`](../../../../hale/Hale/FastLogger) (derived from `import Hale.*` statements; see [`../module-dependencies.dot`](../module-dependencies.dot) for the full cross-package graph).
+Topological order of every module of the `FastLogger` Hackage package imported into `linen`, per [AGENTS.md](../../../AGENTS.md)'s Hackage-import convention.
 
 An edge **A → B** means *module A imports module B*, so **B must be built before A**.
 
@@ -8,6 +8,6 @@ An edge **A → B** means *module A imports module B*, so **B must be built befo
 
 All modules below are ported (or covered by the stdlib) — kept commented out as a completed checklist.
 
-<!-- 1. `Hale.FastLogger.System.Log.FastLogger` -->
-<!-- 2. `Hale.FastLogger` -->
+<!-- 1. `System.Log.FastLogger` -->
+<!-- 2. *(`FastLogger` package root — no upstream module; covered by `linen`'s own root)* -->
 

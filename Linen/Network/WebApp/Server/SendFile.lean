@@ -4,7 +4,7 @@
   Dispatches file sending through the `Connection`'s `connSendFile`, which may
   use sendfile(2) or read+send depending on the transport.
 
-  Ports Hale's `Network.Wai.Handler.Warp.SendFile`.
+  Ports `Network.Wai.Handler.Warp.SendFile`.
 -/
 import Linen.Network.WebApp.Server.Types
 

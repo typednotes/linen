@@ -5,7 +5,7 @@
   4KB chunks and scans for CRLF entirely in C, eliminating per-byte
   syscall overhead.
 
-  Ports Hale's `Network.Wai.Handler.Warp.Request`.
+  Ports `Network.Wai.Handler.Warp.Request`.
 
   ## Design
 

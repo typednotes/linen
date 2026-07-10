@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.CleanPath — normalize URL paths
 
   Removes double slashes and trailing slashes from request paths,
-  redirecting to the canonical form. Ports Hale's
+  redirecting to the canonical form. Ports
   `Network.Wai.Middleware.CleanPath`.
 -/
 import Linen.Network.WebApp

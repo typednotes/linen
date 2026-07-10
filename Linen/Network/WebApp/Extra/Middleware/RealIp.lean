@@ -3,7 +3,7 @@
   from proxy headers
 
   Updates `remoteHost` based on `X-Forwarded-For`/`X-Real-IP` headers. Ports
-  Hale's `Network.Wai.Middleware.RealIp`.
+   `Network.Wai.Middleware.RealIp`.
 -/
 import Linen.Network.WebApp
 

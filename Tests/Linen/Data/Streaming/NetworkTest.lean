@@ -57,7 +57,7 @@ namespace Tests.Data.Streaming.Network
   unless reply == "hi!".toUTF8 do
     throw (IO.userError s!"runTCPServer echo expected 'hi!', got {String.fromUTF8! reply}")
   -- runTCPServer loops forever; the background task is left running for the
-  -- process lifetime (there is no `stop`), matching Hale's original design.
+  -- process lifetime (there is no `stop`), matching the original upstream design.
   unless (← IO.hasFinished serverTask) == false do
     throw (IO.userError "runTCPServer's accept loop should not have exited")
 

@@ -36,8 +36,8 @@
   already-built value, see `Data.Conduit.Internal.Pipe`), these are
   genuinely unbounded producer/consumer loops with no decreasing measure —
   the same shape as Haskell's laziness-driven corecursion. There is no
-  proof of termination to give, so — matching the reference Hale port of
-  this package — the whole `ConduitT` layer is `unsafe`, rather than
+  proof of termination to give, so — matching the upstream `conduit`
+  package's own design — the whole `ConduitT` layer is `unsafe`, rather than
   reaching for a `partial def` (disallowed by project convention) or a
   fuel parameter that would falsify the streams' semantics.
 -/

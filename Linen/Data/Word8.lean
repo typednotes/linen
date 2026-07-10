@@ -1,7 +1,7 @@
 /-
   Linen.Data.Word8 -- UInt8 classification predicates and byte constants
 
-  Ports Hale's `Data.Word8`, itself a port of Haskell's `Data.Word8` from the
+  Ports `Data.Word8`, itself a port of Haskell's `Data.Word8` from the
   `word8` package.
   https://hackage.haskell.org/package/word8-0.1.3/docs/Data-Word8.html
 

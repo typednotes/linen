@@ -1,6 +1,6 @@
-# `Hale.QUIC` module dependencies
+# `QUIC` module dependencies
 
-Topological order of every module of the `QUIC` Hackage package as vendored under [`Hale.QUIC`](../../../../hale/Hale/QUIC) (derived from `import Hale.*` statements; see [`../module-dependencies.dot`](../module-dependencies.dot) for the full cross-package graph).
+Topological order of every module of the `QUIC` Hackage package imported into `linen`, per [AGENTS.md](../../../AGENTS.md)'s Hackage-import convention.
 
 An edge **A → B** means *module A imports module B*, so **B must be built before A**.
 
@@ -8,11 +8,11 @@ An edge **A → B** means *module A imports module B*, so **B must be built befo
 
 All modules below are ported (or covered by the stdlib) — kept commented out as a completed checklist.
 
-<!-- 1. `Hale.QUIC.Network.QUIC.Types` -->
-<!-- 2. `Hale.QUIC.Network.QUIC.Config` -->
-<!-- 3. `Hale.QUIC.Network.QUIC.Connection` -->
-<!-- 4. `Hale.QUIC.Network.QUIC.Client` -->
-<!-- 5. `Hale.QUIC.Network.QUIC.Server` -->
-<!-- 6. `Hale.QUIC.Network.QUIC.Stream` -->
-<!-- 7. `Hale.QUIC` -->
+<!-- 1. `Network.QUIC.Types` -->
+<!-- 2. `Network.QUIC.Config` -->
+<!-- 3. `Network.QUIC.Connection` -->
+<!-- 4. `Network.QUIC.Client` -->
+<!-- 5. `Network.QUIC.Server` -->
+<!-- 6. `Network.QUIC.Stream` -->
+<!-- 7. *(`QUIC` package root — no upstream module; covered by `linen`'s own root)* -->
 

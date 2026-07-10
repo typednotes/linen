@@ -4,7 +4,7 @@
   Renders status lines, headers, and dispatches on the `Response` type
   to send the appropriate body.
 
-  Ports Hale's `Network.Wai.Handler.Warp.Response`.
+  Ports `Network.Wai.Handler.Warp.Response`.
 
   ## Design
 

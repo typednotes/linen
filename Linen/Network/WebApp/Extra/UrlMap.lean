@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebApp.Extra.UrlMap — dispatch by path prefix
 
-  Ports Hale's `Network.Wai.UrlMap`.
+  Ports `Network.Wai.UrlMap`.
 -/
 import Linen.Network.WebApp
 

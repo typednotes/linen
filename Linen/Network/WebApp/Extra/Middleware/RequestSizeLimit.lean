@@ -3,7 +3,7 @@
   body size
 
   Rejects requests with bodies exceeding a specified size limit. Ports
-  Hale's `Network.Wai.Middleware.RequestSizeLimit`.
+   `Network.Wai.Middleware.RequestSizeLimit`.
 
   ## Guarantees
   - Bodies larger than the limit are never fully read into memory.

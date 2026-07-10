@@ -1,14 +1,14 @@
 /-
   Linen.Network.WebApp.Extra.Middleware.Gzip — gzip compression middleware
 
-  Ports Hale's `Network.Wai.Middleware.Gzip`. For now, passes through
+  Ports `Network.Wai.Middleware.Gzip`. For now, passes through
   without actual compression (full zlib FFI integration is deferred, as it
-  was in Hale's source).
+  was in the upstream source).
 
   ## Design
   - Checks `Accept-Encoding` for `"gzip"`.
   - Actual compression requires zlib FFI (not yet implemented, matching
-    Hale's own deferred TODO — no new stub is introduced here).
+    the upstream's own deferred TODO — no new stub is introduced here).
 -/
 import Linen.Network.WebApp
 
@@ -39,7 +39,7 @@ private def clientAcceptsGzip (req : Request) : Bool :=
 
 /-- Gzip middleware. Passes eligible responses through unchanged when the
     client accepts gzip — actual compression is deferred to a future zlib
-    integration, matching Hale's source.
+    integration, matching the upstream source.
     $$\text{gzip} : \text{GzipSettings} \to \text{Middleware}$$ -/
 def gzip (_settings : GzipSettings := {}) : Middleware :=
   fun app req respond =>

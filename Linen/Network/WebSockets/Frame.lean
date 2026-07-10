@@ -1,7 +1,7 @@
 /-
   Linen.Network.WebSockets.Frame — WebSocket frame encoding/decoding (RFC 6455 §5)
 
-  Ports Hale's `Network.WebSockets.Frame`.
+  Ports `Network.WebSockets.Frame`.
 
   ## Guarantees
   - Masking key is exactly 4 bytes (when present)

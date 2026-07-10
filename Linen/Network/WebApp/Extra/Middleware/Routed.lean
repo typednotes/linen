@@ -3,7 +3,7 @@
   routing
 
   Applies a middleware only to requests matching a path predicate. Ports
-  Hale's `Network.Wai.Middleware.Routed`.
+   `Network.Wai.Middleware.Routed`.
 -/
 import Linen.Network.WebApp
 

@@ -3,7 +3,7 @@
   to streaming
 
   Converts `.responseFile` responses into `.responseStream`, useful when the
-  server doesn't support `sendfile(2)`. Ports Hale's
+  server doesn't support `sendfile(2)`. Ports
   `Network.Wai.Middleware.StreamFile`.
 -/
 import Linen.Network.WebApp

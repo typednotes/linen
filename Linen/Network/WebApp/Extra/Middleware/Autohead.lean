@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.Autohead — automatically handle
   HEAD requests
 
-  Converts HEAD requests to GET and strips the response body. Ports Hale's
+  Converts HEAD requests to GET and strips the response body. Ports
   `Network.Wai.Middleware.Autohead`.
 -/
 import Linen.Network.WebApp

@@ -38,7 +38,7 @@ def recvUntilClosed (conn : Socket .connected) : IO ByteArray := do
 #eval show IO Unit from do
   withApplication (pure helloApp) fun port => do
     -- The reported port must be the OS-assigned one, not the literal 0
-    -- passed to `listenTCP` (Hale's bug, fixed here via `getSockName`).
+    -- passed to `listenTCP` (a source bug, fixed here via `getSockName`).
     assert! port != 0
     let client ← socket .inet .stream
     let connected ← Blocking.connect client { host := "127.0.0.1", port := port }

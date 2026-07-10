@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Test — WebApp testing utilities
 
   A simulated `Network.WebApp` environment for testing `Application`s
-  without a real network connection. Ports Hale's `Network.Wai.Test`.
+  without a real network connection. Ports `Network.Wai.Test`.
 -/
 import Linen.Network.WebApp
 import Linen.Control.Concurrent.Green

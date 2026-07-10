@@ -5,7 +5,7 @@
   chunked transfer encoding and known-length bodies. Handles leftover bytes
   from header parsing that belong to the body.
 
-  Ports Hale's `Network.Wai.Handler.Warp.Conduit`.
+  Ports `Network.Wai.Handler.Warp.Conduit`.
 
   ## Design
   - `ISource` wraps a `Source` with remaining byte count tracking

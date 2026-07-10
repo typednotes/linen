@@ -4,7 +4,7 @@
   Binds a TCP socket, accepts connections, and spawns a green thread per
   connection to handle HTTP requests.
 
-  Ports Hale's `Network.Wai.Handler.Warp.Run`.
+  Ports `Network.Wai.Handler.Warp.Run`.
 
   ## Design
 

@@ -2,7 +2,7 @@
   Linen.Network.WebApp.Extra.Middleware.Push.Referer.Manager — Push prediction
   manager
 
-  Ports Hale's `Network.Wai.Middleware.Push.Referer.Manager`. Manages the
+  Ports `Network.Wai.Middleware.Push.Referer.Manager`. Manages the
   referer-based push prediction table. Tracks which resources are commonly
   requested after a page load, and suggests them for push.
 -/

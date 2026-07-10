@@ -556,7 +556,7 @@ the project overview and quick start.
   claim path (falling back to the anonymous role), and `authenticate` ties
   it together into an `Except String AuthResult`. JWT signature validation
   is stubbed pending wiring to `Crypto.JOSE`, matching the equivalent point
-  in Hale's own port.
+  in the upstream `postgrest` project.
 - `PostgREST.Cache.Sieve` — the SIEVE cache eviction policy (scan-resistant,
   simpler than ARC): `SieveCache` holds entries in a circular buffer with a
   "hand" pointer; `create`/`lookup`/`insert`/`remove`/`size` manage the
@@ -832,7 +832,7 @@ the project overview and quick start.
 - `Network.WebApp.Extra.Middleware.ForceSSL` — redirect HTTP to HTTPS.
 - `Network.WebApp.Extra.Middleware.Gzip` — gzip `Accept-Encoding`
   negotiation (compression itself deferred pending zlib FFI, matching
-  Hale's own stub).
+  the upstream's own stub).
 - `Network.WebApp.Extra.Middleware.HealthCheckEndpoint` — a health-check
   endpoint that returns 200 OK without hitting the wrapped app.
 - `Network.WebApp.Extra.Middleware.HttpAuth` — HTTP Basic Authentication.

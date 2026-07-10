@@ -4,8 +4,8 @@
   Core types for static file serving. The key type is `Piece`, a refined
   path segment that prevents directory traversal attacks.
 
-  Ports Hale's `WaiAppStatic.Types`, under the renamed `WebApp.Static`
-  namespace (Hale's `WaiAppStatic` → `WebApp.Static`, matching this
+  Ports `WaiAppStatic.Types`, under the renamed `WebApp.Static`
+  namespace (`wai-app-static`'s `WaiAppStatic` → `WebApp.Static`, matching this
   project's `WAI → WebApp` rename).
 
   ## Guarantees
