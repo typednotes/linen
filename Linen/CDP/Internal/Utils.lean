@@ -48,7 +48,7 @@ inductive ProtocolError where
   | serverError (message : String)
   /-- An uncategorized error. -/
   | other (message : String)
-  deriving Repr, BEq, DecidableEq
+  deriving Repr, BEq, DecidableEq, Inhabited
 
 /-- Render a `ProtocolError` the way upstream's `Show` instance does. -/
 def ProtocolError.toString : ProtocolError → String

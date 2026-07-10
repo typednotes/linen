@@ -61,10 +61,10 @@ it depends on).
 51. [`Warp`](Warp/dependencies.md) (done) — 18 module(s)
 52. [`WarpQUIC`](WarpQUIC/dependencies.md) (done) — 2 module(s)
 53. [`WarpTLS`](WarpTLS/dependencies.md) (done) — 3 module(s)
-54. [`WebSockets`](WebSockets/dependencies.md) (done) — 5 module(s)
+54. [`WebSockets`](WebSockets/dependencies.md) (done) — 6 module(s)
 55. [`WaiWebSockets`](WaiWebSockets/dependencies.md) (done) — 2 module(s)
 56. [`Word8`](Word8/dependencies.md) (done) — 2 module(s)
 57. [`network-uri`](network-uri/dependencies.md) (done) — RFC 3986 URI parsing
     ([source](https://github.com/haskell/network-uri)), a prerequisite of `cdp`.
-58. [`cdp`](cdp/dependencies.md) — Chrome DevTools Protocol client
-    ([source](https://github.com/arsalan0c/cdp-hs)).
+58. [`cdp`](cdp/dependencies.md) (done) — Chrome DevTools Protocol client
+    ([source](https://github.com/arsalan0c/cdp-hs)), 45 module(s).

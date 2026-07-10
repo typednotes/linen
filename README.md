@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>271 modules</strong> · <strong>371 compile-time theorems</strong> · <strong>3464 <code>#guard</code> checks</strong>
+  <strong>317 modules</strong> · <strong>393 compile-time theorems</strong> · <strong>5511 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -77,6 +77,9 @@ for the full per-module feature list and module table.
 - **`PostgREST`** — a Lean port of PostgREST's request/response pipeline:
   API request parsing, config, schema cache introspection, query planning,
   auth, and OpenAPI generation.
+- **`CDP`** — a Chrome DevTools Protocol client: typed commands/events/types
+  for every protocol domain, plus a WebSocket-based runtime to connect to a
+  browser, send commands, and subscribe to events.
 - **`System.Console.Ansi` / `System.Exit` / `System.Log.FastLogger`** —
   terminal styling, process exit codes, and buffered logging.
 
@@ -105,7 +108,7 @@ open Data.Functor Control.Monad
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 271 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 317 modules).
 
 ## Build & Test
 

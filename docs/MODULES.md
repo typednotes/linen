@@ -958,6 +958,56 @@ convention.
   no SHA-1 in the Lean stdlib) — not production-ready as-is.
 - `Network.WebSockets.Connection` — `mkConnection`: frames outgoing
   text/binary/close/ping messages and auto-responds to incoming pings.
+- `Network.WebSockets.Client` — `runClient`: outbound (client-side)
+  connections, performing the RFC 6455 §4.1 opening handshake over a plain
+  TCP connection.
+
+### `CDP` — Chrome DevTools Protocol client
+
+A port of [`cdp-hs`](https://github.com/arsalan0c/cdp-hs) (see
+[`docs/imports/cdp/dependencies.md`](imports/cdp/dependencies.md)): typed
+commands/events/types for every CDP domain, plus a WebSocket-based runtime to
+connect to a browser, send commands, and subscribe to events.
+
+- `CDP.Definition` — the protocol's own JSON-Schema-style self-description
+  (`Domain`/`Command`/`Event`/`TypeDef`), as served by a live browser's
+  `/json/protocol` endpoint.
+- `CDP.Internal.Utils` — shared runtime scaffolding: `Config`/`Handle`,
+  `SessionId`/`CommandId`, `ProtocolError`, and the `Command`/`Event` classes
+  every domain module instantiates.
+- `CDP.Domains.CacheStorage` / `.Cast` / `.DOMStorage` / `.Database` /
+  `.DeviceOrientation` / `.EventBreakpoints` / `.HeadlessExperimental` /
+  `.Input` / `.Inspector` / `.Media` / `.Memory` / `.Performance` /
+  `.Debugger` / `.HeapProfiler` / `.IO` / `.IndexedDB` / `.SystemInfo` /
+  `.Tethering` / `.WebAudio` / `.WebAuthn` / `.Tracing` / `.Profiler` /
+  `.Log` / `.DOMDebugger` / `.PerformanceTimeline` / `.Animation` /
+  `.LayerTree` / `.Audits` / `.CSS` / `.Overlay` / `.Accessibility` /
+  `.DOMSnapshot` / `.Fetch` / `.ServiceWorker` / `.Storage` /
+  `.BackgroundService` — one module per CDP domain, each a direct port of
+  the corresponding upstream `CDP.Domains.*` module: parameter/response
+  structures for every command, payload structures for every event, and the
+  domain's own types, with `ToJSON`/`FromJSON` and `Command`/`Event`
+  instances.
+- `CDP.Domains.Runtime` — the `Runtime` domain (JavaScript remote evaluation
+  and mirror objects); also the module every other domain's cross-references
+  to `RemoteObject`/`RemoteObjectId` resolve against.
+- `CDP.Domains.DOMPageNetworkEmulationSecurity` — the `DOM`, `Emulation`,
+  `Network`, `Page` and `Security` domains, bundled into one module as
+  upstream does (they're mutually referential) and separated into nested
+  namespaces.
+- `CDP.Domains.BrowserTarget` — the `Browser` and `Target` domains, likewise
+  bundled as upstream does.
+- `CDP.Domains` — the package aggregator: re-exports all 39 domain modules
+  above with a single import.
+- `CDP.Endpoints` — the browser's HTTP discovery endpoints
+  (`/json/version`, `/json/list`, `/json/new`, `/json/activate/…`,
+  `/json/close/…`, `/json/protocol`) plus `connectToTab`/`browserAddress`/
+  `pageAddress` to resolve a target's WebSocket debugger URL.
+- `CDP.Runtime` — the client runtime: `runClient` opens the WebSocket
+  connection and drives a dispatch loop that routes incoming frames to
+  either a pending command's result (via `MVar`-backed promises) or a
+  subscribed event handler; `sendCommand`/`sendCommandWait` and
+  `subscribe`/`unsubscribe` are the client-facing API.
 
 ### `Data.Word8` — ASCII byte classification
 
@@ -1237,5 +1287,51 @@ over all 256 `UInt8` values.
 | `Linen.Network.WebSockets.Frame` | frame encoding/decoding: FIN/opcode byte, length variants, masking |
 | `Linen.Network.WebSockets.Handshake` | the RFC 6455 §4 upgrade handshake: `computeAcceptKey`/`isValidHandshake`/`buildHandshakeResponse` |
 | `Linen.Network.WebSockets.Connection` | `mkConnection`: frames outgoing sends, decodes/dispatches incoming frames |
-| `Linen.Network.WebSockets` | the package aggregator: `Types`/`Frame`/`Handshake`/`Connection` |
+| `Linen.Network.WebSockets.Client` | `runClient`: outbound (client-side) connections, RFC 6455 §4.1 opening handshake |
+| `Linen.Network.WebSockets` | the package aggregator: `Types`/`Frame`/`Handshake`/`Connection`/`Client` |
 | `Linen.Data.Word8` | ASCII byte classification (`isUpper`/`isDigit`/…), case conversion, named byte constants |
+| `Linen.CDP.Definition` | the protocol's self-description: `Domain`/`Command`/`Event`/`TypeDef` |
+| `Linen.CDP.Internal.Utils` | `Config`/`Handle`, `SessionId`/`CommandId`, `ProtocolError`, the `Command`/`Event` classes |
+| `Linen.CDP.Domains.CacheStorage` | the `CacheStorage` CDP domain |
+| `Linen.CDP.Domains.Cast` | the `Cast` CDP domain (Presentation API / Remote Playback API) |
+| `Linen.CDP.Domains.DOMStorage` | the `DOMStorage` CDP domain |
+| `Linen.CDP.Domains.Database` | the `Database` CDP domain |
+| `Linen.CDP.Domains.DeviceOrientation` | the `DeviceOrientation` CDP domain |
+| `Linen.CDP.Domains.EventBreakpoints` | the `EventBreakpoints` CDP domain |
+| `Linen.CDP.Domains.HeadlessExperimental` | the `HeadlessExperimental` CDP domain |
+| `Linen.CDP.Domains.Input` | the `Input` CDP domain: dispatching keyboard/mouse/touch events |
+| `Linen.CDP.Domains.Inspector` | the `Inspector` CDP domain |
+| `Linen.CDP.Domains.Media` | the `Media` CDP domain |
+| `Linen.CDP.Domains.Memory` | the `Memory` CDP domain |
+| `Linen.CDP.Domains.Performance` | the `Performance` CDP domain |
+| `Linen.CDP.Domains.Runtime` | the `Runtime` CDP domain: JavaScript remote evaluation and mirror objects |
+| `Linen.CDP.Domains.Debugger` | the `Debugger` CDP domain: breakpoints, stepping, stack traces |
+| `Linen.CDP.Domains.HeapProfiler` | the `HeapProfiler` CDP domain |
+| `Linen.CDP.Domains.IO` | the `IO` CDP domain: streams produced by DevTools |
+| `Linen.CDP.Domains.DOMPageNetworkEmulationSecurity` | the `DOM`/`Emulation`/`Network`/`Page`/`Security` CDP domains, bundled as upstream does |
+| `Linen.CDP.Domains.Accessibility` | the `Accessibility` CDP domain |
+| `Linen.CDP.Domains.Animation` | the `Animation` CDP domain |
+| `Linen.CDP.Domains.Audits` | the `Audits` CDP domain: page violations and possible improvements |
+| `Linen.CDP.Domains.BrowserTarget` | the `Browser`/`Target` CDP domains, bundled as upstream does |
+| `Linen.CDP.Domains.CSS` | the `CSS` CDP domain: stylesheet/rule/style read/write |
+| `Linen.CDP.Domains.DOMDebugger` | the `DOMDebugger` CDP domain: breakpoints on DOM operations/events |
+| `Linen.CDP.Domains.DOMSnapshot` | the `DOMSnapshot` CDP domain: DOM/layout/style document snapshots |
+| `Linen.CDP.Domains.Fetch` | the `Fetch` CDP domain: substituting the browser's network layer |
+| `Linen.CDP.Domains.IndexedDB` | the `IndexedDB` CDP domain |
+| `Linen.CDP.Domains.LayerTree` | the `LayerTree` CDP domain: the tree of compositor layers |
+| `Linen.CDP.Domains.Log` | the `Log` CDP domain: access to log entries |
+| `Linen.CDP.Domains.Overlay` | the `Overlay` CDP domain: page overlays for highlighting/inspection |
+| `Linen.CDP.Domains.PerformanceTimeline` | the `PerformanceTimeline` CDP domain |
+| `Linen.CDP.Domains.Profiler` | the `Profiler` CDP domain: JavaScript CPU profiling |
+| `Linen.CDP.Domains.ServiceWorker` | the `ServiceWorker` CDP domain |
+| `Linen.CDP.Domains.BackgroundService` | the `BackgroundService` CDP domain |
+| `Linen.CDP.Domains.Storage` | the `Storage` CDP domain: quota, cookies, and storage buckets |
+| `Linen.CDP.Domains.SystemInfo` | the `SystemInfo` CDP domain: low-level system information |
+| `Linen.CDP.Domains.Tethering` | the `Tethering` CDP domain: browser port binding |
+| `Linen.CDP.Domains.Tracing` | the `Tracing` CDP domain |
+| `Linen.CDP.Domains.WebAudio` | the `WebAudio` CDP domain |
+| `Linen.CDP.Domains.WebAuthn` | the `WebAuthn` CDP domain |
+| `Linen.CDP.Domains` | the package aggregator: re-exports all 39 `CDP.Domains.*` modules above |
+| `Linen.CDP.Endpoints` | the browser's HTTP discovery endpoints (`/json/version`, `/json/list`, …), `connectToTab` |
+| `Linen.CDP.Runtime` | the client runtime: `runClient`, `sendCommand`/`sendCommandWait`, `subscribe`/`unsubscribe` |
+| `Linen.CDP` | the package aggregator: `CDP.Domains` + `CDP.Runtime` |

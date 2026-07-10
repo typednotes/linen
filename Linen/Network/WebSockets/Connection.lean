@@ -16,6 +16,26 @@ def mkConnection (send : ByteArray → IO Unit) (recv : IO ByteArray)
     : IO Connection := do
   let stateRef ← IO.mkRef ConnectionState.open_
   let bufRef ← IO.mkRef ByteArray.empty
+  let receiveDataImpl : IO ByteArray := do
+    let buf ← bufRef.get
+    let data ← if buf.isEmpty then recv else do
+      bufRef.set ByteArray.empty
+      return buf
+    match Frame.decode data with
+    | some (frame, rest) =>
+      unless rest.isEmpty do bufRef.set rest
+      -- Handle control frames
+      match frame.opcode with
+      | .ping =>
+        -- Auto-respond with pong
+        let pong : Frame := ⟨true, .pong, none, frame.payload⟩
+        send pong.encode
+        recv  -- continue reading for data frame
+      | .close =>
+        stateRef.set .closed
+        return ByteArray.empty
+      | _ => return frame.payload
+    | none => return ByteArray.empty
   return {
     sendText := fun text => do
       let frame : Frame := ⟨true, .text, none, text.toUTF8⟩
@@ -34,28 +54,9 @@ def mkConnection (send : ByteArray → IO Unit) (recv : IO ByteArray)
     sendPing := fun data => do
       let frame : Frame := ⟨true, .ping, none, data⟩
       send frame.encode
-    receiveData := do
-      let buf ← bufRef.get
-      let data ← if buf.isEmpty then recv else do
-        bufRef.set ByteArray.empty
-        return buf
-      match Frame.decode data with
-      | some (frame, rest) =>
-        unless rest.isEmpty do bufRef.set rest
-        -- Handle control frames
-        match frame.opcode with
-        | .ping =>
-          -- Auto-respond with pong
-          let pong : Frame := ⟨true, .pong, none, frame.payload⟩
-          send pong.encode
-          recv  -- continue reading for data frame
-        | .close =>
-          stateRef.set .closed
-          return ByteArray.empty
-        | _ => return frame.payload
-      | none => return ByteArray.empty
+    receiveData := receiveDataImpl
     receiveText := do
-      let data ← recv  -- simplified
+      let data ← receiveDataImpl
       return String.fromUTF8! data
     getState := stateRef.get
   }

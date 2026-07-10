@@ -13,4 +13,5 @@ All modules below are ported (or covered by the stdlib) — kept commented out a
 <!-- 3. `Network.WebSockets.Connection` -->
 <!-- 4. `Network.WebSockets.Handshake` -->
 <!-- 5. *(`WebSockets` package root — no upstream module; covered by `linen`'s own root)* -->
+<!-- 6. `Network.WebSockets.Client` (client-side `runClient`; added for `CDP.Runtime`, see `../cdp/dependencies.md`) -->
 
