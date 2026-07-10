@@ -58,10 +58,12 @@ module):
 ### Importing from Hackage
 
 When asked to import a library from `https://hackage.haskell.org/`, first
-write a dependency list to a file under `docs/imports/` before porting any
-code. The list must be in **topological order of dependencies**: a module
-appears only after every module it depends on (modules depending on nothing
-but existing linen parts come first).
+write a dependency list to `docs/imports/<library>/dependencies.md` before
+porting any code (one folder per library). The list must be in **topological
+order of dependencies**: a module appears only after every module it depends
+on (modules depending on nothing but existing linen parts come first). Add or
+update `docs/imports/index.md` with the library-level topological order
+(which library before which), linking to each library's `dependencies.md`.
 
 Then import the dependencies in that order, **applying this same approach
 recursively** to each one: before porting a dependency that itself pulls in

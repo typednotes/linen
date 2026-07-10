@@ -4,7 +4,7 @@ from collections import defaultdict
 
 ROOT = "/Users/nicolas.grislain/Typednotes/hale"
 SRC = os.path.join(ROOT, "Hale")
-OUT_DIR = "/Users/nicolas.grislain/Typednotes/linen/docs"
+OUT_DIR = "/Users/nicolas.grislain/Typednotes/linen/docs/imports"
 
 # Modules whose dependency closure should be pulled as early as possible in the
 # topological order, so we can implement them with the least prerequisite work.
@@ -495,55 +495,111 @@ with open("/tmp/topo_order.txt", "w") as fh:
 with open("/tmp/cycle.txt", "w") as fh:
     fh.write("\n".join(cycle_nodes))
 
-# ---- Write Markdown ----
-n_edges = sum(len(v) for v in edges.values())
-missing = sorted(n for n in nodes if n not in modules)
-md_path = os.path.join(OUT_DIR, "module-dependencies.md")
-with open(md_path, "w", encoding="utf-8") as fh:
+# ---- Group modules by Hackage package (Hale.<Package>.*), one dependency
+# list per package under docs/imports/<Package>/dependencies.md, per
+# AGENTS.md's Hackage-import convention. `Hale` itself (the umbrella root) is
+# not a package: it has no dedicated `linen` counterpart (`Linen.lean` already
+# plays that role), so it is excluded from grouping.
+def package(mod):
+    if mod == "Hale":
+        return None
+    return mod.split(".")[1]
+
+pkg_of = {n: package(n) for n in nodes}
+packages = sorted({p for p in pkg_of.values() if p is not None})
+
+# Per-package module lists, in the existing global topological order (a
+# subset of a topological order is itself a valid topological order).
+pkg_modules = defaultdict(list)
+for m in order:
+    p = pkg_of[m]
+    if p is not None:
+        pkg_modules[p].append(m)
+
+# Package-level DAG: Pa -> Pb means some module of Pa imports a module of Pb,
+# so Pb must be imported/built before Pa.
+pkg_edges = defaultdict(set)
+for a, bs in edges.items():
+    pa = pkg_of[a]
+    for b in bs:
+        pb = pkg_of[b]
+        if pa is not None and pb is not None and pa != pb:
+            pkg_edges[pa].add(pb)
+
+pkg_deps_of = {p: set(pkg_edges.get(p, set())) for p in packages}
+pkg_rdeps = defaultdict(set)
+for p, ds in pkg_deps_of.items():
+    for d in ds:
+        pkg_rdeps[d].add(p)
+pkg_remaining = {p: set(pkg_deps_of[p]) for p in packages}
+pkg_heap = sorted(p for p in packages if not pkg_remaining[p])
+heapq.heapify(pkg_heap)
+pkg_order = []
+while pkg_heap:
+    p = heapq.heappop(pkg_heap)
+    pkg_order.append(p)
+    for dependent in sorted(pkg_rdeps[p]):
+        pkg_remaining[dependent].discard(p)
+        if not pkg_remaining[dependent]:
+            heapq.heappush(pkg_heap, dependent)
+pkg_cycle = sorted(p for p in packages if pkg_remaining[p])
+
+pkg_done = {p: all(m in DONE for m in pkg_modules[p]) for p in packages}
+
+# ---- Write per-package docs/imports/<Package>/dependencies.md ----
+for p in packages:
+    pkg_dir = os.path.join(OUT_DIR, p)
+    os.makedirs(pkg_dir, exist_ok=True)
+    with open(os.path.join(pkg_dir, "dependencies.md"), "w", encoding="utf-8") as fh:
+        w = fh.write
+        w(f"# `Hale.{p}` module dependencies\n\n")
+        w(f"Topological order of every module of the `{p}` Hackage package as vendored "
+          f"under [`Hale.{p}`](../../../../hale/Hale/{p}) (derived from `import Hale.*` "
+          "statements in each source file; imports inside comments/docstrings are "
+          "ignored). See [`../module-dependencies.dot`](../module-dependencies.dot) for "
+          "the full cross-package graph.\n\n")
+        w("An edge **A → B** means *module A imports module B*, so **B must be "
+          "built before A**.\n\n")
+        w("## Topologically sorted modules\n\n")
+        if pkg_done[p]:
+            w("All modules below are ported (or covered by the stdlib) — kept "
+              "commented out as a completed checklist.\n\n")
+        for i, m in enumerate(pkg_modules[p], 1):
+            if m in DONE:
+                w(f"<!-- {i}. `{m}` -->\n")
+            else:
+                w(f"{i}. `{m}`\n")
+        w("\n")
+
+# ---- Write docs/imports/index.md (library-level topological order) ----
+with open(os.path.join(OUT_DIR, "index.md"), "w", encoding="utf-8") as fh:
     w = fh.write
-    w("# Hale module dependencies\n\n")
-    w("Dependency graph and topological order of every module under "
-      "[`Hale/`](../../hale/Hale), derived from the `import Hale.*` "
-      "statements in each source file (imports inside comments/docstrings "
-      "are ignored).\n\n")
-    w("An edge **A → B** means *module A imports module B*, so **B must be "
-      "built before A**.\n\n")
-    w("## Summary\n\n")
-    w(f"- **Modules (nodes):** {len(nodes)}\n")
-    w(f"- **Source files scanned:** {len(modules)}\n")
-    w(f"- **Dependency edges:** {n_edges}\n")
-    w(f"- **Cycles (strongly-connected components > 1):** "
-      f"{len(cycle_nodes)} → the graph is a DAG.\n")
-    if missing:
-        w(f"- **Imported but no source file found:** {len(missing)} "
-          f"({', '.join('`'+m+'`' for m in missing)})\n")
-    w("\n## Graph\n\n")
-    w("The full Graphviz source is in "
-      "[`module-dependencies.dot`](module-dependencies.dot); a rendered "
-      "version is in [`module-dependencies.svg`](module-dependencies.svg). "
-      "Regenerate either with:\n\n")
+    w("# Hale import index\n\n")
+    w("`Hale` is a personal umbrella of Hackage packages vendored under "
+      "[`Hale/`](../../../hale/Hale) and imported into `linen` one package at a time, "
+      "per [AGENTS.md](../../AGENTS.md)'s Hackage-import convention. This file lists the "
+      f"{len(packages)} packages in **topological order** (a package appears only after "
+      "every package it depends on); each links to its own module-level dependency "
+      "list.\n\n")
+    w("The root `Hale.lean` aggregator (which imports all packages below) has no "
+      "dedicated `linen` counterpart — `Linen.lean` already plays that role.\n\n")
+    w("The full cross-package module graph is in "
+      "[`module-dependencies.dot`](module-dependencies.dot) / "
+      "[`module-dependencies.svg`](module-dependencies.svg); regenerate everything on "
+      "this page with:\n\n")
     w("```sh\n")
-    w("python3 docs/depgraph.py            # rebuild .dot + .md\n")
-    w("dot -Tsvg docs/module-dependencies.dot -o docs/module-dependencies.svg\n")
+    w("python3 docs/depgraph.py            # rebuild per-package dependencies.md + index.md + .dot\n")
+    w("dot -Tsvg docs/imports/module-dependencies.dot -o docs/imports/module-dependencies.svg\n")
     w("```\n\n")
-    w("## Topologically sorted modules\n\n")
-    w("Each module is listed after all modules it imports. The order is "
-      "**prioritised to reach "
-      "`Hale.Network.Network.Socket.EventDispatcher` as early as possible**: "
-      "already-ported modules (commented out) come first, then "
-      "EventDispatcher's remaining dependency chain, then everything else. "
-      "Within a tier, ordering is alphabetical.\n\n")
-    for i, m in enumerate(order, 1):
-        if m in DONE:
-            w(f"<!-- {i}. `{m}` -->\n")
-        else:
-            w(f"{i}. `{m}`\n")
+    w("## Packages\n\n")
+    for i, p in enumerate(pkg_order, 1):
+        status = " (done)" if pkg_done[p] else ""
+        w(f"{i}. [`{p}`]({p}/dependencies.md){status} — {len(pkg_modules[p])} module(s)\n")
     w("\n")
-    if cycle_nodes:
-        w("## Modules in cycles (not sortable)\n\n")
-        for m in cycle_nodes:
-            w(f"- `{m}`\n")
-print("md:", md_path)
+    if pkg_cycle:
+        w("## Packages in cycles (not sortable)\n\n")
+        for p in pkg_cycle:
+            w(f"- `{p}`\n")
 
 print({
     "n_files": len(modules),
@@ -551,5 +607,8 @@ print({
     "n_edges": sum(len(v) for v in edges.values()),
     "n_sorted": len(order),
     "n_cycle": len(cycle_nodes),
+    "n_packages": len(packages),
+    "n_package_cycles": len(pkg_cycle),
 })
 print("dot:", dot_path)
+print("index:", os.path.join(OUT_DIR, "index.md"))

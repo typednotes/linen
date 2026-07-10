@@ -274,8 +274,8 @@ If nothing is listening, the example prints a short "could not connect" hint
 ## Documentation
 
 - [docs/MODULES.md](docs/MODULES.md) — the full module feature list and module table.
-- [docs/module-dependencies.md](docs/module-dependencies.md) — module dependency
-  graph and topological build order.
+- [docs/imports/index.md](docs/imports/index.md) — Hackage-package import order, with a
+  per-package module dependency list under `docs/imports/<Package>/dependencies.md`.
 - [AGENTS.md](AGENTS.md) — conventions for contributing to the library.
 
 ## License
