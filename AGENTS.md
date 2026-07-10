@@ -55,6 +55,19 @@ module):
   standard library — and still satisfy every rule below (tests, no `partial`,
   no `sorry`).
 
+### Importing from Hackage
+
+When asked to import a library from `https://hackage.haskell.org/`, first
+write a dependency list to a file under `docs/imports/` before porting any
+code. The list must be in **topological order of dependencies**: a module
+appears only after every module it depends on (modules depending on nothing
+but existing linen parts come first).
+
+Then import the dependencies in that order, **applying this same approach
+recursively** to each one: before porting a dependency that itself pulls in
+further Hackage libraries, first write its own topologically-ordered
+dependency list under `docs/imports/`, then import those in turn.
+
 ## Coding conventions
 
 - **No `partial def`.** All recursion must be structural or have a proven
