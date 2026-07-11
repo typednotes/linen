@@ -1165,6 +1165,27 @@ over all 256 `UInt8` values.
 | Module | Description |
 |---|---|
 | `Linen.Data.Functor` | `Compose`, `Const`, `Product`, `FunctorSum`, `Contravariant` |
+| `Linen.Data.Array.Shaped` | `repa`'s package facade: re-exports `Shape`/`Index`/`Slice`/`Base`, every representation/operator/`Specialised.Dim2`/`Stencil` module below |
+| `Linen.Data.Array.Shaped.Base` | the `Source` class of readable array representations (`repa`'s associated-data-family `Array r sh e` becomes concrete types per representation) |
+| `Linen.Data.Array.Shaped.Index` | index/shape types (`Z`, `Snoc`/`:.`) and their `Shape` instances |
+| `Linen.Data.Array.Shaped.Operators.IndexSpace` | index-space transforms: `reshape`/`append`/`transpose`/`extract`/`backpermute`/`backpermuteDft`/`extend`/`slice` |
+| `Linen.Data.Array.Shaped.Operators.Interleave` | interleaves the elements of two to four same-extent arrays along the lowest dimension |
+| `Linen.Data.Array.Shaped.Operators.Mapping` | element-wise `map`/`zipWith`, arithmetic operators, the `Structured` class |
+| `Linen.Data.Array.Shaped.Operators.Reduction` | sequential folding/summing over arrays (`foldS`/`sumS`/`equalsS`); parallel `*P` variants dropped, no distinct sequential behaviour |
+| `Linen.Data.Array.Shaped.Operators.Selection` | sequential `select`, filtering a range of indices into a `Manifest` array |
+| `Linen.Data.Array.Shaped.Operators.Traversal` | generic unstructured `traverse` building a `Delayed` array from one to four source arrays |
+| `Linen.Data.Array.Shaped.Repr.Cursored` | the `Cursored` array representation: shiftable index-computation cursors shared between neighbouring reads |
+| `Linen.Data.Array.Shaped.Repr.Delayed` | the `Delayed` representation: a shape paired with an index→element function, recomputed on every read |
+| `Linen.Data.Array.Shaped.Repr.Manifest` | the `Manifest` representation over a flat `Array e`, collapsing upstream's `Unboxed`/`ForeignPtr`/`Vector`/`ByteString` variants; `computeS`/`copyS` materialize a `Source` array |
+| `Linen.Data.Array.Shaped.Repr.Partitioned` | the `Partitioned` representation: dispatches between two same-shape sub-arrays by an index-range predicate |
+| `Linen.Data.Array.Shaped.Repr.Undefined` | the `Undefined` representation: known extent, `panic!` on read, used as a partition's never-read fallback |
+| `Linen.Data.Array.Shaped.Shape` | the `Shape` class of types usable as array shapes/indices |
+| `Linen.Data.Array.Shaped.Slice` | index-space transformation between arrays and slices via the `outParam`-based `Slice` class |
+| `Linen.Data.Array.Shaped.Specialised.Dim2` | functions specialised for rank-2 arrays |
+| `Linen.Data.Array.Shaped.Stencil` | thin aggregator: pulls in stencil creation (`Stencil.Base`) and application (`Stencil.Dim2`, `Specialised.Dim2`) |
+| `Linen.Data.Array.Shaped.Stencil.Base` | basic stencil definitions: `Boundary`, stencil coefficients/offsets |
+| `Linen.Data.Array.Shaped.Stencil.Dim2` | applies a stencil to a 2D array by folding over its offsets (generalizes upstream's fixed 7×7 GHC-optimiser unrolling) |
+| `Linen.Data.Array.Shaped.Stencil.Partition` | pure 2D geometry for partitioning a region for stencil application |
 | `Linen.Data.Base64` | RFC 4648 `encode`/`decode` over `ByteArray` (structural, no `partial`) |
 | `Linen.Data.Bifunctor` | `Bifunctor`/`LawfulBifunctor`, `bimap`, `Prod`/`Sum`/`Except` instances |
 | `Linen.Data.ByteString` | slice over `ByteArray` (O(1) `take`/`drop`/`splitAt`); full `Data.ByteString` API + `BEq`/`Ord`/`Hashable` |
@@ -1174,6 +1195,20 @@ over all 256 `UInt8` values.
 | `Linen.Data.ByteString.Short` | `ShortByteString` (`ByteArray` newtype): `pack`/`unpack`/`index`, `toShort`/`fromShort` |
 | `Linen.Data.ByteString.Builder` | difference-list builder (O(1) `append`): word/UTF-8/decimal/hex encoders + monoid laws |
 | `Linen.Data.CaseInsensitive` | `FoldCase` class + `CI α` wrapper: case-insensitive `BEq`/`Ord`/`Hashable`, original-preserving `ToString` |
+| `Linen.Data.Colour` | package facade over `Colour.Internal`: `Colour`, `AlphaColour`, `black`/`opaque`/`withOpacity`/`transparent`/`alphaChannel`/`blend`/`dissolve`/`atop` |
+| `Linen.Data.Colour.Chan` | a single, phantom-tagged colour channel, specialized to `Float` |
+| `Linen.Data.Colour.CIE` | colour operations defined by the CIE |
+| `Linen.Data.Colour.CIE.Chromaticity` | CIE xy chromaticity coordinates, specialized to `Float` |
+| `Linen.Data.Colour.CIE.Illuminant` | standard illuminants defined by the CIE (A, D65, …) |
+| `Linen.Data.Colour.Internal` | `Colour`/`AlphaColour` over `Float`: `blend`/`over`/`darken` via a merged `AffineSpace`/`ColourOps` closed world |
+| `Linen.Data.Colour.Matrix` | dense 3×3 matrices (`Matrix3`) and 3-vectors (`Vec3`) for RGB↔XYZ colour-space transforms |
+| `Linen.Data.Colour.Names` | SVG 1.1 named colours + `readColourName : String → Option Colour` |
+| `Linen.Data.Colour.RGB` | a generic RGB triple (`RGB α`) for an unspecified colour space, plus `RGBGamut` |
+| `Linen.Data.Colour.RGBSpace` | RGB colour coordinate systems: `RGBSpace`, `TransferFunction` (+ `append`/`linear`) |
+| `Linen.Data.Colour.RGBSpace.HSL` | HSL (hue-saturation-lightness) colours: `hslView`, RGB↔HSL conversion |
+| `Linen.Data.Colour.RGBSpace.HSV` | HSV (hue-saturation-value) colours: `hsvView`, RGB↔HSV conversion |
+| `Linen.Data.Colour.SRGB` | `Colour`s in accordance with the sRGB standard; `sRGB24`/`toSRGB24` quantized to `UInt8` |
+| `Linen.Data.Colour.SRGB.Linear` | a linear colour space with sRGB's gamut, built from the CIE illuminant D65 |
 | `Linen.Data.Conduit.Internal.Pipe` | conduit's streaming `Pipe` (Freer `pipeM`, strict spine): total `Functor`/`Monad`, no `unsafe` |
 | `Linen.Data.Conduit.Internal.Conduit` | `ConduitT` CPS wrapper over `Pipe`: `await`/`yield`/`leftoverC`/`awaitForever`, `.\|` fusion, `runConduit`/`runConduitRes`, `bracketP` (`unsafe`) |
 | `Linen.Data.Conduit.Combinators` | conduit's combinator library over `ConduitT`: sources/sinks/transformers (`sourceList`/`sinkList`/`mapC`/`filterC`/`takeC`/`foldMC`/…) (`unsafe`) |
@@ -1527,3 +1562,4 @@ over all 256 `UInt8` values.
 | `Linen.CDP.Endpoints` | the browser's HTTP discovery endpoints (`/json/version`, `/json/list`, …), `connectToTab` |
 | `Linen.CDP.Runtime` | the client runtime: `runClient`, `sendCommand`/`sendCommandWait`, `subscribe`/`unsubscribe` |
 | `Linen.CDP` | the package aggregator: `CDP.Domains` + `CDP.Runtime` |
+| `Linen.Graphics.Netpbm` | `netpbm`-style parser for the PBM/PGM/PPM "portable anymap" image formats (ASCII/binary `P1`–`P6`) over `ByteArray`, via `Std.Internal.Parsec` |

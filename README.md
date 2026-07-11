@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>366 modules</strong> · <strong>396 compile-time theorems</strong> · <strong>5823 <code>#guard</code> checks</strong>
+  <strong>402 modules</strong> · <strong>361 compile-time theorems</strong> · <strong>6051 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -91,8 +91,17 @@ for the full per-module feature list and module table.
 - **`CDP`** — a Chrome DevTools Protocol client: typed commands/events/types
   for every protocol domain, plus a WebSocket-based runtime to connect to a
   browser, send commands, and subscribe to events.
+- **`Data.Colour`** — a `colour`-style colour library: `Colour`/`AlphaColour`
+  blending, CIE chromaticity/illuminants, RGB colour spaces (HSL/HSV, sRGB),
+  and named SVG colours.
+- **`Data.Array.Shaped`** — a `repa`-style rank-polymorphic, shape-indexed
+  array library: `Delayed`/`Manifest`/`Cursored`/`Partitioned`/`Undefined`
+  representations, index-space operators, and stencil-based convolution.
 - **`System.Console.Ansi` / `System.Exit` / `System.Log.FastLogger`** —
   terminal styling, process exit codes, and buffered logging.
+- **`Graphics.Netpbm`** — a `netpbm`-style parser for the PBM/PGM/PPM
+  "portable anymap" image formats (ASCII and binary variants, magic numbers
+  `P1`–`P6`) over `ByteArray`.
 
 ## Quick Start
 
@@ -119,7 +128,7 @@ open Data.Functor Control.Monad
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 366 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 402 modules).
 
 ## Build & Test
 

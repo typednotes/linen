@@ -90,6 +90,51 @@ it depends on).
 67. [`pdf-toolbox-document`](PdfToolboxDocument/dependencies.md) (done) — PDF
     document/page-tree API and text extraction
     ([source](https://github.com/Yuras/pdf-toolbox)), 11 module(s).
+68. [`colour`](colour/dependencies.md) (done) — device-independent color
+    space math (`Data.Colour.*`), a prerequisite of `hip`, 14 module(s).
+69. [`repa`](repa/dependencies.md) (done) — shape-indexed regular
+    parallel arrays (`Data.Array.Repa.*`), a prerequisite of `hip`, 21
+    module(s), ported as `Linen.Data.Array.Shaped.*`.
+70. [`netpbm`](netpbm/dependencies.md) (done) — PNM/PGM/PPM image
+    decoder (`Graphics.Netpbm`), a prerequisite of `hip`, 1 module,
+    ported as `Linen.Graphics.Netpbm`.
+71. [`JuicyPixels`](JuicyPixels/dependencies.md) (in progress) — PNG/JPEG/GIF/
+    TIFF/BMP/TGA/HDR image codec suite (`Codec.Picture.*`), a prerequisite
+    of `hip`, 29 module(s), ported as `Linen.Codec.Picture.*`.
+72. [`hip`](hip/dependencies.md) (planned) — Haskell Image Processing
+    library ([source](https://hackage.haskell.org/package/hip))
+    (`Graphics.Image.*`). **Scope note:** `Graphics.Image.IO.Histogram` is
+    excluded, and with it the `Chart`/`Chart-diagrams` dependency — those
+    pull in the entire `diagrams-lib`/`diagrams-svg`/`SVGFonts` 2D
+    vector-graphics EDSL merely to plot one histogram, a subsystem
+    unrelated to image processing itself and roughly as large as
+    `JuicyPixels` on its own. Decided with the user 2026-07-11.
+
+### `hip` dependencies covered by the Lean stdlib or an existing port (no separate Hackage import needed)
+
+- `array`, `primitive` — Lean's native `Array`/`ByteArray`/`FloatArray`.
+- `base`, `bytestring`, `containers`, `mtl`, `vector`, `zlib` — already
+  ported (`Base`, `ByteString`, `Containers`, `Mtl`, `Vector`, `Zlib`).
+- `deepseq` — controls GHC's laziness, which Lean (eager by default) has no
+  equivalent notion of; genuinely out of scope, not a simplification of
+  in-scope behavior.
+- `directory`, `filepath`, `process`, `temporary` — `System.FilePath`,
+  `IO.FS.*` (incl. `IO.FS.createTempFile`/`createTempDir`), `IO.Process`.
+- `random` — `Init.Data.Random` (`RandomGen`, `StdGen`, `randNat`,
+  `randBool`) is already a direct port of this same Haskell library.
+- `transformers` — Lean's own `ExceptT`/`ReaderT`/`StateT` (already relied
+  on by the `Mtl` port).
+- `unordered-containers` — `Std.HashMap`/`Std.HashSet`.
+- `attoparsec`, `attoparsec-binary`, `binary` — `Std.Internal.Parsec` /
+  `Std.Internal.Parsec.ByteArray` cover byte-level parsing for both
+  `netpbm` and `JuicyPixels`'s binary decoding.
+- `storable-record` — describes C-struct memory layout for GHC FFI;
+  `netpbm` only uses it internally, and Lean structures don't need a
+  separate memory-layout descriptor for this.
+- `vector-th-unbox`, `ghc-prim`, `template-haskell`, `QuickCheck` — GHC
+  metaprogramming/internals and a testing library with no Lean analogue;
+  `repa`'s use of these is an implementation detail we reimplement directly
+  without them.
 
 ## Crates (crates.io)
 
