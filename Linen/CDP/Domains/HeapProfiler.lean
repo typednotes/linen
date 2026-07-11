@@ -39,6 +39,7 @@ structure SamplingHeapProfileNode where
   children : List SamplingHeapProfileNode
   deriving Repr, BEq
 
+set_option linter.unusedVariables false in
 mutual
 
 /-- Decode a `SamplingHeapProfileNode`. A plain recursive `def` — rather than

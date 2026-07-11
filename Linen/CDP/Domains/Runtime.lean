@@ -256,6 +256,7 @@ private def finishPropertyPreview (v : Value) (valuePreview : Option ObjectPrevi
       valuePreview
       subtype := ← (← Value.getFieldOpt v "subtype").mapM FromJSON.parseJSON }
 
+set_option linter.unusedVariables false in
 mutual
 
 def parseObjectPreview (v : Value) : Except String ObjectPreview :=
@@ -362,6 +363,7 @@ private theorem EntryPreview.key_sizeOf_lt {e : EntryPreview} {k : ObjectPreview
     simp only [EntryPreview.mk.sizeOf_spec, Option.some.sizeOf_spec]
     omega
 
+set_option linter.unusedVariables false in
 mutual
 
 def encodeObjectPreview (p : ObjectPreview) : Value :=
@@ -726,6 +728,7 @@ private def finishStackTrace (v : Value) (parent : Option StackTrace) : Except S
       parent
       parentId := ← (← Value.getFieldOpt v "parentId").mapM FromJSON.parseJSON }
 
+set_option linter.unusedVariables false in
 def parseStackTrace (v : Value) : Except String StackTrace :=
   match h : v.lookup "parent" with
   | none => finishStackTrace v none
@@ -748,6 +751,7 @@ private theorem StackTrace.parent_sizeOf_lt {p : StackTrace} {parent : StackTrac
     simp only [StackTrace.mk.sizeOf_spec, Option.some.sizeOf_spec]
     omega
 
+set_option linter.unusedVariables false in
 def encodeStackTrace (p : StackTrace) : Value :=
   match h : p.parent with
   | none =>

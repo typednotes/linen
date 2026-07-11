@@ -183,6 +183,7 @@ private def finishKey (v : Value) (array : Option (List Key)) : Except String Ke
       date := ← (← Value.getFieldOpt v "date").mapM FromJSON.parseJSON
       array }
 
+set_option linter.unusedVariables false in
 mutual
 
 /-- Decode a `Key`. A plain recursive `def` — rather than `array` going
@@ -224,6 +225,7 @@ private theorem Key.array_sizeOf_lt {k : Key} {arr : List Key} (h : k.array = so
     simp only [Key.mk.sizeOf_spec, Option.some.sizeOf_spec]
     omega
 
+set_option linter.unusedVariables false in
 mutual
 
 /-- Encode a `Key`. A plain recursive `def`, for the same reason `parseKey`

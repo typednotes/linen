@@ -559,6 +559,7 @@ private def finishCSSLayerData (v : Value) (subLayers : Option (List CSSLayerDat
       subLayers
       order := ← Value.getField v "order" >>= FromJSON.parseJSON }
 
+set_option linter.unusedVariables false in
 mutual
 
 /-- Decode a `CSSLayerData`. A plain recursive `def` — rather than
@@ -600,6 +601,7 @@ private theorem CSSLayerData.subLayers_sizeOf_lt {p : CSSLayerData} {subs : List
     simp only [CSSLayerData.mk.sizeOf_spec, Option.some.sizeOf_spec]
     omega
 
+set_option linter.unusedVariables false in
 mutual
 
 /-- Encode a `CSSLayerData`. A plain recursive `def`, for the same reason
@@ -673,6 +675,7 @@ private def finishCSSProperty (v : Value) (longhandProperties : Option (List CSS
       range := ← (← Value.getFieldOpt v "range").mapM FromJSON.parseJSON
       longhandProperties }
 
+set_option linter.unusedVariables false in
 mutual
 
 /-- Decode a `CSSProperty`. A plain recursive `def` — rather than
@@ -714,6 +717,7 @@ private theorem CSSProperty.longhandProperties_sizeOf_lt {p : CSSProperty}
     simp only [CSSProperty.mk.sizeOf_spec, Option.some.sizeOf_spec]
     omega
 
+set_option linter.unusedVariables false in
 mutual
 
 /-- Encode a `CSSProperty`. A plain recursive `def`, for the same reason

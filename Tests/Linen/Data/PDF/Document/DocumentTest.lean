@@ -28,7 +28,7 @@ private def mkDoc : String :=
   let xrefOff := (String.toUTF8 body).size
   let pad (n : Nat) (off : Nat) : String :=
     let s := toString off
-    String.mk (List.replicate (n - s.length) '0') ++ s
+    String.ofList (List.replicate (n - s.length) '0') ++ s
   let xrefTable :=
     "xref\n0 3\n" ++
     "0000000000 65535 f \n" ++

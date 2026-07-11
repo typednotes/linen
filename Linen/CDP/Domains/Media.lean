@@ -119,6 +119,7 @@ structure PlayerError where
   data : List (String × String)
   deriving Repr, BEq
 
+set_option linter.unusedVariables false in
 mutual
 
 /-- Decode a `PlayerError`. A plain recursive `def` — rather than `cause`

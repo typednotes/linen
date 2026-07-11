@@ -282,6 +282,7 @@ instance : ToJSON AXRelatedNode where
 -- (`FromJSON`, `ToJSON`, `Command`, `Event`, …) applied to them or to
 -- anything that mentions them. Wrapping the structures themselves in an
 -- explicit `mutual ... end` block keeps them at `Type` as expected.
+set_option linter.unusedVariables false in
 mutual
 /-- A single computed AX property; mutually self-referential with
     `AXValueSource` (see the module header). -/
@@ -342,6 +343,7 @@ def finishAXValueSource (v : Value) (value : Option AXValue) (attributeValue : O
       invalid := ← (← Value.getFieldOpt v "invalid").mapM FromJSON.parseJSON
       invalidReason := ← (← Value.getFieldOpt v "invalidReason").mapM FromJSON.parseJSON }
 
+set_option linter.unusedVariables false in
 mutual
 /-- Decode an `AXValue`. -/
 def parseAXValue (v : Value) : Except String AXValue := do
@@ -409,6 +411,7 @@ private theorem AXValueSource_nativeSourceValue_sizeOf_lt {p : AXValueSource} {x
     (h : p.nativeSourceValue = some x) : sizeOf x < sizeOf p := by
   cases p; simp_all only [AXValueSource.mk.sizeOf_spec, Option.some.sizeOf_spec]; omega
 
+set_option linter.unusedVariables false in
 mutual
 /-- Encode an `AXValue`. -/
 def encodeAXValue (p : AXValue) : Value :=

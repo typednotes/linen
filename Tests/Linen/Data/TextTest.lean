@@ -150,7 +150,7 @@ namespace Tests.Data.Text
 /-! ### Zipping -/
 
 #guard Text.zip "abc" "xyz" == [('a', 'x'), ('b', 'y'), ('c', 'z')]
-#guard Text.zipWith (fun a b => a) "abc" "xy" == "ab"
+#guard Text.zipWith (fun a _ => a) "abc" "xy" == "ab"
 
 /-! ### Laws -/
 

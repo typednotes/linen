@@ -31,7 +31,7 @@ private def buildPdf (objBodies : List String) (trailerExtra : String) : ByteArr
   let xrefOff := (String.toUTF8 body).size
   let pad (off : Nat) : String :=
     let s := toString off
-    String.mk (List.replicate (10 - s.length) '0') ++ s
+    String.ofList (List.replicate (10 - s.length) '0') ++ s
   let entries := offsets.map fun off => pad off ++ " 00000 n \n"
   let n := objBodies.length
   let xrefTable := s!"xref\n0 {n + 1}\n0000000000 65535 f \n" ++ String.join entries

@@ -12,8 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       # Native FFI dependencies, resolved via pkg-config in the lakefile:
-      #  - libpq   (ffi/postgres.c) for Database.PostgreSQL
-      #  - OpenSSL (ffi/jose.c)     for Crypto.JOSE
-      - name: Install native FFI dependencies (libpq, OpenSSL)
-        run: sudo apt-get update && sudo apt-get install -y libpq-dev libssl-dev pkg-config
+      #  - libpq     (ffi/postgres.c) for Database.PostgreSQL
+      #  - OpenSSL   (ffi/jose.c)     for Crypto.JOSE
+      #  - libsecret (ffi/keychain.c) for System.Keychain (Linux credential store)
+      - name: Install native FFI dependencies (libpq, OpenSSL, libsecret)
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev libssl-dev libsecret-1-dev pkg-config
       - uses: leanprover/lean-action@v1

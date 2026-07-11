@@ -52,7 +52,7 @@ def macSdkLibArgs : IO (Array String) := do
     let out ← IO.Process.output { cmd := "xcrun", args := #["--show-sdk-path"] }
     if out.exitCode != 0 then
       return #[]
-    return #["-L" ++ out.stdout.trim ++ "/usr/lib"]
+    return #["-L" ++ out.stdout.trimAscii.copy ++ "/usr/lib"]
   catch _ =>
     return #[]
 
@@ -68,7 +68,7 @@ def macSdkFrameworkArgs : IO (Array String) := do
     let out ← IO.Process.output { cmd := "xcrun", args := #["--show-sdk-path"] }
     if out.exitCode != 0 then
       return #[]
-    let sdk := out.stdout.trim
+    let sdk := out.stdout.trimAscii.copy
     if sdk.isEmpty then
       return #[]
     return #["-F", sdk ++ "/System/Library/Frameworks", "-isysroot", sdk, "-L", sdk ++ "/usr/lib"]

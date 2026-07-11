@@ -223,6 +223,7 @@ def DOM.finishNode (v : Value) (children : Option (List DOM.Node)) (contentDocum
       isSVG := ← (← Value.getFieldOpt v "isSVG").mapM FromJSON.parseJSON
       compatibilityMode := ← (← Value.getFieldOpt v "compatibilityMode").mapM FromJSON.parseJSON
       assignedSlot := ← (← Value.getFieldOpt v "assignedSlot").mapM FromJSON.parseJSON }
+set_option linter.unusedVariables false in
 mutual
 /-- Decode a `DOM.Node`. -/
 def DOM.parseNode (v : Value) : Except String DOM.Node := do
@@ -278,6 +279,7 @@ private theorem DOM.Node_templateContent_sizeOf_lt {p : DOM.Node} {x : DOM.Node}
 private theorem DOM.Node_pseudoElements_sizeOf_lt {p : DOM.Node} {x : List DOM.Node}
     (h : p.pseudoElements = some x) : sizeOf x < sizeOf p := by
   cases p; simp_all only [DOM.Node.mk.sizeOf_spec, Option.some.sizeOf_spec]; omega
+set_option linter.unusedVariables false in
 mutual
 /-- Encode a `DOM.Node`. -/
 def DOM.encodeNode (p : DOM.Node) : Value :=
@@ -5308,6 +5310,7 @@ def Page.finishFrameResourceTree (v : Value) (childFrames : Option (List Page.Fr
     { frame := ← Value.getField v "frame" >>= FromJSON.parseJSON
       childFrames
       resources := ← Value.getField v "resources" >>= FromJSON.parseJSON }
+set_option linter.unusedVariables false in
 mutual
 /-- Decode a `Page.FrameResourceTree`. -/
 def Page.parseFrameResourceTree (v : Value) : Except String Page.FrameResourceTree := do
@@ -5333,6 +5336,7 @@ instance : FromJSON Page.FrameResourceTree where parseJSON := Page.parseFrameRes
 private theorem Page.FrameResourceTree_childFrames_sizeOf_lt {p : Page.FrameResourceTree} {x : List Page.FrameResourceTree}
     (h : p.childFrames = some x) : sizeOf x < sizeOf p := by
   cases p; simp_all only [Page.FrameResourceTree.mk.sizeOf_spec, Option.some.sizeOf_spec]; omega
+set_option linter.unusedVariables false in
 mutual
 /-- Encode a `Page.FrameResourceTree`. -/
 def Page.encodeFrameResourceTree (p : Page.FrameResourceTree) : Value :=
@@ -5368,6 +5372,7 @@ def Page.finishFrameTree (v : Value) (childFrames : Option (List Page.FrameTree)
   .ok
     { frame := ← Value.getField v "frame" >>= FromJSON.parseJSON
       childFrames }
+set_option linter.unusedVariables false in
 mutual
 /-- Decode a `Page.FrameTree`. -/
 def Page.parseFrameTree (v : Value) : Except String Page.FrameTree := do
@@ -5393,6 +5398,7 @@ instance : FromJSON Page.FrameTree where parseJSON := Page.parseFrameTree
 private theorem Page.FrameTree_childFrames_sizeOf_lt {p : Page.FrameTree} {x : List Page.FrameTree}
     (h : p.childFrames = some x) : sizeOf x < sizeOf p := by
   cases p; simp_all only [Page.FrameTree.mk.sizeOf_spec, Option.some.sizeOf_spec]; omega
+set_option linter.unusedVariables false in
 mutual
 /-- Encode a `Page.FrameTree`. -/
 def Page.encodeFrameTree (p : Page.FrameTree) : Value :=
@@ -6104,6 +6110,7 @@ def Page.finishBackForwardCacheNotRestoredExplanationTree (v : Value) (children 
     { url := ← Value.getField v "url" >>= FromJSON.parseJSON
       explanations := ← Value.getField v "explanations" >>= FromJSON.parseJSON
       children }
+set_option linter.unusedVariables false in
 mutual
 /-- Decode a `Page.BackForwardCacheNotRestoredExplanationTree`. -/
 def Page.parseBackForwardCacheNotRestoredExplanationTree (v : Value) : Except String Page.BackForwardCacheNotRestoredExplanationTree := do
@@ -6125,6 +6132,7 @@ decreasing_by
   omega
 end
 instance : FromJSON Page.BackForwardCacheNotRestoredExplanationTree where parseJSON := Page.parseBackForwardCacheNotRestoredExplanationTree
+set_option linter.unusedVariables false in
 mutual
 /-- Encode a `Page.BackForwardCacheNotRestoredExplanationTree`. -/
 def Page.encodeBackForwardCacheNotRestoredExplanationTree (p : Page.BackForwardCacheNotRestoredExplanationTree) : Value :=
