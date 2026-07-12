@@ -225,7 +225,7 @@ run_cmd do
 -- is left as an unbound symbol that dyld's flat-namespace fallback can resolve to
 -- macOS's incompatible system `libboringssl.dylib` instead, crashing on the first call.
 package linen where
-  version := v!"0.4.0"
+  version := v!"0.5.0"
   moreLinkArgs := nativeLinkArgs
 
 -- ── Native FFI (POSIX sockets + kqueue/epoll, PostgreSQL libpq) ──
@@ -343,30 +343,35 @@ extern_lib linenffi pkg := do
 lean_lib Linen where
   -- Link the native socket FFI, and precompile so the test suite's `#eval`
   -- checks can call the `@[extern]` bindings through the interpreter.
-  -- `moreLinkArgs` pulls in libpq (`-lpq` and its lib path) for `postgres.o`.
+  -- `needs := #[linenffi]` alone already pulls in every native link flag
+  -- (`nativeLinkArgs`, via `package linen`'s `moreLinkArgs` feeding
+  -- `linenffi`'s `ExternLib.linkArgs`) — do NOT also set `moreLinkArgs`
+  -- here: that would add the same flags a second time to this target's own
+  -- link command, which is exactly what caused every per-module `:dynlib`
+  -- link (and every downstream consumer's link) to pass `-rpath` twice,
+  -- triggering `ld64.lld: warning: duplicate -rpath ... ignored`.
   needs := #[linenffi]
-  moreLinkArgs := nativeLinkArgs
   precompileModules := true
 
 lean_lib Tests where
   -- `Tests.Linen.Database.DuckDB.FFI.TestSupport` (a `Tests`-tree module, not
   -- a `Linen` one) declares its own `@[extern]` bindings for later test
   -- files' `#eval`s to call through the interpreter — same reason `Linen`
-  -- itself precompiles, just one level down.
+  -- itself precompiles, just one level down. See `Linen`'s comment above for
+  -- why `moreLinkArgs` is deliberately NOT also set here.
   needs := #[linenffi]
-  moreLinkArgs := nativeLinkArgs
   precompileModules := true
 
 lean_exe linen where
   root := `Main
-  moreLinkArgs := nativeLinkArgs
+  needs := #[linenffi]
 
 -- Example programs live under `Examples/` and share one entrypoint:
 -- `lake exe examples <name> [args...]`.
 lean_lib Examples where
   globs := #[.submodules `Examples]
-  moreLinkArgs := nativeLinkArgs
+  needs := #[linenffi]
 
 lean_exe examples where
   root := `Examples.Main
-  moreLinkArgs := nativeLinkArgs
+  needs := #[linenffi]
