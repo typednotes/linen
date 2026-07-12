@@ -523,6 +523,218 @@ the project overview and quick start.
   `run` (within a `Session`), `command`/`sql_` constructors, and
   `mapResult`/`contramapParams` (reusing `Result.map`/`Params.contramap`).
 
+### `Database.SQLite3` — SQLite3 bindings (`direct-sqlite`/`sqlite-simple`)
+
+- `Database.SQLite3.Bindings.Types` — opaque `Database`/`Statement` handles
+  (external objects wrapping `sqlite3*`/`sqlite3_stmt*`, same pattern as
+  `LibPQ.Types`'s `PgConn`/`PgResult`), plus the `Error` result-code enum
+  (`ofUInt32`/`toUInt32`, with an `.other` fallback for unrecognized/extended
+  codes) and the `ColumnType`/`StepResult` enums.
+- `Database.SQLite3.Bindings` — `@[extern]` bindings to the raw `sqlite3_*` C
+  entry points (`ffi/sqlite3_shim.c`, linking the vendored amalgamation at
+  `ffi/vendor/sqlite3/`): open/close/errmsg/interrupt/autocommit, `exec`,
+  prepare/step/reset/finalize/clear-bindings, parameter/column metadata,
+  binding values, reading columns, and the result-statistics counters.
+- `Database.SQLite3.Direct` — decodes raw result codes into `Error` and
+  returns `Except Error`, pairing each `Statement` with its owning
+  `Database` so `errmsg` can be looked up without `sqlite3_db_handle`.
+- `Database.SQLite3` — the public, `IO`-throwing API (`SQLError`, untyped
+  `SQLData` values, `bind`/`bindNamed`, `columns`) built on `Direct`.
+
+### `Database.SQLite.Simple` — `sqlite-simple`-style API
+
+- `Database.SQLite.Simple.Types` — `Null` (deliberately never `BEq`-equal, to
+  match `NULL`'s SQL semantics), `Query` (a `String` newtype with `Coe`/
+  `ToString`/`Append`), `Only` (single-column row wrapper), and the
+  heterogeneous row-cons `Cons`/`(:.)`.
+- `Database.SQLite.Simple.Ok` — an accumulating-errors result type `Ok`
+  (`.ok`/`.errors (Array String)`) with `Functor`/`Applicative`/`Alternative`/
+  `Monad` instances (`Alternative` concatenates errors on double failure),
+  `fail`, and `toExcept`/`ofExcept` with a round-trip theorem.
+- `Database.SQLite.Simple.Time.Implementation` — parsing/rendering for
+  SQLite's textual date/time formats via `Std.Internal.Parsec`: `parseDay`/
+  `dayToString`, `parseUTCTime`/`utcTimeToString`, `timeZoneParser`/
+  `timeZoneToString`, built on `dayAndTimeOfDayToUTCTime`/
+  `utcTimeToDayAndTimeOfDay`. Ports only the textual forms upstream's
+  `Data.Time.Format`-based parser accepts — not the Julian-day/Unix-epoch
+  numeric forms `docs/imports/sqlite-simple/dependencies.md` describes, which
+  checking upstream's actual source shows it never parses either.
+- `Database.SQLite.Simple.Time` — thin re-export facade over
+  `Time.Implementation`.
+- `Database.SQLite.Simple.Internal` — `Connection` (an open database plus a
+  savepoint-name counter), `Statement` (a prepared statement paired with its
+  owning `Connection`), and `Field` (a decoded column value with its index/
+  name/declared-type, `Field.typeName`), plus `currentRowFields`. `Statement`
+  is relocated here from upstream's top-level `Database.SQLite.Simple` module
+  per this port's module plan; `ColumnOutOfBounds`/`RowParser` are left to a
+  later `FromRow`/`FromField` port.
+- `Database.SQLite.Simple.ToField` — the `ToField` class, converting a Lean
+  value to `SQLData` for parameter binding: numeric/`Bool`/`String`/
+  `ByteArray`/`Option`/`Null`/`Day`/`UTCTime` instances.
+- `Database.SQLite.Simple.FromField` — the dual `FromField` class, decoding a
+  `Field` back to a Lean value, plus `ResultError` (`incompatible`/
+  `unexpectedNull`/`conversionFailed`) folded into `Ok.errors` messages via
+  `returnError`.
+- `Database.SQLite.Simple.FromRow` — the applicative `RowParser` (a direct
+  `Array Field → Nat → Ok (α × Nat)`, substituting upstream's
+  `ReaderT`/`StateT`/`Ok` stack) and the `FromRow` class, with tuple/`Only`/
+  `Cons` instances up to arity 7.
+- `Database.SQLite.Simple.ToRow` — the dual `ToRow` class, rendering a
+  collection into a flat `Array SQLData`; `Unit`/`Only`/tuple (up to arity
+  7)/`Cons` instances.
+- `Database.SQLite.Simple.QQ` — the `sql "…"` syntax, substituting upstream's
+  Template-Haskell `[sql| … |]` quasiquoter with Lean `syntax`/`macro_rules`;
+  elaborates directly to `Query.ofString`, matching how little validation
+  upstream's own `quoteExp` performs (none — it is a plain string splice).
+- `Database.SQLite.Simple` — the public facade: `withConnection` (bracketed
+  `openConnection`/`closeConnection`), `query`/`query_`/`execute`/`execute_`,
+  `fold`/`fold_` (streaming), `withTransaction`/`withImmediateTransaction`/
+  `withExclusiveTransaction` and `withSavepoint` (commit/rollback via
+  `try … catch … throw`), `lastInsertRowId`/`changes`/`totalChanges`, and
+  `Database.SQLite3.SQLError`'s pretty-printed `ToString`.
+- `Database.SQLite.Simple.Function` — user-defined scalar SQL function
+  registration on top of `sqlite3_create_function_v2`: `createFunction0`
+  through `createFunction3` (a fixed 0..3 arity cutoff substituting
+  upstream's GHC-overlapping-instance `Function` typeclass, the same shape
+  of substitution `FromRow`/`ToRow`'s own arity cutoff already uses) and
+  `deleteFunction`. Required this codebase's first Lean-closure-called-from-C
+  machinery (`ffi/sqlite3_shim.c`'s `xFunc`/`xDestroy` trampolines,
+  `lean_apply_4`/`lean_inc_ref`/`lean_dec_ref`), justified safe because
+  SQLite always invokes the callback synchronously on the calling thread.
+
+### `Database.DuckDB.FFI` — low-level DuckDB FFI bindings (`duckdb-ffi`)
+
+- `Database.DuckDB.FFI.Types` — opaque `Database`/`Connection`/`Result`/
+  `PreparedStatement`/`Appender`/`LogicalType`/`DataChunk`/`Vector` handles
+  (same external-object pattern as `LibPQ.Types`/`Database.SQLite3.Bindings.Types`),
+  plus the `duckdb_state`/`duckdb_type`/`duckdb_error_type`/
+  `duckdb_statement_type` enums (`ofUInt32`/`toUInt32`, `.other` fallback for
+  unrecognized codes).
+- `Database.DuckDB.FFI.OpenConnect` — open/close a database and connection
+  (`ffi/duckdb_shim.c`, linking `libduckdb`), idempotent `close`.
+- `Database.DuckDB.FFI.Configuration` — `duckdb_config` creation/destruction
+  and `duckdb_set_config`; always passes a `NULL` `duckdb_config` where
+  upstream would otherwise thread one through, narrowing this batch's scope.
+- `Database.DuckDB.FFI.ErrorData` — `duckdb_error_data` inspection
+  (`hasError`/`errorMessage`/`errorType`) and the `duckdb_result` error
+  accessors.
+- `Database.DuckDB.FFI.Logging` — `duckdb_log`-style logging plus this
+  port's first Lean-closure-called-from-C trampoline (write/call/delete
+  trampoline pair using `lean_inc_ref`/`lean_dec_ref`/`lean_apply_N`), later
+  reused by `ScalarFunctions`.
+- `Database.DuckDB.FFI.Catalog` — catalog/table-existence and search-path
+  introspection.
+- `Database.DuckDB.FFI.FileSystem` — `duckdb_extract_statements`/file-system
+  helper bindings.
+- `Database.DuckDB.FFI.Helpers` — shared marshalling helpers (owned/borrowed
+  string decoding, `ByteArray`↔`duckdb_string_t` conversions) used across the
+  rest of the batch.
+- `Database.DuckDB.FFI.LogicalTypes` — building/inspecting
+  `duckdb_logical_type` values: primitive/`LIST`/`ARRAY`/`MAP`/`STRUCT`/
+  `UNION`/`ENUM`/`DECIMAL` construction, alias get/set, `duckdb_type` id,
+  decimal width/scale, enum dictionary, struct/union child names/types,
+  list/array/map child types. `create` decodes a `Type_` on the Lean side
+  before calling the raw `createRaw : UInt32 → IO LogicalType` extern — a
+  boxed inductive like `Type_` (it has a data-carrying `.other` constructor)
+  cannot be passed directly as a raw C `uint32_t` parameter, so the
+  encode/decode must happen in pure Lean, mirroring `columnTypeRaw`/
+  `columnType`'s existing pattern elsewhere in this port.
+- `Database.DuckDB.FFI.BindValues` — binding scalar/`NULL` parameter values
+  to a `PreparedStatement` (`duckdb_bind_*`).
+- `Database.DuckDB.FFI.PreparedStatements` — preparing/destroying statements,
+  parameter count/name/type inspection, `duckdb_clear_bindings`, and
+  result-set metadata (statement type, column count/name/type/logical type).
+- `Database.DuckDB.FFI.QueryExecution` — `duckdb_query`/executing a
+  connection's SQL text directly, result-set inspection (column name/type/
+  logical type, statement type, rows-changed), and error reporting for
+  malformed queries.
+- `Database.DuckDB.FFI.ExecutePrepared` — executing a bound
+  `PreparedStatement` and materializing/streaming its `Result`.
+- `Database.DuckDB.FFI.DataChunk` — `duckdb_data_chunk` creation/destruction,
+  column count/vector access, and row-count get/set.
+- `Database.DuckDB.FFI.Vector` — typed scalar get/set accessors
+  (`Int32`/`Int64`/`Double`/`Bool`, …) into a `duckdb_vector`'s raw data
+  buffer, raw `ByteArray` access, string element assignment, `LIST`/`STRUCT`
+  child-vector access, and `duckdb_vector_reference_value_vector`. Both
+  owning (`DataChunk`-derived) and non-owning/borrowed vectors share this
+  API; the finalizer distinction lives in `Types`.
+- `Database.DuckDB.FFI.Validity` — the validity-mask accessors
+  (`rowIsValid`/`setRowValidity`/`setRowValid`/`setRowInvalid`,
+  `ensureValidityWritable`) shared by result vectors and the appender.
+- `Database.DuckDB.FFI.Appender` — the bulk-insert `duckdb_appender`
+  lifecycle and per-column `append*` value writers.
+- `Database.DuckDB.FFI.ScalarFunctions` — user-defined scalar SQL function
+  registration (`duckdb_create_scalar_function`/`ScalarFunctionSet`):
+  `setName`/`addParameter`/`setReturnType`/`setFunction`, and
+  `setOnCall`/registration built on a second Lean-closure-called-from-C
+  trampoline pair (mirroring `Logging`'s), whose call trampoline retrieves
+  the registered closure via `duckdb_scalar_function_get_extra_info` (the
+  callback signature `(duckdb_function_info, duckdb_data_chunk,
+  duckdb_vector)` carries no direct closure parameter) rather than
+  receiving it as a direct argument.
+
+### `Database.DuckDB.Simple` — mid-level DuckDB client library (`duckdb-simple`)
+
+- `Database.DuckDB.Simple.Internal` — `Connection`/`SQLError`, the
+  `withDatabaseHandle`/`withConnectionHandle`/`withClientContext`
+  bracket-style handle accessors, and delete-callback/`StablePtr`
+  registration helpers reused by `Logging`/`Copy`/`Function`.
+- `Database.DuckDB.Simple.LogicalRep` — building/destroying
+  `duckdb_logical_type` descriptors (struct/list/map/enum/decimal) used both
+  when binding parameters and when decoding result columns.
+- `Database.DuckDB.Simple.Ok` — the error-accumulating `Ok a | Errors
+  [SomeException]` applicative, ported the same way as `sqlite-simple`'s
+  `Ok` (`Except (Array String)`-style).
+- `Database.DuckDB.Simple.Types` — `Query`, `Null`, `FormatError`, `(:.)`,
+  the folded-in `Only` (reused from the `sqlite-simple` port) and a
+  folded-in 128-bit `UUID` type (marshalling DuckDB's native `UUID` column
+  type; the `uuid` package's generation machinery is out of scope).
+- `Database.DuckDB.Simple.FromField` — `Field`, `FieldValue` (DuckDB's
+  tagged-union decoded value, covering every DuckDB logical type: ints of
+  every width, `DecimalValue`, `BigNum`, `BitString`, `IntervalValue`,
+  `TimeWithZone`, lists/structs/maps/enums, `UUID`, …), the `FromField`
+  class, and `ResultError`.
+- `Database.DuckDB.Simple.Materialize` — converts one DuckDB
+  `duckdb_vector`/`data_chunk` column into a `FieldValue` per row, the
+  single place that walks DuckDB's native columnar chunk representation
+  (an internal, not-exposed-upstream module, load-bearing for `Copy`/
+  `Function`/the facade).
+- `Database.DuckDB.Simple.ToField` — `DuckDBColumnType`, `FieldBinding`,
+  `NamedParam`, the `ToField` class and instances, binding a Lean value
+  into a prepared-statement parameter slot via
+  `Database.DuckDB.FFI.BindValues`. `STRUCT`/`UNION`/`LIST`/`MAP`/`ENUM`
+  values have no `ToField` instance — `duckdb.h` exposes no
+  `duckdb_bind_struct`/`duckdb_bind_union`-style entry point.
+- `Database.DuckDB.Simple.FromRow` — the applicative row-consuming parser,
+  same shape as `sqlite-simple`'s `FromRow`.
+- `Database.DuckDB.Simple.ToRow` — dual of `FromRow`, encoding a row of
+  parameters via `ToField`.
+- `Database.DuckDB.Simple.Catalog` — catalog/table-existence and
+  search-path queries.
+- `Database.DuckDB.Simple.Config` — connection-config key/value setting
+  prior to `open`.
+- `Database.DuckDB.Simple.FileSystem` — registering a virtual filesystem
+  callback set.
+- `Database.DuckDB.Simple.Logging` — log-callback registration.
+- `Database.DuckDB.Simple.Copy` — bulk row-append ("COPY"-style bulk load)
+  via `Database.DuckDB.FFI.Appender`.
+- `Database.DuckDB.Simple.Function` — user-defined scalar SQL function
+  registration (`createFunction`/`createFunctionWithState`/
+  `deleteFunction`) via `Database.DuckDB.FFI.ScalarFunctions`.
+- `Database.DuckDB.Simple.Generic` — hand-written `STRUCT`/`UNION` decode
+  combinators (`structField`/`withStruct`/`unionField`/`unionFieldNamed`/
+  `withUnion`/`firstMatch`) standing in for upstream's GHC-`Generic`-derived
+  `FromField`/`ToField` instances, which have no Lean counterpart (no
+  `Rep`/`Generic` machinery to walk); includes a worked two-constructor
+  sum-type (`Shape`) example with a hand-written `FromField` instance.
+- `Database.DuckDB.Simple` — the public facade: `withConnection`,
+  `query`/`query_`/`execute`/`execute_`, streaming `fold`/`fold_`, and
+  `withTransaction`, built on prepared statements + repeated
+  `QueryExecution.fetchChunk` + `Materialize` + `FromRow`/`ToRow`. Its test
+  is a genuine end-to-end round trip against a real in-memory DuckDB
+  connection. Completes the `sqlite-simple` → `duckdb-ffi` → `duckdb-simple`
+  import chain.
+
 ### `Crypto.JOSE` — JOSE/JWT cryptography (OpenSSL)
 
 - `Crypto.JOSE.FFI` — `@[extern]` bindings to OpenSSL's EVP API (`ffi/jose.c`):
@@ -1378,7 +1590,9 @@ package is ported as `Linen.Graphics.Image.*`.
 | `Linen.Data.String` | `IsString` class + `String.words`/`unwords`/`unlines` (`lines` is core's `splitOn`) |
 | `Linen.Data.Text` | Haskell-compatible `Data.Text` API (`Text := String`): `chunksOf`/`isInfixOf`/`transpose`/… over Lean's UTF-8 `String`, no fuel counters |
 | `Linen.Data.Text.Encoding` | `Text`↔`ByteString` UTF-8 codec: `encodeUtf8`/`decodeUtf8'` (via `String.fromUTF8?`), `decodeUtf8With` (well-founded byte scanner, ≥1 byte consumed per step) |
+| `Linen.Data.Time.Calendar` | proleptic Gregorian calendar `Day` (Modified-Julian-Day count), `fromGregorian`/`toGregorian`/`fromGregorianValid` via closed-form civil-calendar arithmetic |
 | `Linen.Data.Time.Clock` | UTC time/durations: `NominalDiffTime` (`Int` nanoseconds, `Add`/`Sub`/`Neg`/`Ord`), `UTCTime` (`getCurrentTime` via `IO.monoNanosNow`, `diffUTCTime`/`addUTCTime`) |
+| `Linen.Data.Time.LocalTime` | `TimeOfDay` (hour/minute/fractional-second) and `TimeZone` (signed offset in minutes) |
 | `Linen.Data.Traversable` | `Traversable` class (`traverse`/`sequence`) + `List`/`Option`/`NonEmpty`; `LawfulTraversable` |
 | `Linen.Data.Unique` | globally unique ids: `newUnique : IO Unique` from a global counter (`BEq`/`Ord`/`Hashable`) |
 | `Linen.Data.Vault` | type-safe heterogeneous map: `Key α` tokens (unique, `IO`-minted) over a `Std.HashMap Nat Erased`, `insert`/`lookup`/`delete`/`newKey` |
@@ -1406,6 +1620,9 @@ package is ported as `Linen.Graphics.Image.*`.
 | `Linen.Control.Concurrent.STM.TVar` | transactional variable over `IO.Ref`: `newTVarIO`/`readTVar`/`writeTVar`/`modifyTVar'` |
 | `Linen.Control.Concurrent.STM.TMVar` | `TVar (Option α)`: `takeTMVar`/`putTMVar`/`readTMVar`/`tryTakeTMVar`/`tryPutTMVar`/`isEmptyTMVar` |
 | `Linen.Control.Concurrent.STM.TQueue` | transactional two-list FIFO: `writeTQueue`/`readTQueue`/`tryReadTQueue`/`isEmptyTQueue`/`peekTQueue` |
+| `Linen.Data.Json.Types` | the `Value` JSON AST (`null`/`bool`/`number`/`string`/`array`/`object`) plus the `ToJSON`/`FromJSON` classes |
+| `Linen.Data.Json.Encode` | `Value → String` rendering (`encode`/`encodePretty`) |
+| `Linen.Data.Json.Decode` | a `String → Except String Value` parser (`decode`), plus `decodeAs` via `FromJSON` |
 | `Linen.Data.Json` | JSON AST, `ToJSON`/`FromJSON`, encode/decode + roundtrip proofs |
 | `Linen.System.Console.Ansi` | ANSI terminal colors and styles |
 | `Linen.System.Exit` | `ExitCode` (success/failure) + `exitWith`/`exitSuccess`/`exitFailure` over `IO.Process.exit` |
@@ -1474,6 +1691,57 @@ package is ported as `Linen.Graphics.Image.*`.
 | `Linen.Database.SQL.Decoders` | result decoders: `Value`/`Row`/`Result` levels, `singleRow`/`rowList`/`maybeRow`, row width laws |
 | `Linen.Database.SQL.Pool` | thread-safe connection pool (`IO.Ref`): `PoolSettings` (bounded proofs), `create`/`use`/`destroy`/`stats`, `PoolError` |
 | `Linen.Database.SQL.Statement` | type-safe `Statement p r` = `Params p` + `Result r`: `run`/`command`/`sql_`, `mapResult`/`contramapParams` |
+| `Linen.Database.SQLite.Bindings.Types` | opaque `Database`/`Statement` handles + SQLite result-code (`Error`) and `ColumnType`/`StepResult` enums |
+| `Linen.Database.SQLite.Bindings` | `@[extern]` bindings to the raw `sqlite3_*` C API (vendored amalgamation, no pkg-config) |
+| `Linen.Database.SQLite.Direct` | `Except Error`-returning wrapper over `Bindings`; pairs a `Statement` with its owning `Database` |
+| `Linen.Database.SQLite` | public `IO`-throwing SQLite3 API: `SQLError`, untyped `SQLData`, `bind`/`bindNamed`, `columns` |
+| `Linen.Database.SQLite.Simple.Types` | `Query` (`Coe String Query`), `Null`, folded-in `Only`, row-cons `(:.)` |
+| `Linen.Database.SQLite.Simple.Ok` | error-accumulating `Ok` (`Except (Array String)`-isomorphic): `Functor`/`Applicative`/`Alternative`/`Monad`, `toExcept`/`ofExcept` |
+| `Linen.Database.SQLite.Simple.Time.Implementation` | SQLite date/time text parsing/rendering (`Std.Internal.Parsec.String`) to/from `Day`/`UTCTime`/`TimeOfDay`/`TimeZone` |
+| `Linen.Database.SQLite.Simple.Time` | thin re-export facade over `Time.Implementation` |
+| `Linen.Database.SQLite.Simple.Internal` | `Connection`/`Statement` handle pairs over `Database.SQLite3`; `Field` (decoded value + column index/name + declared type) |
+| `Linen.Database.SQLite.Simple.ToField` | `ToField` class: numeric/`Bool`/`String`/`ByteArray`/`Option`/`Null`/`Day`/`UTCTime` → `SQLData` |
+| `Linen.Database.SQLite.Simple.FromField` | `FromField` class: `Field` → Lean value, `ResultError` folded into `Ok.errors` via `returnError` |
+| `Linen.Database.SQLite.Simple.FromRow` | applicative `RowParser`, `FromRow` class, tuple/`Only`/`Cons` instances up to arity 7 |
+| `Linen.Database.SQLite.Simple.ToRow` | `ToRow` class, `Unit`/`Only`/tuple (up to arity 7)/`Cons` instances → `Array SQLData` |
+| `Linen.Database.SQLite.Simple.QQ` | the `sql "…"` syntax/`macro_rules` substitute for upstream's Template-Haskell quasiquoter, elaborating directly to `Query.ofString` |
+| `Linen.Database.SQLite.Simple` | the public facade: `withConnection`, `query`/`query_`/`execute`/`execute_`, `fold`/`fold_`, `withTransaction`/`withImmediateTransaction`/`withExclusiveTransaction`/`withSavepoint`, `lastInsertRowId`/`changes`/`totalChanges` |
+| `Linen.Database.SQLite.Simple.Function` | user-defined scalar SQL function registration, `createFunction0`–`createFunction3`/`deleteFunction`, built on `sqlite3_create_function_v2` |
+| `Linen.Database.DuckDB.FFI.Types` | opaque `Database`/`Connection`/`Result`/`PreparedStatement`/`Appender`/`LogicalType`/`DataChunk`/`Vector` handles; `duckdb_state`/`duckdb_type`/`duckdb_error_type`/`duckdb_statement_type` enums |
+| `Linen.Database.DuckDB.FFI.OpenConnect` | open/close a `Database` and `Connection` (`ffi/duckdb_shim.c`, links `libduckdb`), idempotent `close` |
+| `Linen.Database.DuckDB.FFI.Configuration` | `duckdb_config` create/destroy/`set`, always passed as `NULL` in this batch's scope |
+| `Linen.Database.DuckDB.FFI.ErrorData` | `duckdb_error_data` inspection (`hasError`/`errorMessage`/`errorType`), `duckdb_result` error accessors |
+| `Linen.Database.DuckDB.FFI.Logging` | `duckdb_log`-style logging; first Lean-closure-called-from-C trampoline pair in this port |
+| `Linen.Database.DuckDB.FFI.Catalog` | catalog/table-existence and search-path introspection |
+| `Linen.Database.DuckDB.FFI.FileSystem` | `duckdb_extract_statements`/file-system helper bindings |
+| `Linen.Database.DuckDB.FFI.Helpers` | shared marshalling helpers: owned/borrowed string decoding, `ByteArray`↔`duckdb_string_t` |
+| `Linen.Database.DuckDB.FFI.LogicalTypes` | build/inspect `duckdb_logical_type`: primitive/`LIST`/`ARRAY`/`MAP`/`STRUCT`/`UNION`/`ENUM`/`DECIMAL`, alias, decimal width/scale, enum dictionary, child types |
+| `Linen.Database.DuckDB.FFI.BindValues` | binding scalar/`NULL` parameter values to a `PreparedStatement` (`duckdb_bind_*`) |
+| `Linen.Database.DuckDB.FFI.PreparedStatements` | prepare/destroy statements, parameter count/name/type, `clearBindings`, result-set metadata |
+| `Linen.Database.DuckDB.FFI.QueryExecution` | `duckdb_query` direct SQL execution, result-set inspection, rows-changed, malformed-query error reporting |
+| `Linen.Database.DuckDB.FFI.ExecutePrepared` | execute a bound `PreparedStatement`, materialize/stream its `Result` |
+| `Linen.Database.DuckDB.FFI.DataChunk` | `duckdb_data_chunk` create/destroy, column count/vector access, row-count get/set |
+| `Linen.Database.DuckDB.FFI.Vector` | typed scalar get/set into a `duckdb_vector`'s data buffer, raw `ByteArray` access, string assignment, `LIST`/`STRUCT` child vectors |
+| `Linen.Database.DuckDB.FFI.Validity` | validity-mask accessors (`rowIsValid`/`setRowValidity`/`setRowValid`/`setRowInvalid`, `ensureValidityWritable`) |
+| `Linen.Database.DuckDB.FFI.Appender` | bulk-insert `duckdb_appender` lifecycle and per-column `append*` value writers |
+| `Linen.Database.DuckDB.FFI.ScalarFunctions` | user-defined scalar SQL function registration (`ScalarFunctionSet`), second Lean-closure-called-from-C trampoline pair, closure retrieved via `duckdb_scalar_function_get_extra_info` |
+| `Linen.Database.DuckDB.Simple.Internal` | `Connection`/`SQLError`, bracket-style handle accessors, delete-callback/`StablePtr` registration helpers |
+| `Linen.Database.DuckDB.Simple.LogicalRep` | building/destroying `duckdb_logical_type` descriptors (struct/list/map/enum/decimal) |
+| `Linen.Database.DuckDB.Simple.Ok` | the error-accumulating `Ok a \| Errors [SomeException]` applicative |
+| `Linen.Database.DuckDB.Simple.Types` | `Query`, `Null`, `FormatError`, `(:.)`, folded-in `Only` and 128-bit `UUID` |
+| `Linen.Database.DuckDB.Simple.FromField` | `Field`, `FieldValue` (every DuckDB logical type), the `FromField` class, `ResultError` |
+| `Linen.Database.DuckDB.Simple.Materialize` | converts a `duckdb_vector`/`data_chunk` column into a `FieldValue` per row (internal) |
+| `Linen.Database.DuckDB.Simple.ToField` | `DuckDBColumnType`, `FieldBinding`, `NamedParam`, the `ToField` class binding into `BindValues` |
+| `Linen.Database.DuckDB.Simple.FromRow` | applicative row-consuming parser |
+| `Linen.Database.DuckDB.Simple.ToRow` | dual of `FromRow`, encoding parameters via `ToField` |
+| `Linen.Database.DuckDB.Simple.Catalog` | catalog/table-existence and search-path queries |
+| `Linen.Database.DuckDB.Simple.Config` | connection-config key/value setting prior to `open` |
+| `Linen.Database.DuckDB.Simple.FileSystem` | registering a virtual filesystem callback set |
+| `Linen.Database.DuckDB.Simple.Logging` | log-callback registration |
+| `Linen.Database.DuckDB.Simple.Copy` | bulk row-append ("COPY"-style bulk load) via `Appender` |
+| `Linen.Database.DuckDB.Simple.Function` | user-defined scalar SQL function registration via `ScalarFunctions` |
+| `Linen.Database.DuckDB.Simple.Generic` | hand-written `STRUCT`/`UNION` decode combinators standing in for GHC-`Generic`-derived instances |
+| `Linen.Database.DuckDB.Simple` | public facade: `withConnection`, `query`/`query_`/`execute`/`execute_`, `fold`/`fold_`, `withTransaction` |
 | `Linen.Crypto.JOSE.FFI` | `@[extern]` OpenSSL bindings: HMAC, RSA/EC verify, JWK→DER key build, base64url (`ffi/jose.c`) |
 | `Linen.Crypto.JOSE.Types` | JOSE/JWT/JWK types: `JWSAlgorithm`/`ECCurve`/`JWKKeyType`, proof-carrying `JWK`, `ClaimsSet`, `JWSHeader`, `JwtError` + laws |
 | `Linen.Crypto.JOSE.JWK` | JWK helpers: `parseOctKey` (base64url), `toDerPublicKey` (RSA/EC → DER via OpenSSL) |

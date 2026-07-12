@@ -120,6 +120,13 @@ example : Socket .connected → IO (Socket .closed)       := (close ·)
 -- (confirmed empirically on this host) -- unlike Linux, where it is
 -- permitted. Since `sendTo`'s type requires `Socket .connected`, no runtime
 -- call to it can succeed portably across the platforms this library targets.
+--
+-- `connect` performs a *non-blocking* connect (`socketConnectNB`), which
+-- leaves `connQ` in non-blocking mode. Datagram delivery on loopback isn't
+-- instantaneous, so calling `recvFrom` right after the peer's `sendto(2)`
+-- races the kernel: without waiting for readability first, `recvFrom` can
+-- hit EAGAIN before the packet lands. `poll .read` blocks (via `select`)
+-- until the datagram has actually arrived, removing the race.
 #eval show IO Unit from do
   let p ← socket .inet .datagram
   let p ← bind p ⟨"127.0.0.1", 0⟩
@@ -131,6 +138,10 @@ example : Socket .connected → IO (Socket .closed)       := (close ·)
     | .refused e    => throw e
   let addrQ ← getSockName connQ
   let _ ← Network.Socket.FFI.socketSendTo p.raw "pong".toUTF8 addrQ.host addrQ.port
+  match ← poll connQ .read 2000 with
+    | .ready    => pure ()
+    | .timeout  => throw (IO.userError "datagram did not arrive within 2s")
+    | .error e  => throw e
   let (data, from_) ← recvFrom connQ
   unless data == "pong".toUTF8 do
     throw (IO.userError s!"expected 'pong', got {data.size} bytes")

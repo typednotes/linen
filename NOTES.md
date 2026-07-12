@@ -1,9 +1,5 @@
 # TODO
 
-## Issues
-
-Fix `SocketTest` which seems flaky
-
 ## Packages to add
 
 ### DB connectors
@@ -21,3 +17,19 @@ https://woob.tech/?
 ### Other
 
 mmap - Memory Mapped File ?
+
+Add:
+- https://hackage.haskell.org/package/time
+- https://hackage.haskell.org/package/pandoc ?
+- https://hackage.haskell.org/package/lens ?
+- https://hackage.haskell.org/package/hedis ?
+- https://hackage.haskell.org/package/streamly
+
+Find from: https://hackage.haskell.org/packages
+Or from: https://github.com/krispo/awesome-haskell
+Or from: https://github.com/search?q=language%3AHaskell&type=repositories&s=stars&o=desc&p=1
+
+https://github.com/facebook/Haxl
+https://github.com/digitallyinduced/ihp
+
+https://www.iroh.computer/ ?

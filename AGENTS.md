@@ -27,6 +27,26 @@ Guidance for working in the **linen** Lean library.
   For `Prop`-valued definitions that cannot be decided by `#guard`, use
   `example ... := rfl` (or an explicit proof) to illustrate the law.
 
+### FFI and native-library dependencies
+
+- **Any module that links against a native C library (FFI) must build and
+  pass its tests on at least macOS and Linux.** This covers both the `ffi/*.c`
+  shim and the `lakefile.lean` linking logic (`pkg-config` discovery, vendored
+  source, or downloaded prebuilt archives).
+- CI (`.github/workflows/`) must run the full `lake build Tests` on both
+  platforms whenever any FFI target is present in the build graph — a native
+  dependency that only builds on the contributor's own machine is not
+  considered done.
+- When a native library ships no `pkg-config` file and has no package in
+  Ubuntu's default apt repos (so the existing `pkgConfig`/`pkgLinkFlags`
+  pattern in `lakefile.lean` doesn't apply), prefer, in order: (1) vendoring
+  the library's source directly under `ffi/` when a small single- or
+  few-file amalgamation exists (e.g. SQLite's `sqlite3.c`/`sqlite3.h`) — this
+  avoids a platform dev-package dependency entirely and pins the exact
+  version in git; (2) downloading a pinned prebuilt release archive as a
+  build/CI step when no such amalgamation exists (e.g. DuckDB) — do not check
+  prebuilt per-platform binaries into git.
+
 ## Keeping the main page current
 
 `README.md` is the project's front page: the logo, badges, the feature list,

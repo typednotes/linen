@@ -112,6 +112,49 @@ it depends on).
     to plot one histogram, a subsystem unrelated to image processing itself
     and roughly as large as `JuicyPixels` on its own. Decided with the user
     2026-07-11.
+73. [`sqlite-simple`](sqlite-simple/dependencies.md) (done) — mid-level
+    SQLite client library ([source](https://github.com/nurpax/sqlite-simple)),
+    16 module(s) (12 from `sqlite-simple` itself, plus its raw-FFI
+    dependency `direct-sqlite` folded directly into the same
+    `dependencies.md`, 4 modules — the same "raw C binding folded into the
+    one wrapper package that uses it" treatment `Hasql` gives
+    `postgresql-libpq`/`LibPQ`). Needs a new native `sqlite3` C-library
+    link (via `pkg-config`, following the existing `libpq`/`openssl`
+    pattern in `lakefile.lean`) — see the `dependencies.md`'s "Native C
+    library" section.
+74. [`duckdb-ffi`](duckdb-ffi/dependencies.md) (done) — low-level FFI
+    bindings to the DuckDB C API
+    ([source](https://github.com/Tritlo/duckdb-haskell)), 18 module(s).
+    A prerequisite of `duckdb-simple`; kept as its own entry rather than
+    folded in (unlike `direct-sqlite`/`sqlite-simple`) because of its full
+    upstream size — see the `dependencies.md`'s size-decision note.
+    **Scope note:** scoped down from the full 44-module upstream surface to
+    the 18 modules `duckdb-simple` actually imports; the other 26 —
+    aggregate/table-function registration, the Arrow interop layer,
+    streaming results, and the whole `Deprecated.*` legacy pre-1.0 shim
+    tree (plus the top-level re-export facades) — are excluded as
+    deprecated/unused C-API surface with no consumer in `duckdb-simple`,
+    the same treatment the `hip` entry above gives
+    `Graphics.Image.IO.Histogram`. Decided with the user 2026-07-11. Needs
+    a new native `duckdb` C-library link; **DuckDB ships no `pkg-config`
+    file on either macOS/Homebrew or Ubuntu's default apt repos**, unlike
+    every other native dependency in this repo — resolved via a new CI step
+    to download a pinned DuckDB release archive plus a bespoke
+    non-`pkg-config` discovery path in `lakefile.lean`, see the
+    `dependencies.md`'s "Native C library" section. **Correction
+    (2026-07-12):** one binding originally filed under the excluded
+    `StreamingResult` module, `duckdb_fetch_chunk`, turned out to be
+    load-bearing for `duckdb-simple`'s own facade after all (it walks a
+    materialized, non-streaming result) — added directly to the kept
+    `QueryExecution` module rather than reopening this scope split; see
+    `dependencies.md`'s own correction note.
+75. [`duckdb-simple`](duckdb-simple/dependencies.md) (done) — mid-level
+    DuckDB client library modeled after `sqlite-simple`'s API
+    ([source](https://github.com/Tritlo/duckdb-haskell)), 17 module(s).
+    Confirmed independent of `sqlite-simple`/`direct-sqlite` (checked its
+    `.cabal` directly) — listed after `sqlite-simple` only because that is
+    the requested import order, not a real dependency edge. Completes the
+    `sqlite-simple` → `duckdb-ffi` → `duckdb-simple` import chain.
 
 ### `hip` dependencies covered by the Lean stdlib or an existing port (no separate Hackage import needed)
 

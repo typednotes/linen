@@ -7,14 +7,37 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v5
       # Native FFI dependencies, resolved via pkg-config in the lakefile:
       #  - libpq     (ffi/postgres.c) for Database.PostgreSQL
       #  - OpenSSL   (ffi/jose.c)     for Crypto.JOSE
-      #  - libsecret (ffi/keychain.c) for System.Keychain (Linux credential store)
-      - name: Install native FFI dependencies (libpq, OpenSSL, libsecret)
+      #  - libsecret (ffi/keychain.c) for System.Keychain (Linux credential store only;
+      #                                macOS uses the Security/CoreFoundation frameworks instead)
+      - name: Install native FFI dependencies (Linux)
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libpq-dev libssl-dev libsecret-1-dev pkg-config
+      - name: Install native FFI dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install libpq openssl pkg-config
+          # libpq/openssl are keg-only on Homebrew, so pkg-config needs an
+          # explicit PKG_CONFIG_PATH to find their .pc files.
+          echo "PKG_CONFIG_PATH=$(brew --prefix libpq)/lib/pkgconfig:$(brew --prefix openssl)/lib/pkgconfig" >> "$GITHUB_ENV"
+      # DuckDB (ffi/duckdb_shim.c) for Database.DuckDB.FFI: no separate
+      # download step here. lakefile.lean's own `ensureDuckdbUnpacked` logic
+      # (curl + unzip, both preinstalled on ubuntu-latest/macos-latest) runs
+      # on demand during `lake build` below, on both matrix legs, exactly
+      # like it does on a contributor's own machine — the same
+      # once-per-checkout caching (a `duckdb.h` already present under
+      # `.lake/duckdb/` short-circuits before any network call) that makes a
+      # dedicated CI step unnecessary: it wouldn't avoid a redundant
+      # download (there is none across the two build-graph fetches within
+      # one `lake build`), and duplicating the version/URL logic here would
+      # just be a second place to keep in sync with lakefile.lean.
       - uses: leanprover/lean-action@v1

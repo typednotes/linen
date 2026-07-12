@@ -207,7 +207,14 @@ mutual
       match xref with
       | .table _ => Except.ok <$> Data.PDF.Core.XRef.lookupTableEntry file.buffer xref ref
       | .stream _ s => do
-        let content ← streamContentFueled file fuel ref s
+        -- Per PDF32000-1:2008 §7.5.8, cross-reference streams are never
+        -- encrypted, so their content must be read raw and decoded without
+        -- going through `streamContentFueled`/`rawStreamContentFueled`,
+        -- which would decrypt using `ref` — the object being looked up,
+        -- not the (untracked) xref stream's own object number.
+        let len ← resolveStreamLength file fuel ref s.dict
+        let raw ← Data.PDF.Core.Stream.rawStreamContent file.buffer len s.offset
+        let content ← Data.PDF.Core.Stream.decodeStream file.filters s raw
         Data.PDF.Core.XRef.lookupStreamEntry s.dict content ref
 
   /-- Look up `ref`'s entry, following `/Prev` until it's found or the

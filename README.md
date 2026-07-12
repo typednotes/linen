@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>462 modules</strong> · <strong>362 compile-time theorems</strong> · <strong>7434 <code>#guard</code> checks</strong>
+  <strong>515 modules</strong> · <strong>370 compile-time theorems</strong> · <strong>7655 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -71,6 +71,39 @@ for the full per-module feature list and module table.
   CSV I/O, joins, sorting, grouping/aggregation, and statistics.
 - **`Database.PostgreSQL` / `Database.SQL`** — libpq FFI bindings and a
   hasql-style typed client (encoders/decoders, sessions, pooling).
+- **`Database.SQLite3`** — `direct-sqlite`-style FFI bindings to a vendored
+  SQLite amalgamation (no pkg-config), with an `Except Error`-returning
+  `Direct` layer and a public `IO`-throwing API.
+- **`Database.SQLite.Simple`** — a `sqlite-simple`-style mid-level client:
+  `Query`/`Only`/row-cons types, the error-accumulating `Ok` applicative,
+  SQLite date/time text parsing & rendering, `Connection`/`Statement`/`Field`
+  connection plumbing, and the `ToField`/`FromField`/`ToRow`/`FromRow`
+  parameter/row conversion classes (tuple instances up to arity 7); a public
+  facade (`withConnection`, `query`/`query_`/`execute`/`execute_`,
+  streaming `fold`/`fold_`, `withTransaction`/`withSavepoint`,
+  `lastInsertRowId`/`changes`); the `sql "…"` `syntax`/`macro_rules`
+  quasiquoter substitute; and user-defined scalar SQL function registration
+  (`createFunction0`–`createFunction3`/`deleteFunction`) via a new
+  Lean-closure-called-from-C `sqlite3_create_function_v2` bridge.
+- **`Database.DuckDB.FFI`** — low-level `duckdb-ffi`-style FFI bindings to
+  `libduckdb`: connection/query lifecycle, prepared statements & the
+  appender, `DataChunk`/`Vector`/validity-mask access to result data, the
+  logical-type system (primitive/`LIST`/`ARRAY`/`MAP`/`STRUCT`/`UNION`/
+  `ENUM`/`DECIMAL`), catalog/config/error/logging helpers, and user-defined
+  scalar SQL function registration via a Lean-closure-called-from-C
+  trampoline (mirroring the one built for `Database.SQLite.Simple`).
+- **`Database.DuckDB.Simple`** — a `duckdb-simple`-style mid-level client atop
+  `Database.DuckDB.FFI`: the error-accumulating `Ok` applicative, `Query`/
+  `Only`/row-cons types, the `ToField`/`FromField`/`ToRow`/`FromRow`
+  parameter/row conversion classes (tuple instances up to arity 7) including
+  DuckDB's `STRUCT`/`UNION`/`LIST`/`MAP`/`ENUM`/`DECIMAL` logical-type decode
+  support and hand-written `STRUCT`/`UNION` decode combinators standing in for
+  GHC-generics-derived instances; catalog/config/file-system/logging helpers
+  and user-defined scalar SQL function registration; and a public facade
+  (`withConnection`, `query`/`query_`/`execute`/`execute_`, streaming
+  `fold`/`fold_`, `withTransaction`) built on the appender-free
+  prepared-statement/`DataChunk` fetch pipeline. Completes the
+  `sqlite-simple` → `duckdb-ffi` → `duckdb-simple` import chain.
 - **`Crypto.JOSE`** — JOSE/JWT verification (HMAC/RSA/EC) over OpenSSL.
 - **`Crypto.Zlib` / `Crypto.MD5` / `Crypto.RC4` / `Crypto.AES`** — zlib
   inflate, RFC 1321 MD5, the RC4 stream cipher, and AES-128 CBC decryption
@@ -141,7 +174,7 @@ open Data.Functor Control.Monad
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 462 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 515 modules).
 
 ## Build & Test
 

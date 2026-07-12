@@ -75,6 +75,97 @@ def macSdkFrameworkArgs : IO (Array String) := do
   catch _ =>
     return #[]
 
+-- ── DuckDB discovery (downloaded pinned prebuilt archive, no pkg-config) ──
+-- DuckDB ships no `.pc` file and has no small single-file amalgamation to
+-- vendor (unlike SQLite's `sqlite3.c`), so per AGENTS.md's FFI precedence
+-- note this is the "download a pinned prebuilt release archive" path: a
+-- fixed DuckDB release version's platform archive is downloaded (if not
+-- already cached) and unpacked into `.lake/duckdb/` at lakefile-elaboration
+-- time, exactly like `pkgLinkFlags` shells out to `pkg-config` above — just
+-- to `curl`/`unzip` instead. The archive itself is git-ignored (`.lake/` is
+-- already in `.gitignore`), matching "do not check prebuilt per-platform
+-- binaries into git".
+
+/-- Pinned DuckDB release version (bump here only). `v1.5.4` is the latest
+    stable release as of this port, and — unlike `v1.1.x` — its `duckdb.h`
+    already exposes the instance-cache/client-context/arrow-options API
+    surface `duckdb-ffi-1.5.0.0`'s `OpenConnect.hs` binds against. -/
+def duckdbVersion : String := "1.5.4"
+
+/-- Directory the pinned DuckDB archive is unpacked into (or, for
+    `DUCKDB_PREFIX`, where a local install already lives). Relative to the
+    package root, which is Lake's cwd when it elaborates `lakefile.lean` and
+    runs `target`/`extern_lib` actions — the same assumption `pkgConfig`'s
+    relative-path-free design already relies on. -/
+def duckdbCacheDir : FilePath := ".lake" / "duckdb"
+
+/-- The pinned release's platform- (and, on Linux, architecture-) specific
+    asset name. Only macOS/Linux are resolved, matching the two legs of the
+    CI matrix / AGENTS.md's FFI macOS+Linux testing requirement. -/
+def duckdbArchiveName : IO String := do
+  if System.Platform.isOSX then
+    return "libduckdb-osx-universal.zip"
+  else
+    try
+      let out ← IO.Process.output { cmd := "uname", args := #["-m"] }
+      let arch := out.stdout.trimAscii.copy
+      return if arch == "aarch64" || arch == "arm64" then
+        "libduckdb-linux-arm64.zip"
+      else
+        "libduckdb-linux-amd64.zip"
+    catch _ =>
+      return "libduckdb-linux-amd64.zip"
+
+/-- Make `p` absolute (relative to the current directory) if it isn't
+    already, so paths baked into `-I`/`-L`/`-rpath` flags stay valid no
+    matter what directory a later `lake`/built-binary invocation runs from. -/
+def toAbsolute (p : FilePath) : IO FilePath := do
+  if p.isAbsolute then
+    return p
+  else
+    return (← IO.currentDir) / p
+
+/-- Download (if not already cached) and unpack the pinned platform archive
+    into `duckdbCacheDir`, returning that directory — the release archives
+    are flat (`duckdb.h`, `duckdb.hpp`, `libduckdb.{dylib,so}` directly
+    inside, no subdirectory). Idempotent: a `duckdb.h` already present short-
+    circuits the whole check before any network call, so re-running `lake
+    build` (including in CI, on a cold cache) only ever downloads once. -/
+def ensureDuckdbUnpacked : IO FilePath := do
+  let dir := duckdbCacheDir
+  let header := dir / "duckdb.h"
+  if ← header.pathExists then
+    return dir
+  IO.FS.createDirAll dir
+  let name ← duckdbArchiveName
+  let url := s!"https://github.com/duckdb/duckdb/releases/download/v{duckdbVersion}/{name}"
+  let archivePath := dir / name
+  IO.eprintln s!"[linen] downloading DuckDB {duckdbVersion} ({name})..."
+  let curlOut ← IO.Process.output
+    { cmd := "curl", args := #["-fsSL", "-o", archivePath.toString, url] }
+  if curlOut.exitCode != 0 then
+    throw <| IO.userError s!"failed to download {url}: {curlOut.stderr}"
+  let unzipOut ← IO.Process.output
+    { cmd := "unzip", args := #["-o", "-q", archivePath.toString, "-d", dir.toString] }
+  if unzipOut.exitCode != 0 then
+    throw <| IO.userError s!"failed to unpack {archivePath}: {unzipOut.stderr}"
+  return dir
+
+/-- Resolve DuckDB's include/lib directories: `DUCKDB_PREFIX` (e.g. a
+    Homebrew `duckdb` prefix, laying out `include/duckdb.h` and
+    `lib/libduckdb.dylib`) if that env var is set — skipping the download
+    entirely, for local dev machines with `libduckdb` already installed some
+    other way — else the pinned download-and-unpack path above (a single
+    flat directory serving as both). Both are returned absolute. -/
+def duckdbDirs : IO (FilePath × FilePath) := do
+  match ← IO.getEnv "DUCKDB_PREFIX" with
+  | some prefixDir =>
+    let p ← toAbsolute (prefixDir : FilePath)
+    return (p / "include", p / "lib")
+  | none =>
+    let dir ← toAbsolute (← ensureDuckdbUnpacked)
+    return (dir, dir)
+
 -- Resolve the native link flags at lakefile-elaboration time via `pkg-config`.
 -- This runs on the build machine (Lake recompiles the lakefile per checkout),
 -- so the Ubuntu runner gets Linux paths and dev boxes get their own — with no
@@ -105,11 +196,28 @@ run_cmd do
       pure #["-ladvapi32", "-lcredui"]
     else
       pkgLinkFlags "libsecret-1"
+  -- DuckDB: downloaded pinned prebuilt archive (see the block above), not
+  -- pkg-config. `-rpath` (supported by Lean's bundled `ld.lld` on both
+  -- platforms, same flag spelling) is baked into every linked
+  -- binary/shared-lib — including `linenffi`'s own `:shared` dynlib the
+  -- interpreter dlopen's for `#eval` — so the dynamic loader finds
+  -- `libduckdb.{dylib,so}` at its unpacked/`DUCKDB_PREFIX` location without
+  -- `DYLD_LIBRARY_PATH`/`LD_LIBRARY_PATH`. Chosen over copying the shared
+  -- library next to every build output because rpath is a one-time link-time
+  -- flag applying uniformly to `lean_exe`, `Tests`' `#eval`s, and `Examples`
+  -- alike, whereas copying would need repeating (and re-syncing on upgrade)
+  -- for every one of those separate output locations.
+  let (duckdbInc, duckdbLibDir) ← duckdbDirs
+  let duckdbIncludeArgs : Array String := #["-I", duckdbInc.toString]
+  let duckdbLinkArgs : Array String :=
+    #["-L", duckdbLibDir.toString, "-lduckdb", "-Wl,-rpath," ++ duckdbLibDir.toString]
   mkDef `libpqLinkArgs pq
   mkDef `opensslLinkArgs ssl
   mkDef `zlibLinkArgs (macSdk ++ zlib)
   mkDef `keychainLinkArgs keychainLinkArgs
-  mkDef `nativeLinkArgs (pq ++ ssl ++ macSdk ++ zlib ++ keychainLinkArgs)
+  mkDef `duckdbIncludeArgs duckdbIncludeArgs
+  mkDef `duckdbLinkArgs duckdbLinkArgs
+  mkDef `nativeLinkArgs (pq ++ ssl ++ macSdk ++ zlib ++ keychainLinkArgs ++ duckdbLinkArgs)
 
 -- `moreLinkArgs` here also flows into `ExternLib.linkArgs` (`self.pkg.moreLinkArgs`),
 -- so `linenffi`'s `:shared` dynlib — loaded directly by the interpreter for `#eval` —
@@ -117,7 +225,7 @@ run_cmd do
 -- is left as an unbound symbol that dyld's flat-namespace fallback can resolve to
 -- macOS's incompatible system `libboringssl.dylib` instead, crashing on the first call.
 package linen where
-  version := v!"0.3.0"
+  version := v!"0.4.0"
   moreLinkArgs := nativeLinkArgs
 
 -- ── Native FFI (POSIX sockets + kqueue/epoll, PostgreSQL libpq) ──
@@ -180,6 +288,42 @@ target keychain.o pkg : FilePath := do
   let weakArgs := #["-I", (← getLeanIncludeDir).toString] ++ libsecretCFlags
   buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
 
+/-- Compile the vendored SQLite amalgamation (`ffi/vendor/sqlite3/sqlite3.c`)
+    into an object file. No `pkg-config` probe is needed: SQLite ships as a
+    small, self-contained, public-domain single `.c`/`.h` amalgamation, so it
+    is vendored directly under `ffi/vendor/sqlite3/` rather than discovered on
+    the host system (see `docs/imports/sqlite-simple/dependencies.md`'s
+    "Native C library" section). `SQLITE_THREADSAFE=1` (serialized mode) keeps
+    the default upstream ships; nothing here disables it. -/
+target sqlite3.o pkg : FilePath := do
+  let oFile := pkg.buildDir / "ffi" / "sqlite3.o"
+  let srcJob ← inputTextFile <| pkg.dir / "ffi" / "vendor" / "sqlite3" / "sqlite3.c"
+  let weakArgs := #["-I", (← getLeanIncludeDir).toString,
+    "-I", (pkg.dir / "ffi" / "vendor" / "sqlite3").toString,
+    "-DSQLITE_THREADSAFE=1"]
+  buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
+
+/-- Compile `ffi/sqlite3_shim.c` (the `@[extern]` entry points used by
+    `Linen.Database.SQLite.Bindings`) into an object file. `#include`s the
+    vendored `sqlite3.h` directly (no system header, no `pkg-config`). -/
+target sqlite3_shim.o pkg : FilePath := do
+  let oFile := pkg.buildDir / "ffi" / "sqlite3_shim.o"
+  let srcJob ← inputTextFile <| pkg.dir / "ffi" / "sqlite3_shim.c"
+  let weakArgs := #["-I", (← getLeanIncludeDir).toString,
+    "-I", (pkg.dir / "ffi" / "vendor" / "sqlite3").toString]
+  buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
+
+/-- Compile `ffi/duckdb_shim.c` (the `@[extern]` entry points used by
+    `Linen.Database.DuckDB.FFI.OpenConnect`, and by future `duckdb-ffi`
+    modules as they're ported) into an object file. DuckDB's include path
+    (`duckdb.h`) is resolved via the downloaded-pinned-archive/`DUCKDB_PREFIX`
+    logic above, not `pkg-config` (see that block's comment for why). -/
+target duckdb.o pkg : FilePath := do
+  let oFile := pkg.buildDir / "ffi" / "duckdb.o"
+  let srcJob ← inputTextFile <| pkg.dir / "ffi" / "duckdb_shim.c"
+  let weakArgs := #["-I", (← getLeanIncludeDir).toString] ++ duckdbIncludeArgs
+  buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
+
 /-- Bundle the FFI object(s) into a static lib that Lake links automatically. -/
 extern_lib linenffi pkg := do
   let networkObj ← network.o.fetch
@@ -188,8 +332,12 @@ extern_lib linenffi pkg := do
   let tlsObj ← tls.o.fetch
   let zlibObj ← zlib.o.fetch
   let keychainObj ← keychain.o.fetch
+  let sqlite3Obj ← sqlite3.o.fetch
+  let sqlite3ShimObj ← sqlite3_shim.o.fetch
+  let duckdbObj ← duckdb.o.fetch
   buildStaticLib (pkg.staticLibDir / nameToStaticLib "linenffi")
-    #[networkObj, postgresObj, joseObj, tlsObj, zlibObj, keychainObj]
+    #[networkObj, postgresObj, joseObj, tlsObj, zlibObj, keychainObj, sqlite3Obj, sqlite3ShimObj,
+      duckdbObj]
 
 @[default_target]
 lean_lib Linen where
@@ -201,8 +349,13 @@ lean_lib Linen where
   precompileModules := true
 
 lean_lib Tests where
+  -- `Tests.Linen.Database.DuckDB.FFI.TestSupport` (a `Tests`-tree module, not
+  -- a `Linen` one) declares its own `@[extern]` bindings for later test
+  -- files' `#eval`s to call through the interpreter — same reason `Linen`
+  -- itself precompiles, just one level down.
   needs := #[linenffi]
   moreLinkArgs := nativeLinkArgs
+  precompileModules := true
 
 lean_exe linen where
   root := `Main
