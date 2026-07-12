@@ -13,8 +13,8 @@ An edge **A → B** means *module A imports module B*, so **B must be built befo
 Upstream `zlib` exposes `Codec.Compression.Zlib`, `Codec.Compression.Zlib.Internal`,
 `Codec.Compression.GZip`, `Codec.Compression.Zlib.Raw`, and the low-level FFI
 binding `Codec.Zlib` used by `io-streams`'s own `System.IO.Streams.Zlib`. Only
-the **inflate (decompress) direction of the raw zlib/RFC 1950 format** is
-needed here:
+the **inflate (decompress) and deflate (compress) directions of the raw
+zlib/RFC 1950 format** are needed here:
 
 - `pdf-toolbox-core`'s `Pdf.Core.Stream.Filter.FlateDecode` calls
   `io-streams`'s `Streams.decompress`, which is built on `zlib`'s
@@ -23,10 +23,19 @@ needed here:
 - No call site anywhere in `pdf-toolbox-core`/`-content`/`-document` ever
   compresses/deflates or reads a gzip stream — verified by grepping the whole
   upstream source tree for `compress`/`deflate`/`GZip`/`gunzip`: zero hits.
+- The `JuicyPixels` port's PNG encoder (`Linen.Codec.Picture.Png`, see
+  [`../JuicyPixels/dependencies.md`](../JuicyPixels/dependencies.md)) does
+  need to *produce* a zlib/RFC 1950 stream for its `IDAT` chunks, so the
+  deflate (compress) direction — `Codec.Zlib.initDeflate`/`feedDeflate`/
+  `finishDeflate`, ported as `Linen.Crypto.Zlib.FFI`'s `initDeflate`/
+  `feedDeflate`/`finishDeflate` (and one-shot `compress`) — was added
+  alongside the pre-existing inflate wrapper, using `Z_DEFAULT_COMPRESSION`
+  (no call site needs a specific speed/ratio trade-off, and the inflate side
+  set no level/parameter precedent to follow).
 
-So this port is one FFI-backed function, `decompress`, driving a persistent
-`z_stream` (via a C shim linked against the system `libz`, mirroring the
-`libpq`/OpenSSL pkg-config pattern already used for
+So this port is two FFI-backed functions, `decompress` and `compress`, each
+driving a persistent `z_stream` (via a C shim linked against the system
+`libz`, mirroring the `libpq`/OpenSSL pkg-config pattern already used for
 [`Jose`](../Jose/dependencies.md)/`Hasql`), not a full port of `Codec.Compression.*`'s
 pure-Haskell high-level wrapper API (which upstream itself only offers as a
 convenience layer over the same FFI calls).
@@ -40,5 +49,8 @@ convenience layer over the same FFI calls).
    `Crypto.Zlib`): an opaque `Inflate` handle (`z_stream*`, mirroring
    `Linen/Network/TLS/Context.lean`'s OpenSSL-handle pattern) with
    `initInflate`, `feed`, `finish`, wired to a new `ffi/zlib.c` shim and a
-   `zlib` `pkgConfig` entry in the root `lakefile.lean`. -->
+   `zlib` `pkgConfig` entry in the root `lakefile.lean`. Later extended, in
+   the same file and C shim, with a mirror-image opaque `Deflate` handle
+   (`initDeflate`/`feedDeflate`/`finishDeflate`, plus one-shot `compress`)
+   for the deflate (compress) direction needed by the PNG encoder. -->
 

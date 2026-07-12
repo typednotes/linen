@@ -1,13 +1,15 @@
 /*
- * ffi/zlib.c — zlib inflate (decompress) FFI for Lean 4
+ * ffi/zlib.c — zlib inflate (decompress) and deflate (compress) FFI for
+ * Lean 4
  *
- * Wraps a persistent `z_stream *` for the raw zlib/RFC 1950 inflate
- * direction only (WindowBits 15). Follows the same `lean_alloc_external`
- * pattern as `ffi/tls.c`.
+ * Wraps a persistent `z_stream *` for the raw zlib/RFC 1950 inflate and
+ * deflate directions only (WindowBits 15). Follows the same
+ * `lean_alloc_external` pattern as `ffi/tls.c`.
  *
- * Scope (see docs/imports/Zlib/dependencies.md): only
- * `initInflate`/`feedInflate`/`finishInflate` — no deflate/compress, no
- * gzip (WindowBits 31).
+ * Scope (see docs/imports/Zlib/dependencies.md):
+ * `initInflate`/`feedInflate`/`finishInflate` and their deflate mirror
+ * `initDeflate`/`feedDeflate`/`finishDeflate` — no gzip (WindowBits 31).
+ * Deflate uses `Z_DEFAULT_COMPRESSION` (see `linen_zlib_deflate_init`).
  *
  * Platform: macOS and Linux. Requires the system zlib (`libz`).
  */
@@ -243,6 +245,243 @@ LEAN_EXPORT lean_obj_res linen_zlib_inflate_finish(
 
     if (s->initialized) {
         inflateEnd(&s->strm);
+        s->initialized = 0;
+    }
+    s->finished = 1;
+
+    if (rc != 0) {
+        char errbuf[256];
+        strncpy(errbuf, err_msg, sizeof(errbuf) - 1);
+        errbuf[sizeof(errbuf) - 1] = '\0';
+        free(out_buf);
+        return linen_zlib_mk_io_error(errbuf);
+    }
+
+    lean_obj_res arr = lean_alloc_sarray(1, out_len, out_len);
+    if (out_len > 0) {
+        memcpy(lean_sarray_cptr(arr), out_buf, out_len);
+    }
+    free(out_buf);
+    return lean_io_result_mk_ok(arr);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * External class for the deflate stream handle
+ *
+ * Mirrors the inflate handle above exactly, but drives `deflate`/
+ * `deflateEnd` instead of `inflate`/`inflateEnd`.
+ * ──────────────────────────────────────────────────────────── */
+
+static lean_external_class *g_linen_zlib_deflate_class = NULL;
+
+typedef struct {
+    z_stream strm;
+    int initialized;  /* whether deflateInit succeeded (needs deflateEnd) */
+    int finished;     /* whether Z_STREAM_END/deflateEnd already happened */
+} linen_deflate_t;
+
+static void linen_zlib_deflate_finalizer(void *ptr) {
+    linen_deflate_t *s = (linen_deflate_t *)ptr;
+    if (s) {
+        if (s->initialized && !s->finished) {
+            deflateEnd(&s->strm);
+        }
+        free(s);
+    }
+}
+
+static void ensure_zlib_deflate_class(void) {
+    if (!g_linen_zlib_deflate_class) {
+        g_linen_zlib_deflate_class = lean_register_external_class(
+            linen_zlib_deflate_finalizer, linen_zlib_noop_foreach);
+    }
+}
+
+/*
+ * Run `deflate` in a loop, feeding no more input, growing the output
+ * buffer as needed, until the input's available bytes are exhausted (and,
+ * if `flush == Z_FINISH`, until Z_STREAM_END). Appends produced bytes into
+ * `*out_buf`/`*out_len`/`*out_cap` (a simple growable buffer).
+ *
+ * Returns 0 on success, -1 on a zlib error (message left in `err_msg`).
+ */
+static int linen_zlib_drive_deflate(
+    z_stream *strm,
+    int flush,
+    uint8_t **out_buf,
+    size_t *out_len,
+    size_t *out_cap,
+    int *stream_ended,
+    const char **err_msg
+) {
+    uint8_t chunk[LINEN_ZLIB_CHUNK];
+    for (;;) {
+        strm->next_out = chunk;
+        strm->avail_out = LINEN_ZLIB_CHUNK;
+
+        int ret = deflate(strm, flush);
+
+        size_t produced = LINEN_ZLIB_CHUNK - strm->avail_out;
+        if (produced > 0) {
+            if (*out_len + produced > *out_cap) {
+                size_t new_cap = (*out_cap == 0) ? LINEN_ZLIB_CHUNK : *out_cap * 2;
+                while (new_cap < *out_len + produced) new_cap *= 2;
+                uint8_t *grown = realloc(*out_buf, new_cap);
+                if (!grown) {
+                    *err_msg = "out of memory growing deflate output buffer";
+                    return -1;
+                }
+                *out_buf = grown;
+                *out_cap = new_cap;
+            }
+            memcpy(*out_buf + *out_len, chunk, produced);
+            *out_len += produced;
+        }
+
+        if (ret == Z_STREAM_END) {
+            *stream_ended = 1;
+            return 0;
+        }
+        if (ret == Z_OK || ret == Z_BUF_ERROR) {
+            /* Keep going as long as there is remaining input, or the
+               output buffer was full (more output may still be pending);
+               otherwise nothing more to produce this call. */
+            if (strm->avail_in == 0 && produced < LINEN_ZLIB_CHUNK) {
+                return 0;
+            }
+            continue;
+        }
+        *err_msg = strm->msg ? strm->msg : "deflate failed";
+        return -1;
+    }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * initDeflate
+ *
+ * @[extern "linen_zlib_deflate_init"]
+ * opaque initDeflateImpl : IO Deflate.type
+ * ──────────────────────────────────────────────────────────── */
+
+LEAN_EXPORT lean_obj_res linen_zlib_deflate_init(lean_obj_arg world) {
+    ensure_zlib_deflate_class();
+
+    linen_deflate_t *s = malloc(sizeof(linen_deflate_t));
+    if (!s) {
+        return linen_zlib_mk_io_error("malloc failed");
+    }
+    memset(&s->strm, 0, sizeof(s->strm));
+    s->initialized = 0;
+    s->finished = 0;
+
+    /* WindowBits 15: raw zlib/RFC 1950 format (not gzip), matching the
+       inflate side. Compression level: Z_DEFAULT_COMPRESSION — no caller
+       in this codebase needs a specific ratio/speed trade-off, and the
+       existing inflate wrapper exposes no level/parameter choice either,
+       so there is no precedent to mirror beyond "pick zlib's default". */
+    int ret = deflateInit2(&s->strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15,
+                            8, Z_DEFAULT_STRATEGY);
+    if (ret != Z_OK) {
+        const char *msg = s->strm.msg ? s->strm.msg : "deflateInit failed";
+        char buf[256];
+        strncpy(buf, msg, sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = '\0';
+        free(s);
+        return linen_zlib_mk_io_error(buf);
+    }
+    s->initialized = 1;
+
+    lean_obj_res obj = lean_alloc_external(g_linen_zlib_deflate_class, s);
+    return lean_io_result_mk_ok(obj);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * feedDeflate
+ *
+ * @[extern "linen_zlib_deflate_feed"]
+ * opaque feedDeflateImpl : @& Deflate.type → @& ByteArray → IO ByteArray
+ * ──────────────────────────────────────────────────────────── */
+
+LEAN_EXPORT lean_obj_res linen_zlib_deflate_feed(
+    b_lean_obj_arg handle_obj,
+    b_lean_obj_arg data_obj,
+    lean_obj_arg world
+) {
+    linen_deflate_t *s = lean_get_external_data(handle_obj);
+
+    if (s->finished) {
+        return lean_io_result_mk_ok(lean_mk_empty_byte_array(lean_box(0)));
+    }
+
+    size_t len = lean_sarray_size(data_obj);
+    const uint8_t *buf = lean_sarray_cptr(data_obj);
+
+    s->strm.next_in = (uint8_t *)buf;
+    s->strm.avail_in = (uInt)len;
+
+    uint8_t *out_buf = NULL;
+    size_t out_len = 0;
+    size_t out_cap = 0;
+    int stream_ended = 0;
+    const char *err_msg = NULL;
+
+    int rc = linen_zlib_drive_deflate(&s->strm, Z_NO_FLUSH, &out_buf, &out_len,
+                                       &out_cap, &stream_ended, &err_msg);
+    if (rc != 0) {
+        char errbuf[256];
+        strncpy(errbuf, err_msg, sizeof(errbuf) - 1);
+        errbuf[sizeof(errbuf) - 1] = '\0';
+        free(out_buf);
+        return linen_zlib_mk_io_error(errbuf);
+    }
+    if (stream_ended) {
+        s->finished = 1;
+    }
+
+    lean_obj_res arr = lean_alloc_sarray(1, out_len, out_len);
+    if (out_len > 0) {
+        memcpy(lean_sarray_cptr(arr), out_buf, out_len);
+    }
+    free(out_buf);
+    return lean_io_result_mk_ok(arr);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * finishDeflate
+ *
+ * @[extern "linen_zlib_deflate_finish"]
+ * opaque finishDeflateImpl : @& Deflate.type → IO ByteArray
+ *
+ * Flushes any remaining buffered output (Z_FINISH) and calls
+ * `deflateEnd`.
+ * ──────────────────────────────────────────────────────────── */
+
+LEAN_EXPORT lean_obj_res linen_zlib_deflate_finish(
+    b_lean_obj_arg handle_obj,
+    lean_obj_arg world
+) {
+    linen_deflate_t *s = lean_get_external_data(handle_obj);
+
+    if (s->finished) {
+        return lean_io_result_mk_ok(lean_mk_empty_byte_array(lean_box(0)));
+    }
+
+    /* No new input — just flush whatever `deflate` can still produce. */
+    uint8_t empty;
+    s->strm.next_in = &empty;
+    s->strm.avail_in = 0;
+
+    uint8_t *out_buf = NULL;
+    size_t out_len = 0;
+    size_t out_cap = 0;
+    int stream_ended = 0;
+    const char *err_msg = NULL;
+
+    int rc = linen_zlib_drive_deflate(&s->strm, Z_FINISH, &out_buf, &out_len,
+                                       &out_cap, &stream_ended, &err_msg);
+
+    if (s->initialized) {
+        deflateEnd(&s->strm);
         s->initialized = 0;
     }
     s->finished = 1;

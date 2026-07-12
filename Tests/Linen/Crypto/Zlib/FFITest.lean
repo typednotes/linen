@@ -73,4 +73,60 @@ private def helloWorld : ByteArray :=
   unless !result do
     throw (IO.userError "expected feedInflate on bogus data to fail")
 
+-- One-shot `compress` followed by `decompress` recovers the original bytes
+-- (a round trip through zlib's own deflate/inflate, not just a fixed
+-- reference payload).
+#eval show IO Unit from do
+  let compressed ← compress helloWorld
+  let out ← decompress compressed
+  unless out == helloWorld do
+    throw (IO.userError s!"compress/decompress round-trip mismatch: got {out.toList}")
+
+-- The same round-trip driven by the streaming handle API directly on both
+-- ends: feed the whole payload in one chunk, then finish.
+#eval show IO Unit from do
+  let dHandle ← initDeflate
+  let dHead ← feedDeflate dHandle helloWorld
+  let dTail ← finishDeflate dHandle
+  let compressed := dHead ++ dTail
+  let iHandle ← initInflate
+  let iHead ← feedInflate iHandle compressed
+  let iTail ← finishInflate iHandle
+  unless iHead ++ iTail == helloWorld do
+    throw (IO.userError s!"streaming compress/decompress round-trip mismatch: got {(iHead ++ iTail).toList}")
+
+-- Compressing an empty `ByteArray` round-trips to an empty `ByteArray`.
+#eval show IO Unit from do
+  let compressed ← compress ByteArray.empty
+  let out ← decompress compressed
+  unless out == ByteArray.empty do
+    throw (IO.userError s!"expected empty round-trip, got {out.toList}")
+
+-- A longer, highly repetitive input exercises multiple internal `feed`
+-- iterations on the deflate side (the C shim's 16 KiB output-buffer loop),
+-- not just a single small chunk.
+#eval show IO Unit from do
+  let big := ByteArray.mk (Array.mk (List.replicate 200000 (65 : UInt8)))
+  let compressed ← compress big
+  let out ← decompress compressed
+  unless out == big do
+    throw (IO.userError s!"large round-trip mismatch: sizes {out.size} vs {big.size}")
+
+-- Feeding the input split across several small chunks (as a real streaming
+-- producer would) still recovers the exact original bytes on the deflate
+-- side.
+#eval show IO Unit from do
+  let handle ← initDeflate
+  let chunks := #[helloWorld.extract 0 4, helloWorld.extract 4 8,
+                  helloWorld.extract 8 helloWorld.size]
+  let mut acc := ByteArray.empty
+  for chunk in chunks do
+    let out ← feedDeflate handle chunk
+    acc := acc ++ out
+  let tail ← finishDeflate handle
+  acc := acc ++ tail
+  let out ← decompress acc
+  unless out == helloWorld do
+    throw (IO.userError s!"chunked compress round-trip mismatch: got {out.toList}")
+
 end Tests.Crypto.Zlib.FFI

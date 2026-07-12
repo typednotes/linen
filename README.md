@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>402 modules</strong> · <strong>361 compile-time theorems</strong> · <strong>6051 <code>#guard</code> checks</strong>
+  <strong>462 modules</strong> · <strong>362 compile-time theorems</strong> · <strong>7434 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -102,6 +102,19 @@ for the full per-module feature list and module table.
 - **`Graphics.Netpbm`** — a `netpbm`-style parser for the PBM/PGM/PPM
   "portable anymap" image formats (ASCII and binary variants, magic numbers
   `P1`–`P6`) over `ByteArray`.
+- **`Codec.Picture`** — a `JuicyPixels`-style image codec suite: pixel/image
+  types and colorspace conversions, plus PNG, JPEG (baseline + progressive),
+  GIF (including animation), BMP, TGA, TIFF, and Radiance HDR encoders/
+  decoders, Exif/TIFF/JFIF metadata, and median-cut colour quantization.
+- **`Graphics.Image`** — a `hip`-style image-processing library: `Y`/`RGB`/
+  `HSI`/`CMYK`/`YCbCr`/complex/binary colour spaces over a shape-indexed
+  pixel array; geometric transforms (rotate/scale/translate/crop) with
+  nearest-neighbour/bilinear interpolation; kernel convolution and named
+  filters (Sobel, Gaussian, Laplacian, …); binary morphology (erode/dilate/
+  open/close); FFT-based complex-image processing; adaptive histogram
+  equalization; Hough-transform line detection; salt-and-pepper noise
+  generation; and PNG/JPEG/GIF/BMP/TGA/TIFF/HDR and PNM/PGM/PPM file I/O via
+  `Codec.Picture`/`Graphics.Netpbm`.
 
 ## Quick Start
 
@@ -128,7 +141,7 @@ open Data.Functor Control.Monad
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 402 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 462 modules).
 
 ## Build & Test
 

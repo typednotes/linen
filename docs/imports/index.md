@@ -98,17 +98,20 @@ it depends on).
 70. [`netpbm`](netpbm/dependencies.md) (done) — PNM/PGM/PPM image
     decoder (`Graphics.Netpbm`), a prerequisite of `hip`, 1 module,
     ported as `Linen.Graphics.Netpbm`.
-71. [`JuicyPixels`](JuicyPixels/dependencies.md) (in progress) — PNG/JPEG/GIF/
+71. [`JuicyPixels`](JuicyPixels/dependencies.md) (done) — PNG/JPEG/GIF/
     TIFF/BMP/TGA/HDR image codec suite (`Codec.Picture.*`), a prerequisite
     of `hip`, 29 module(s), ported as `Linen.Codec.Picture.*`.
-72. [`hip`](hip/dependencies.md) (planned) — Haskell Image Processing
+72. [`hip`](hip/dependencies.md) (done) — Haskell Image Processing
     library ([source](https://hackage.haskell.org/package/hip))
-    (`Graphics.Image.*`). **Scope note:** `Graphics.Image.IO.Histogram` is
-    excluded, and with it the `Chart`/`Chart-diagrams` dependency — those
-    pull in the entire `diagrams-lib`/`diagrams-svg`/`SVGFonts` 2D
-    vector-graphics EDSL merely to plot one histogram, a subsystem
-    unrelated to image processing itself and roughly as large as
-    `JuicyPixels` on its own. Decided with the user 2026-07-11.
+    (`Graphics.Image.*`), 30 module(s) (21 new-port, 8 covered by the
+    already-ported `repa`, plus 2 of the 21 glue-only and reusing
+    `Linen.Codec.Picture.*`/`Linen.Graphics.Netpbm`). **Scope note:**
+    `Graphics.Image.IO.Histogram` is excluded, and with it the
+    `Chart`/`Chart-diagrams` dependency — those pull in the entire
+    `diagrams-lib`/`diagrams-svg`/`SVGFonts` 2D vector-graphics EDSL merely
+    to plot one histogram, a subsystem unrelated to image processing itself
+    and roughly as large as `JuicyPixels` on its own. Decided with the user
+    2026-07-11.
 
 ### `hip` dependencies covered by the Lean stdlib or an existing port (no separate Hackage import needed)
 

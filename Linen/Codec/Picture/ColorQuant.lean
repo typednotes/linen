@@ -78,7 +78,10 @@ def defaultPaletteOptions : PaletteOptions :=
 private def cmpU8 (a b : Pixel8) : Ordering :=
   if a < b then .lt else if b < a then .gt else .eq
 
-local instance : Ord PixelRGB8 where
+/-- Lexicographic order on RGB8 pixels, needed to store `PixelRGB8`s in a
+    `Data.Set'` (as `isColorCountBelow` does). Not `local` because callers of
+    `isColorCountBelow` need it in scope to use its result. -/
+instance : Ord PixelRGB8 where
   compare a b := ((cmpU8 a.r b.r).then (cmpU8 a.g b.g)).then (cmpU8 a.b b.b)
 
 /-- Determine the set of distinct colours in `img`, unless there are more

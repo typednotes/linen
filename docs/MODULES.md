@@ -1160,6 +1160,147 @@ byte constants (`_A`.._Z`, `_a`.._z`, `_0`.._9`, punctuation), with
 `native_decide`-proved idempotency and classification/conversion coherence
 over all 256 `UInt8` values.
 
+### `Codec.Picture` — image codecs (PNG, JPEG, GIF, BMP, TGA, TIFF, HDR)
+
+A port of [`JuicyPixels`](https://hackage.haskell.org/package/JuicyPixels)
+(see [`docs/imports/JuicyPixels/dependencies.md`](imports/JuicyPixels/dependencies.md)):
+pixel/image types and colorspace conversions, plus independent encoders/
+decoders for every major raster format. "Codec" and "Picture" name a general
+subject area rather than Haskell/GHC itself, so the package is ported as
+`Linen.Codec.Picture.*` (same reasoning as `Graphics.Netpbm`).
+
+- `Codec.Picture.Types` — `Image`/`MutableImage`/`DynamicImage`, the
+  `Pixel`/`ColorConvertible`/`ColorSpaceConvertible`/`ColorPlane`/
+  `LumaPlaneExtractable`/`TransparentPixel` classes, and every concrete pixel
+  type (`PixelYA8`, `PixelRGB8`, `PixelYCbCr8`, `PixelCMYK8`, … and their
+  16-bit/float variants).
+- `Codec.Picture.VectorByteConversion` — `Array UInt8` ↔ `ByteArray`
+  conversion (an explicit element-wise copy, since Lean's `Array`/`ByteArray`
+  share no storage-layout trick to exploit as upstream's unsafe pointer cast
+  does).
+- `Codec.Picture.InternalHelper` — small `ByteString`/file-loading helpers.
+- `Codec.Picture.BitWriter` — MSB-first bit-level reader/writer, used by both
+  the JPEG and PNG (and GIF LZW) codecs.
+- `Codec.Picture.Metadata.Exif` — Exif tag vocabulary and TIFF-embedded Exif
+  directory parsing.
+- `Codec.Picture.Metadata` — the generic `Metadatas`/`Keys`/`Elem` map
+  attached to decoded images.
+- `Codec.Picture.ColorQuant` — median-cut colour quantization (GIF/PNG
+  palette generation).
+- `Codec.Picture.Bitmap` — BMP decode/encode.
+- `Codec.Picture.Tga` — TGA decode/encode.
+- `Codec.Picture.HDR` — Radiance HDR decode/encode.
+- `Codec.Picture.Png.Internal.Type` — PNG chunk structure, `ChunkSignature`,
+  filter types.
+- `Codec.Picture.Png.Internal.Metadata` — PNG ancillary-chunk ↔ `Metadata`
+  conversion.
+- `Codec.Picture.Png.Internal.Export` — image → PNG chunk encoding.
+- `Codec.Picture.Png` — top-level PNG decode/encode, over zlib
+  inflate/deflate (`Linen.Data.Compression.Zlib`).
+- `Codec.Picture.Tiff.Internal.Types` — TIFF IFD/tag structure.
+- `Codec.Picture.Tiff.Internal.Metadata` — TIFF tag ↔ `Metadata` conversion.
+- `Codec.Picture.Tiff` — top-level TIFF decode/encode.
+- `Codec.Picture.Gif.Internal.LZW` — GIF LZW decompression.
+- `Codec.Picture.Gif.Internal.LZWEncoding` — GIF LZW compression.
+- `Codec.Picture.Gif` — top-level GIF decode/encode, including animated GIFs
+  (frame sequencing, disposal methods, delays), with palette quantization on
+  encode.
+- `Codec.Picture.Jpg.Internal.DefaultTable` — standard JPEG
+  quantization/Huffman tables.
+- `Codec.Picture.Jpg.Internal.Types` — JPEG marker/segment/scan structure.
+- `Codec.Picture.Jpg.Internal.Common` — shared JPEG decode helpers.
+- `Codec.Picture.Jpg.Internal.FastDct` / `.FastIdct` — integer DCT/IDCT.
+- `Codec.Picture.Jpg.Internal.Metadata` — JFIF/Exif ↔ `Metadata` conversion.
+- `Codec.Picture.Jpg.Internal.Progressive` — progressive-scan JPEG decoding.
+- `Codec.Picture.Jpg` — top-level JPEG decode/encode (baseline +
+  progressive).
+- `Codec.Picture.Saving` — format-agnostic "save with extension" dispatch
+  over every codec above.
+- `Codec.Picture` — the package's public re-export facade.
+
+### `Graphics.Image` — image processing (colour spaces, geometry, filters, morphology, FFT, AHE, Hough, noise)
+
+A port of [`hip`](https://hackage.haskell.org/package/hip) (see
+[`docs/imports/hip/dependencies.md`](imports/hip/dependencies.md)): pixel/
+colour-space abstractions over a `repa`-backed image array, geometric and
+convolution-based processing, and file I/O reusing `Codec.Picture`/
+`Graphics.Netpbm`. `hip`'s own representation-selection layer
+(`Interface.Vector.*`/`Interface.Repa.*`, 8 modules) needs no separate port —
+every image here is backed directly by `Linen.Data.Array.Shaped`. "Graphics.
+Image" names a general subject area rather than Haskell/GHC itself, so the
+package is ported as `Linen.Graphics.Image.*`.
+
+- `Graphics.Image.Utils` — small numeric/list helpers with no
+  `Graphics.Image.*` dependency of their own.
+- `Graphics.Image.Interface.Elevator` — the `Elevator` class: precision-
+  changing conversions between pixel component types (e.g. `Float ↔ UInt8`),
+  with range scaling, plus `clamp01`.
+- `Graphics.Image.Interface` — the central `Pixel`/`ColorSpace`/
+  `AlphaSpace`/array classes tying a pixel type and component type to an
+  image's array representation, a `Manifest`-backed `Image` type, and
+  generic border-handling indexing (`index`, `borderIndex`, `Border`, …).
+- `Graphics.Image.ColorSpace.Y` — single-channel luma colour space (`Y`),
+  plus its alpha-carrying counterpart `YA`.
+- `Graphics.Image.ColorSpace.RGB` — three-channel red/green/blue colour
+  space, plus `RGBA`.
+- `Graphics.Image.ColorSpace.HSI` — three-channel hue/saturation/intensity
+  colour space, plus `HSIA`.
+- `Graphics.Image.ColorSpace.CMYK` — four-channel cyan/magenta/yellow/key
+  (black) colour space, plus `CMYKA`.
+- `Graphics.Image.ColorSpace.YCbCr` — three-channel luma/chroma colour
+  space, plus `YCbCrA`.
+- `Graphics.Image.ColorSpace.Complex` — complex-valued pixels over any
+  existing colour space, used by the FFT-based processing modules.
+- `Graphics.Image.ColorSpace.X` — a generic, "unlabeled" single-channel
+  colour space used as a building block, distinct from luma `Y`.
+- `Graphics.Image.ColorSpace.Binary` — bit-valued binary pixels built on `X`,
+  for thresholding/morphology.
+- `Graphics.Image.ColorSpace` — the colour-space facade: re-exports every
+  individual colour space, plus the cross-colour-space conversion matrix
+  (`ToY`/`ToRGB`/`ToHSI`/`ToCMYK`/`ToYCbCr`, and their alpha-carrying
+  counterparts).
+- `Graphics.Image.Processing.Interpolation` — sampling an image at a
+  non-integer coordinate (nearest-neighbour/bilinear).
+- `Graphics.Image.Processing.Geometric` — resampling, cropping, flipping,
+  rotation, and resizing of images.
+- `Graphics.Image.Processing.Complex.Fourier` — the 2-D fast Fourier
+  transform (and its inverse) on complex-pixel images.
+- `Graphics.Image.Processing.Complex` — whole-image complex-pixel
+  operations, plus the `fft`/`ifft` re-export.
+- `Graphics.Image.Processing.Convolution` — kernel convolution/correlation
+  of an image.
+- `Graphics.Image.Processing.Filter` — named filter kernels (Sobel,
+  Gaussian, Laplacian, …) built on convolution.
+- `Graphics.Image.Processing.Binary` — binary-image construction and
+  morphology (erode/dilate/opening/closing) built on `ColorSpace.Binary` and
+  `Processing.Convolution`.
+- `Graphics.Image.Processing` — the processing facade: re-exports
+  `Geometric`/`Interpolation`/`Convolution`/`Filter`, plus its own
+  `pixelGrid`.
+- `Graphics.Image.IO.Base` — shared reader/writer typeclasses and
+  pixel-precision normalisation used by every concrete image-format backend.
+- `Graphics.Image.IO.Formats.JuicyPixels` — glue between `Image cs e` and
+  `Linen.Codec.Picture`, reusing that suite for the actual PNG/JPEG/GIF/BMP/
+  TIFF/TGA/HDR decode/encode.
+- `Graphics.Image.IO.Formats.Netpbm` — glue between `Image cs e` and
+  `Linen.Graphics.Netpbm`, reusing it for the actual PNM/PGM/PPM decode.
+- `Graphics.Image.IO.Formats` — the format-dispatch facade tying together
+  every JuicyPixels-backed and Netpbm-backed format tag.
+- `Graphics.Image.IO` — the top-level file-I/O facade: format-guessing
+  read/write wrappers built on `IO.Base`/`IO.Formats`.
+- `Graphics.Image.Types` — the package-level type/re-export facade:
+  concrete (colour space × precision) image type aliases.
+- `Graphics.Image` — the top-level public facade of the whole `hip` library.
+- `Graphics.Image.Processing.Ahe` — adaptive (local-rank) histogram
+  equalization.
+- `Graphics.Image.Processing.Hough` — the linear Hough transform for line
+  detection (a vote-count heatmap over discretized angle/distance, per
+  upstream's own experimental algorithm).
+- `Graphics.Image.Processing.Noise` — salt-and-pepper (impulse) noise
+  generation, threading Lean core's `StdGen`/`randNat` (`Init.Data.Random`,
+  already a direct port of the same `System.Random` this module builds on)
+  as a pure, explicit-seed generator.
+
 ## Module Table
 
 | Module | Description |
@@ -1563,3 +1704,63 @@ over all 256 `UInt8` values.
 | `Linen.CDP.Runtime` | the client runtime: `runClient`, `sendCommand`/`sendCommandWait`, `subscribe`/`unsubscribe` |
 | `Linen.CDP` | the package aggregator: `CDP.Domains` + `CDP.Runtime` |
 | `Linen.Graphics.Netpbm` | `netpbm`-style parser for the PBM/PGM/PPM "portable anymap" image formats (ASCII/binary `P1`–`P6`) over `ByteArray`, via `Std.Internal.Parsec` |
+| `Linen.Codec.Picture.Types` | `Image`/`MutableImage`/`DynamicImage`, pixel classes, and every concrete pixel type |
+| `Linen.Codec.Picture.VectorByteConversion` | `Array UInt8` ↔ `ByteArray` conversion |
+| `Linen.Codec.Picture.InternalHelper` | small `ByteString`/file-loading helpers |
+| `Linen.Codec.Picture.BitWriter` | MSB-first bit-level reader/writer for JPEG/PNG/GIF |
+| `Linen.Codec.Picture.Metadata.Exif` | Exif tag vocabulary and TIFF-embedded Exif directory parsing |
+| `Linen.Codec.Picture.Metadata` | the generic `Metadatas`/`Keys`/`Elem` map attached to decoded images |
+| `Linen.Codec.Picture.ColorQuant` | median-cut colour quantization (GIF/PNG palette generation) |
+| `Linen.Codec.Picture.Bitmap` | BMP decode/encode |
+| `Linen.Codec.Picture.Tga` | TGA decode/encode |
+| `Linen.Codec.Picture.HDR` | Radiance HDR decode/encode |
+| `Linen.Codec.Picture.Png.Internal.Type` | PNG chunk structure, `ChunkSignature`, filter types |
+| `Linen.Codec.Picture.Png.Internal.Metadata` | PNG ancillary-chunk ↔ `Metadata` conversion |
+| `Linen.Codec.Picture.Png.Internal.Export` | image → PNG chunk encoding |
+| `Linen.Codec.Picture.Png` | top-level PNG decode/encode over zlib inflate/deflate |
+| `Linen.Codec.Picture.Tiff.Internal.Types` | TIFF IFD/tag structure |
+| `Linen.Codec.Picture.Tiff.Internal.Metadata` | TIFF tag ↔ `Metadata` conversion |
+| `Linen.Codec.Picture.Tiff` | top-level TIFF decode/encode |
+| `Linen.Codec.Picture.Gif.Internal.LZW` | GIF LZW decompression |
+| `Linen.Codec.Picture.Gif.Internal.LZWEncoding` | GIF LZW compression |
+| `Linen.Codec.Picture.Gif` | top-level GIF decode/encode, including animated GIFs, with palette quantization on encode |
+| `Linen.Codec.Picture.Jpg.Internal.DefaultTable` | standard JPEG quantization/Huffman tables |
+| `Linen.Codec.Picture.Jpg.Internal.Types` | JPEG marker/segment/scan structure |
+| `Linen.Codec.Picture.Jpg.Internal.Common` | shared JPEG decode helpers |
+| `Linen.Codec.Picture.Jpg.Internal.FastDct` | integer DCT |
+| `Linen.Codec.Picture.Jpg.Internal.FastIdct` | integer IDCT |
+| `Linen.Codec.Picture.Jpg.Internal.Metadata` | JFIF/Exif ↔ `Metadata` conversion |
+| `Linen.Codec.Picture.Jpg.Internal.Progressive` | progressive-scan JPEG decoding |
+| `Linen.Codec.Picture.Jpg` | top-level JPEG decode/encode (baseline + progressive) |
+| `Linen.Codec.Picture.Saving` | format-agnostic "save with extension" dispatch over every codec |
+| `Linen.Codec.Picture` | the package's public re-export facade |
+| `Linen.Graphics.Image.Utils` | small numeric/list helpers with no `Graphics.Image.*` dependency of their own |
+| `Linen.Graphics.Image.Interface.Elevator` | the `Elevator` class: precision-changing conversions between pixel component types, plus `clamp01` |
+| `Linen.Graphics.Image.Interface` | the central `Pixel`/`ColorSpace`/`AlphaSpace` classes, a `Manifest`-backed `Image` type, and generic border-handling indexing |
+| `Linen.Graphics.Image.ColorSpace.Y` | single-channel luma colour space `Y`, plus its alpha-carrying counterpart `YA` |
+| `Linen.Graphics.Image.ColorSpace.RGB` | three-channel red/green/blue colour space, plus `RGBA` |
+| `Linen.Graphics.Image.ColorSpace.HSI` | three-channel hue/saturation/intensity colour space, plus `HSIA` |
+| `Linen.Graphics.Image.ColorSpace.CMYK` | four-channel cyan/magenta/yellow/key colour space, plus `CMYKA` |
+| `Linen.Graphics.Image.ColorSpace.YCbCr` | three-channel luma/chroma colour space, plus `YCbCrA` |
+| `Linen.Graphics.Image.ColorSpace.Complex` | complex-valued pixels over any existing colour space, used by the FFT-based processing modules |
+| `Linen.Graphics.Image.ColorSpace.X` | a generic, "unlabeled" single-channel colour space used as a building block, distinct from luma `Y` |
+| `Linen.Graphics.Image.ColorSpace.Binary` | bit-valued binary pixels built on `X`, for thresholding/morphology |
+| `Linen.Graphics.Image.ColorSpace` | the colour-space facade: re-exports every colour space, plus the cross-colour-space conversion matrix |
+| `Linen.Graphics.Image.Processing.Interpolation` | sampling an image at a non-integer coordinate (nearest-neighbour/bilinear) |
+| `Linen.Graphics.Image.Processing.Geometric` | resampling, cropping, flipping, rotation, and resizing of images |
+| `Linen.Graphics.Image.Processing.Complex.Fourier` | the 2-D fast Fourier transform (and its inverse) on complex-pixel images |
+| `Linen.Graphics.Image.Processing.Complex` | whole-image complex-pixel operations, plus the `fft`/`ifft` re-export |
+| `Linen.Graphics.Image.Processing.Convolution` | kernel convolution/correlation of an image |
+| `Linen.Graphics.Image.Processing.Filter` | named filter kernels (Sobel, Gaussian, Laplacian, …) built on convolution |
+| `Linen.Graphics.Image.Processing.Binary` | binary-image construction and morphology (erode/dilate/opening/closing) |
+| `Linen.Graphics.Image.Processing` | the processing facade: re-exports `Geometric`/`Interpolation`/`Convolution`/`Filter`, plus its own `pixelGrid` |
+| `Linen.Graphics.Image.IO.Base` | shared reader/writer typeclasses and pixel-precision normalisation used by every format backend |
+| `Linen.Graphics.Image.IO.Formats.JuicyPixels` | glue between `Image cs e` and `Linen.Codec.Picture`, reusing it for PNG/JPEG/GIF/BMP/TIFF/TGA/HDR decode/encode |
+| `Linen.Graphics.Image.IO.Formats.Netpbm` | glue between `Image cs e` and `Linen.Graphics.Netpbm`, reusing it for PNM/PGM/PPM decode |
+| `Linen.Graphics.Image.IO.Formats` | the format-dispatch facade tying together every JuicyPixels-backed and Netpbm-backed format tag |
+| `Linen.Graphics.Image.IO` | the top-level file-I/O facade: format-guessing read/write wrappers |
+| `Linen.Graphics.Image.Types` | the package-level type/re-export facade: concrete (colour space × precision) image type aliases |
+| `Linen.Graphics.Image` | the top-level public facade of the whole `hip` library |
+| `Linen.Graphics.Image.Processing.Ahe` | adaptive (local-rank) histogram equalization |
+| `Linen.Graphics.Image.Processing.Hough` | the linear Hough transform for line detection (a vote-count heatmap over discretized angle/distance) |
+| `Linen.Graphics.Image.Processing.Noise` | salt-and-pepper (impulse) noise generation, threading Lean core's `StdGen`/`randNat` as a pure, explicit-seed generator |
