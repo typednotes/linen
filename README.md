@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>515 modules</strong> · <strong>370 compile-time theorems</strong> · <strong>7655 <code>#guard</code> checks</strong>
+  <strong>539 modules</strong> · <strong>370 compile-time theorems</strong> · <strong>7881 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -105,6 +105,12 @@ for the full per-module feature list and module table.
   prepared-statement/`DataChunk` fetch pipeline. Completes the
   `sqlite-simple` → `duckdb-ffi` → `duckdb-simple` import chain.
 - **`Crypto.JOSE`** — JOSE/JWT verification (HMAC/RSA/EC) over OpenSSL.
+- **`Network.OAuth2`** — a `hoauth2`-style OAuth2 client: authorization-code,
+  client-credentials, device-authorization, JWT-bearer, resource-owner-password
+  and refresh-token grants; PKCE (`S256`) via two new OpenSSL-backed
+  `Crypto.SHA256`/`Crypto.SecureRandom` FFI primitives; typed request-builder
+  application config; and token/user-info/device-authorization HTTP flows over
+  `Network.HTTP.Client.Conduit`.
 - **`Crypto.Zlib` / `Crypto.MD5` / `Crypto.RC4` / `Crypto.AES`** — zlib
   inflate, RFC 1321 MD5, the RC4 stream cipher, and AES-128 CBC decryption
   + PKCS5 unpadding — the primitives behind the PDF Standard Security
@@ -174,7 +180,7 @@ open Data.Functor Control.Monad
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 515 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 539 modules).
 
 ## Build & Test
 

@@ -12,6 +12,15 @@
   this library (see `Linen.Data.Conduit.Internal.Conduit`) — there is no
   extra unboundedness introduced here beyond what that layer already
   carries.
+
+  ## `applyBearerAuth`/`applyBasicAuth`
+  Upstream's `http-client` package defines these two request-mutating
+  helpers (re-exported, among others, by `Network.HTTP.Client.Conduit`);
+  `linen` had no prior port of either. Added here — the module `hoauth2`'s
+  `Network.OAuth2.HttpClient`/`Network.OAuth2.TokenRequest` actually import
+  them from — as minimal, direct header-prepending functions rather than
+  pulling in a wider slice of `http-client`'s own request-building API
+  (see `docs/imports/hoauth2/dependencies.md`).
 -/
 
 import Linen.Network.HTTP.Client.Types
@@ -19,10 +28,12 @@ import Linen.Network.HTTP.Client.Connection
 import Linen.Network.HTTP.Client.Request
 import Linen.Network.HTTP.Client.Response
 import Linen.Data.Conduit.Internal.Conduit
+import Linen.Data.Base64
 
 namespace Network.HTTP.Client.Conduit
 
 open Network.HTTP.Client
+open Network.HTTP.Types
 open Data.Conduit
 
 /-- Execute an HTTP request and stream the response body as a conduit source.
@@ -65,5 +76,22 @@ unsafe def httpSink (req : Request) : ConduitT i o IO (Response × ByteArray) :=
   let resp ← liftConduit (performRequest conn req)
   liftConduit conn.connClose
   pure (resp, resp.body)
+
+-- ── Authentication header helpers ──
+
+/-- Prepend an `Authorization: Bearer <token>` header (`http-client`'s
+    `applyBearerAuth`).
+
+    $$\text{applyBearerAuth} : \text{String} \to \text{Request} \to \text{Request}$$ -/
+def applyBearerAuth (token : String) (req : Request) : Request :=
+  { req with headers := (hAuthorization, s!"Bearer {token}") :: req.headers }
+
+/-- Prepend an `Authorization: Basic <base64(user:pass)>` header
+    (`http-client`'s `applyBasicAuth`).
+
+    $$\text{applyBasicAuth} : \text{String} \to \text{String} \to \text{Request} \to \text{Request}$$ -/
+def applyBasicAuth (user pass : String) (req : Request) : Request :=
+  { req with
+      headers := (hAuthorization, s!"Basic {Data.Base64.encode s!"{user}:{pass}".toUTF8}") :: req.headers }
 
 end Network.HTTP.Client.Conduit

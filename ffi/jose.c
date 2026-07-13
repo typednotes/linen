@@ -10,6 +10,8 @@
  * - EC signature verification (ES256/ES384/ES512)
  * - JWK-to-DER public key construction (RSA and EC)
  * - Base64url encode/decode
+ * - Plain SHA-256 digest (`Linen.Crypto.SHA256`)
+ * - CSPRNG byte generation (`Linen.Crypto.SecureRandom`)
  *
  * Platform: macOS and Linux. Requires OpenSSL or LibreSSL.
  */
@@ -25,6 +27,7 @@
 #include <openssl/objects.h>
 #include <openssl/param_build.h>
 #include <openssl/core_names.h>
+#include <openssl/rand.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -624,4 +627,57 @@ LEAN_EXPORT lean_obj_res linen_jose_base64url_encode(
     free(b64);
 
     return lean_io_result_mk_ok(result);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * SHA-256 digest
+ *
+ * @[extern "linen_crypto_sha256"]
+ * opaque sha256 : @& ByteArray -> IO ByteArray
+ *
+ * Plain (non-HMAC) SHA-256 digest via OpenSSL's EVP_Digest/EVP_sha256.
+ * Backs `Linen.Crypto.SHA256`.
+ * ──────────────────────────────────────────────────────────── */
+
+LEAN_EXPORT lean_obj_res linen_crypto_sha256(
+    b_lean_obj_arg data_obj,
+    lean_obj_arg world
+) {
+    const uint8_t *data = lean_sarray_cptr(data_obj);
+    size_t data_len     = lean_sarray_size(data_obj);
+
+    unsigned char result[EVP_MAX_MD_SIZE];
+    unsigned int result_len = 0;
+
+    if (EVP_Digest(data, data_len, result, &result_len, EVP_sha256(), NULL) != 1) {
+        return jose_mk_io_error("SHA-256 digest failed");
+    }
+
+    return lean_io_result_mk_ok(jose_mk_byte_array(result, result_len));
+}
+
+/* ────────────────────────────────────────────────────────────
+ * CSPRNG byte generation
+ *
+ * @[extern "linen_crypto_random_bytes"]
+ * opaque randomBytes : Nat -> IO ByteArray
+ *
+ * Cryptographically secure random bytes via OpenSSL's RAND_bytes.
+ * Backs `Linen.Crypto.SecureRandom`.
+ * ──────────────────────────────────────────────────────────── */
+
+LEAN_EXPORT lean_obj_res linen_crypto_random_bytes(
+    b_lean_obj_arg n_obj,
+    lean_obj_arg world
+) {
+    size_t n = lean_usize_of_nat(n_obj);
+
+    lean_obj_res arr = lean_alloc_sarray(1, n, n);
+    if (n > 0) {
+        if (RAND_bytes(lean_sarray_cptr(arr), (int)n) != 1) {
+            return jose_mk_io_error("RAND_bytes failed");
+        }
+    }
+
+    return lean_io_result_mk_ok(arr);
 }

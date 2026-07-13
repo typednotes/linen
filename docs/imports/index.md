@@ -155,6 +155,18 @@ it depends on).
     `.cabal` directly) — listed after `sqlite-simple` only because that is
     the requested import order, not a real dependency edge. Completes the
     `sqlite-simple` → `duckdb-ffi` → `duckdb-simple` import chain.
+76. [`hoauth2`](hoauth2/dependencies.md) (done) — OAuth2 authorization
+    client ([source](https://github.com/freizl/hoauth2)), 22 module(s)
+    (18 upstream `exposed-modules` + 4 `other-modules`), ported as
+    `Linen.Network.OAuth2.*`. **Scope note:** `binary`/`binary-instances`,
+    `microlens`, `uri-bytestring`/`uri-bytestring-aeson`, `exceptions`, and
+    `memory` are all substituted with existing `linen` ports or Lean stdlib
+    per the precedence rule rather than freshly imported; `crypton` is
+    scoped down to two new small OpenSSL-backed FFI primitives
+    (`Linen.Crypto.SHA256`, `Linen.Crypto.SecureRandom`, reusing the
+    already-linked `ffi/jose.c` OpenSSL dependency) rather than importing
+    the whole package. See the `dependencies.md`'s "External dependencies"
+    section for the full rationale on each.
 
 ### `hip` dependencies covered by the Lean stdlib or an existing port (no separate Hackage import needed)
 

@@ -755,6 +755,60 @@ the project overview and quick start.
   (parse compact form, verify the signature over the candidate JWK set, then
   validate the claims).
 
+### `Network.OAuth2` — OAuth2 client (`hoauth2`)
+
+A port of Hackage's [`hoauth2`](https://hackage.haskell.org/package/hoauth2)
+(v2.15.1), per [`docs/imports/hoauth2/dependencies.md`](imports/hoauth2/dependencies.md).
+`memory`, `exceptions`, `microlens`, `uri-bytestring`(`-aeson`), and
+`binary`(`-instances`) are all substituted with existing `linen`/stdlib
+equivalents rather than freshly ported; `crypton` is scoped down to two new
+OpenSSL-backed FFI primitives reusing `Crypto.JOSE.FFI`'s already-linked
+OpenSSL — see the dependencies doc for the full rationale on each.
+
+- `Crypto.SHA256` / `Crypto.SecureRandom` — two new `@[extern]` bindings added
+  to `ffi/jose.c`, reusing the OpenSSL link already established for
+  `Crypto.JOSE.FFI`: a plain SHA-256 digest (`EVP_sha256`/`EVP_Digest`) and a
+  CSPRNG byte generator (`RAND_bytes`) — the only two primitives PKCE's
+  `S256` challenge method needs, in place of a full `crypton` import.
+- `Network.HTTP.Client.Contrib` — small response-handling helpers
+  (`handleResponse`/`handleResponseJSON`) shared by the OAuth2 HTTP flows.
+- `Network.OAuth2.Internal` — `OAuth2` client config, `AccessToken`/
+  `RefreshToken`/`IdToken`/`ExchangeToken` newtypes, `ClientAuthenticationMethod`,
+  and URI/request helpers (`uriToRequest`, query-parameter injection)
+  substituting `exceptions`'s bare `MonadThrow` constraint and `microlens`'s
+  `over` with plain `Except`-returning functions.
+- `Network.OAuth2.AuthorizationRequest` — the authorization-code redirect URL
+  builder (RFC 6749 §4.1.1).
+- `Network.OAuth2.HttpClient` — bearer/basic-auth request application and
+  JSON-decoding HTTP calls over `Network.HTTP.Client.Conduit`.
+- `Network.OAuth2.TokenRequest` — `TokenResponse`/`OAuth2Token` parsing and
+  `fetchAccessToken`/refresh; the upstream `Binary TokenResponse` instance is
+  dropped (it only proxied through the already-derived JSON codec).
+- `Network.OAuth2` — facade re-exporting the four modules above.
+- `Network.OAuth2.Experiment.Utils` / `.Pkce` — query-parameter map flattening
+  and RFC 7636 PKCE (`CodeVerifier`/`CodeChallenge`, `S256`); `genCodeVerifier`
+  documents its one simplification (a `% 66` mapping onto the unreserved
+  alphabet, replacing upstream's probabilistic rejection-sampling loop).
+- `Network.OAuth2.Experiment.Types` — the typed OAuth2-request-builder
+  machinery (`IdpApplication` family, `GrantTypeFlow`, phantom-typed
+  application config); upstream's `TypeFamilies`/`PolyKinds` are ported via
+  `outParam` class parameters (the same idiom the Lean stdlib uses for
+  `Membership`/`GetElem`) and a plain `Type` parameter respectively.
+- `Network.OAuth2.Experiment.Flows.UserInfoRequest` / `.AuthorizationRequest`
+  / `.DeviceAuthorizationRequest` / `.TokenRequest` / `.RefreshTokenRequest` —
+  per-flow request parameter types and their `ToQueryParam` instances.
+- `Network.OAuth2.Experiment.Flows` — the package's real HTTP-performing
+  entry points (token/device-authorization/refresh/user-info requests,
+  including RFC 8628 §3.5's device-token polling loop, written with a
+  structural `Loop.forIn`, not `partial def` or a fuel parameter).
+- `Network.OAuth2.Experiment.Grants.ClientCredentials` / `.DeviceAuthorization`
+  / `.JwtBearer` / `.ResourceOwnerPassword` / `.AuthorizationCode` — one
+  `IdpApplication` instance per OAuth2 grant type (RFC 6749 + RFC 8628); the
+  authorization-code grant additionally wires up PKCE.
+- `Network.OAuth2.Experiment.Grants` / `Network.OAuth2.Experiment` — facades
+  re-exporting the grant modules, and the package's full typed surface
+  (`Types`/`Grants`/`Flows`/`Pkce`/`Utils`), respectively.
+
 ### `Crypto.Zlib` / `Crypto.MD5` / `Crypto.RC4` / `Crypto.AES` — primitives for PDF encryption
 
 - `Crypto.Zlib.FFI` — a `@[extern]` opaque handle wrapping zlib's `z_stream *`
@@ -1747,6 +1801,30 @@ package is ported as `Linen.Graphics.Image.*`.
 | `Linen.Crypto.JOSE.JWK` | JWK helpers: `parseOctKey` (base64url), `toDerPublicKey` (RSA/EC → DER via OpenSSL) |
 | `Linen.Crypto.JOSE.JWS` | JWS compact verification (RFC 7515): `splitCompact`, `verifySignature` (HMAC/RSA/EC via OpenSSL) |
 | `Linen.Crypto.JOSE.JWT` | JWT verification (RFC 7519): `validateClaims` (exp/nbf/aud/iss, bounded skew), `verifyJWT` (signature + claims) |
+| `Linen.Crypto.SHA256` | `@[extern]` OpenSSL SHA-256 digest (`ffi/jose.c`, reusing `Crypto.JOSE.FFI`'s OpenSSL link) |
+| `Linen.Crypto.SecureRandom` | `@[extern]` OpenSSL `RAND_bytes` CSPRNG (`ffi/jose.c`, reusing `Crypto.JOSE.FFI`'s OpenSSL link) |
+| `Linen.Network.HTTP.Client.Contrib` | `handleResponse`/`handleResponseJSON` response-handling helpers shared by the OAuth2 HTTP flows |
+| `Linen.Network.OAuth2.Internal` | `OAuth2` client config, `AccessToken`/`RefreshToken`/`IdToken`/`ExchangeToken` newtypes, `ClientAuthenticationMethod`, URI/request helpers |
+| `Linen.Network.OAuth2.AuthorizationRequest` | authorization-code redirect URL builder (RFC 6749 §4.1.1) |
+| `Linen.Network.OAuth2.HttpClient` | bearer/basic-auth request application, JSON-decoding HTTP calls over `Network.HTTP.Client.Conduit` |
+| `Linen.Network.OAuth2.TokenRequest` | `TokenResponse`/`OAuth2Token` parsing, `fetchAccessToken`/refresh |
+| `Linen.Network.OAuth2` | facade re-exporting `.Internal`/`.AuthorizationRequest`/`.HttpClient`/`.TokenRequest` |
+| `Linen.Network.OAuth2.Experiment.Utils` | query-parameter map flattening, URI-to-text helpers |
+| `Linen.Network.OAuth2.Experiment.Pkce` | RFC 7636 PKCE: `CodeVerifier`/`CodeChallenge`/`S256` challenge method |
+| `Linen.Network.OAuth2.Experiment.Types` | typed OAuth2-request-builder machinery: `IdpApplication` family, `GrantTypeFlow`, phantom-typed application config |
+| `Linen.Network.OAuth2.Experiment.Flows.UserInfoRequest` | `HasUserInfoRequest` marker class |
+| `Linen.Network.OAuth2.Experiment.Flows.AuthorizationRequest` | `AuthorizationRequestParam` + `ToQueryParam` instance |
+| `Linen.Network.OAuth2.Experiment.Flows.DeviceAuthorizationRequest` | `DeviceCode`, `DeviceAuthorizationResponse` (RFC 8628 §3.2), `DeviceAuthorizationRequestParam` |
+| `Linen.Network.OAuth2.Experiment.Flows.TokenRequest` | `HasTokenRequest`/`HasClientAuthenticationMethod`/`NoNeedExchangeToken`, `addSecretToHeader` |
+| `Linen.Network.OAuth2.Experiment.Flows.RefreshTokenRequest` | `RefreshTokenRequest` + `ToQueryParam`, `HasRefreshTokenRequest` |
+| `Linen.Network.OAuth2.Experiment.Flows` | the real HTTP-performing flows: token/device-authorization/refresh/user-info requests, RFC 8628 §3.5 device-token polling |
+| `Linen.Network.OAuth2.Experiment.Grants.ClientCredentials` | client-credentials grant `IdpApplication` instance (RFC 6749 §4.4) |
+| `Linen.Network.OAuth2.Experiment.Grants.DeviceAuthorization` | device-authorization grant `IdpApplication` instance (RFC 8628) |
+| `Linen.Network.OAuth2.Experiment.Grants.JwtBearer` | JWT-bearer grant `IdpApplication` instance (RFC 7523) |
+| `Linen.Network.OAuth2.Experiment.Grants.ResourceOwnerPassword` | resource-owner-password grant `IdpApplication` instance (RFC 6749 §4.3) |
+| `Linen.Network.OAuth2.Experiment.Grants.AuthorizationCode` | authorization-code grant `IdpApplication` instance (RFC 6749 §4.1), with PKCE |
+| `Linen.Network.OAuth2.Experiment.Grants` | facade re-exporting the five grant modules |
+| `Linen.Network.OAuth2.Experiment` | top-level facade re-exporting `Types`/`Grants`/`Flows`/`Pkce`/`Utils` |
 | `Linen.Crypto.Zlib.FFI` | `@[extern]` zlib inflate-only FFI (`ffi/zlib.c`): opaque `Inflate` handle, `initInflate`/`feedInflate`/`finishInflate`, one-shot `decompress` |
 | `Linen.Crypto.MD5` | RFC 1321 MD5 digest: pure, structurally-recursive `hash` (64-round compression over fixed 64-byte blocks) |
 | `Linen.Crypto.RC4` | RC4 stream cipher: `initCtx` (KSA, 256-byte S-box) + `combine` (PRGA keystream XOR), both structurally recursive |

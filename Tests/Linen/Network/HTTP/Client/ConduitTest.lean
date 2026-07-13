@@ -13,6 +13,17 @@ open Data.Conduit
 
 namespace Tests.Network.HTTP.Client.Conduit
 
+private def sampleRequest : Request :=
+  { method := .standard .GET, host := "example.com", port := 443 }
+
+-- `applyBearerAuth` prepends an `Authorization: Bearer <token>` header.
+#guard (Network.HTTP.Client.Conduit.applyBearerAuth "tok123" sampleRequest).headers.head?
+    == some (Network.HTTP.Types.hAuthorization, "Bearer tok123")
+
+-- `applyBasicAuth` prepends an `Authorization: Basic <base64(user:pass)>` header.
+#guard (Network.HTTP.Client.Conduit.applyBasicAuth "user" "pass" sampleRequest).headers.head?
+    == some (Network.HTTP.Types.hAuthorization, "Basic dXNlcjpwYXNz")
+
 /-! ### Signatures -/
 
 unsafe example (req : Request) : ConduitT PEmpty ByteArray IO Response :=
