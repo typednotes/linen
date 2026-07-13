@@ -23,36 +23,36 @@ namespace Tests.Database.SQLite.Simple.Time.Implementation
 
 -- Plain `YYYY-MM-DD HH:MM:SS`, no offset (assumed UTC).
 #guard match parseUTCTime "2024-02-29 13:45:07" with
-  | .ok t => t == dayAndTimeOfDayToUTCTime (Day.fromGregorian 2024 2 29) (TimeOfDay.mk 13 45 7.0)
+  | .ok t => t == dayAndTimeOfDayToUTCTime (Day.fromGregorian 2024 2 29) (TimeOfDay.ofHourMinuteSec 13 45 7.0)
   | .error _ => false
 
 -- ISO 8601 `T` separator, fractional seconds, trailing `Z`.
 #guard match parseUTCTime "2024-02-29T13:45:07.5Z" with
-  | .ok t => t == dayAndTimeOfDayToUTCTime (Day.fromGregorian 2024 2 29) (TimeOfDay.mk 13 45 7.5)
+  | .ok t => t == dayAndTimeOfDayToUTCTime (Day.fromGregorian 2024 2 29) (TimeOfDay.ofHourMinuteSec 13 45 7.5)
   | .error _ => false
 
 -- Explicit positive UTC offset shifts the time back to UTC (and can roll
 -- the calendar day over).
 #guard match parseUTCTime "2024-01-01 00:30:00+02:00" with
-  | .ok t => t == dayAndTimeOfDayToUTCTime (Day.fromGregorian 2023 12 31) (TimeOfDay.mk 22 30 0.0)
+  | .ok t => t == dayAndTimeOfDayToUTCTime (Day.fromGregorian 2023 12 31) (TimeOfDay.ofHourMinuteSec 22 30 0.0)
   | .error _ => false
 
 -- Explicit negative UTC offset.
 #guard match parseUTCTime "2024-01-01 23:30:00-02:00" with
-  | .ok t => t == dayAndTimeOfDayToUTCTime (Day.fromGregorian 2024 1 2) (TimeOfDay.mk 1 30 0.0)
+  | .ok t => t == dayAndTimeOfDayToUTCTime (Day.fromGregorian 2024 1 2) (TimeOfDay.ofHourMinuteSec 1 30 0.0)
   | .error _ => false
 
 -- Omitted seconds default to `:00`.
 #guard match parseUTCTime "2024-01-01 10:00" with
-  | .ok t => t == dayAndTimeOfDayToUTCTime (Day.fromGregorian 2024 1 1) (TimeOfDay.mk 10 0 0.0)
+  | .ok t => t == dayAndTimeOfDayToUTCTime (Day.fromGregorian 2024 1 1) (TimeOfDay.ofHourMinuteSec 10 0 0.0)
   | .error _ => false
 
 -- Round trip through rendering.
 #guard utcTimeToString
-    (dayAndTimeOfDayToUTCTime (Day.fromGregorian 2024 2 29) (TimeOfDay.mk 13 45 7.0)) ==
+    (dayAndTimeOfDayToUTCTime (Day.fromGregorian 2024 2 29) (TimeOfDay.ofHourMinuteSec 13 45 7.0)) ==
   "2024-02-29 13:45:07"
 #guard utcTimeToString
-    (dayAndTimeOfDayToUTCTime (Day.fromGregorian 2024 2 29) (TimeOfDay.mk 13 45 7.5)) ==
+    (dayAndTimeOfDayToUTCTime (Day.fromGregorian 2024 2 29) (TimeOfDay.ofHourMinuteSec 13 45 7.5)) ==
   "2024-02-29 13:45:07.500"
 
 #guard (parseUTCTime "not a time").isOk == false

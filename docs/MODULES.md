@@ -205,6 +205,51 @@ the project overview and quick start.
 - `encode` / `encodePretty` and `decode` / `decodeAs`, with proven
   encode→decode **roundtrip theorems**.
 
+### `Time` — the `time` package, over `Std.Time`
+
+A port of Hackage's [`time`](https://hackage.haskell.org/package/time)
+(v1.15), per [`docs/imports/Time/dependencies.md`](imports/Time/dependencies.md).
+Lean's own `Std.Time` (ships with the pinned toolchain) already covers `time`'s
+core job — Gregorian/ISO-week/ordinal calendar arithmetic, clocks, durations,
+IANA-tzdata timezones, and locale-aware `strftime`-style formatting/parsing —
+so this import is mostly a documented substitution; `Linen.Data.Time.Calendar`/
+`.Clock`/`.LocalTime` (added ad hoc during the `sqlite-simple` import, before
+`Std.Time` was known) are now rebuilt on `Std.Time.Date.PlainDate`/
+`Std.Time.Duration`/`Std.Time.Zoned` respectively, fixing a bug where
+`Data.Time.Clock.getCurrentTime` read a *monotonic* clock instead of real
+wall-clock time. The bespoke `Linen.System.Time`/`ffi/time.c` wall-clock FFI
+shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
+
+- `Linen.Time.Calendar.CalendarDiffDays` — a `(months, days)` calendrical
+  period, `Semigroup`/`Monoid` under addition, `calendarDay`/`calendarWeek`/
+  `calendarMonth`/`calendarYear` constants, scale-by-integer.
+- `Linen.Time.Calendar.Month` — an absolute month counter since a fixed
+  origin, `addMonths`/`diffMonths`, and `DayPeriod`-style
+  `periodFirstDay`/`periodLastDay`/`dayPeriod` relating it to
+  `Std.Time.Date.PlainDate` — a standalone counter type `Std.Time`'s
+  per-date `Month.Ordinal` field doesn't provide.
+- `Linen.Time.Calendar.Quarter` — the same shape one level up: `QuarterOfYear`
+  and an absolute `Quarter` counter, `addQuarters`/`diffQuarters`,
+  `monthQuarter`/`dayQuarter`.
+- `Linen.Time.Calendar.Julian` — the proleptic Julian calendar: its own
+  leap-year rule (no Gregorian century correction), month lengths, and
+  `addJulianMonthsClip`/`RollOver`/`addJulianYearsClip`/`RollOver` etc.
+  arithmetic — a genuinely different calendar system from `Std.Time`'s
+  Gregorian-only implementation.
+- `Linen.Time.Calendar.Easter` — the Gregorian and Orthodox Easter-date
+  algorithms (`gregorianEaster`/`orthodoxEaster`, `sundayAfter`), per
+  Reingold & Dershowitz's *Calendrical Calculations*.
+- `Linen.Time.CalendarDiffTime` — the time-valued sibling of
+  `CalendarDiffDays`: `(months, Duration)` instead of `(months, days)`.
+- `Linen.Time.UniversalTime` — `UT1` mean solar time as a
+  Modified-Julian-Date-plus-fraction rational, with longitude-parameterised
+  conversion to/from `Std.Time`'s civil wall-clock time — `Std.Time` only
+  models UTC/civil time, never earth-rotation-based UT1.
+- `Linen.Time.Clock.TAI` — `AbsoluteTime` (a TAI instant) and day-keyed
+  leap-second-map conversions `utcToTAITime`/`taiToUTCTime`/`utcDayLength`
+  (`LeapSecondMap = Day -> Option Int`, caller-supplied, matching upstream's
+  own refusal to bundle a hardcoded leap-second table).
+
 ### `System.Console.Ansi` — terminal styling
 
 - `Color` / `Intensity` enums and the ANSI escape-code builders
@@ -1644,9 +1689,17 @@ package is ported as `Linen.Graphics.Image.*`.
 | `Linen.Data.String` | `IsString` class + `String.words`/`unwords`/`unlines` (`lines` is core's `splitOn`) |
 | `Linen.Data.Text` | Haskell-compatible `Data.Text` API (`Text := String`): `chunksOf`/`isInfixOf`/`transpose`/… over Lean's UTF-8 `String`, no fuel counters |
 | `Linen.Data.Text.Encoding` | `Text`↔`ByteString` UTF-8 codec: `encodeUtf8`/`decodeUtf8'` (via `String.fromUTF8?`), `decodeUtf8With` (well-founded byte scanner, ≥1 byte consumed per step) |
-| `Linen.Data.Time.Calendar` | proleptic Gregorian calendar `Day` (Modified-Julian-Day count), `fromGregorian`/`toGregorian`/`fromGregorianValid` via closed-form civil-calendar arithmetic |
-| `Linen.Data.Time.Clock` | UTC time/durations: `NominalDiffTime` (`Int` nanoseconds, `Add`/`Sub`/`Neg`/`Ord`), `UTCTime` (`getCurrentTime` via `IO.monoNanosNow`, `diffUTCTime`/`addUTCTime`) |
-| `Linen.Data.Time.LocalTime` | `TimeOfDay` (hour/minute/fractional-second) and `TimeZone` (signed offset in minutes) |
+| `Linen.Data.Time.Calendar` | proleptic Gregorian calendar `Day` (Modified-Julian-Day count), `fromGregorian`/`toGregorian`/`fromGregorianValid`, built on `Std.Time.Date.PlainDate` |
+| `Linen.Data.Time.Clock` | UTC time/durations: `NominalDiffTime` (`Std.Time.Duration`), `UTCTime` (`Std.Time.DateTime.Timestamp`; `getCurrentTime` is genuine wall-clock time via `Timestamp.now`, `diffUTCTime`/`addUTCTime`) |
+| `Linen.Data.Time.LocalTime` | `TimeOfDay` (`Std.Time.Time.PlainTime`) and `TimeZone` (signed-offset minutes, `Std.Time.Zoned.TimeZone.Offset`) |
+| `Linen.Time.Calendar.CalendarDiffDays` | a `(months, days)` calendrical period, `Semigroup`/`Monoid` under addition, `calendarDay`/`calendarWeek`/`calendarMonth`/`calendarYear` constants, scale-by-integer |
+| `Linen.Time.Calendar.Month` | an absolute month counter since a fixed origin, `addMonths`/`diffMonths`, `periodFirstDay`/`periodLastDay`/`dayPeriod` relating it to `Std.Time.Date.PlainDate` |
+| `Linen.Time.Calendar.Quarter` | `QuarterOfYear` and an absolute `Quarter` counter, `addQuarters`/`diffQuarters`, `monthQuarter`/`dayQuarter` |
+| `Linen.Time.Calendar.Julian` | the proleptic Julian calendar: its own leap-year rule (no Gregorian century correction), month lengths, `addJulianMonthsClip`/`RollOver`/`addJulianYearsClip`/`RollOver` arithmetic |
+| `Linen.Time.Calendar.Easter` | the Gregorian and Orthodox Easter-date algorithms (`gregorianEaster`/`orthodoxEaster`, `sundayAfter`), per Reingold & Dershowitz |
+| `Linen.Time.CalendarDiffTime` | the time-valued sibling of `CalendarDiffDays`: `(months, Duration)` instead of `(months, days)` |
+| `Linen.Time.UniversalTime` | `UT1` mean solar time as a Modified-Julian-Date-plus-fraction rational, with longitude-parameterised conversion to/from `Std.Time`'s civil wall-clock time |
+| `Linen.Time.Clock.TAI` | `AbsoluteTime` (a TAI instant) and day-keyed `LeapSecondMap`, TAI↔UTC conversion accounting for leap seconds |
 | `Linen.Data.Traversable` | `Traversable` class (`traverse`/`sequence`) + `List`/`Option`/`NonEmpty`; `LawfulTraversable` |
 | `Linen.Data.Unique` | globally unique ids: `newUnique : IO Unique` from a global counter (`BEq`/`Ord`/`Hashable`) |
 | `Linen.Data.Vault` | type-safe heterogeneous map: `Key α` tokens (unique, `IO`-minted) over a `Std.HashMap Nat Erased`, `insert`/`lookup`/`delete`/`newKey` |

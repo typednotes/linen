@@ -217,6 +217,14 @@ import Linen.Network.HTTP.Req
 import Linen.Data.Time.Calendar
 import Linen.Data.Time.LocalTime
 import Linen.Data.Time.Clock
+import Linen.Time.Calendar.CalendarDiffDays
+import Linen.Time.Calendar.Month
+import Linen.Time.Calendar.Quarter
+import Linen.Time.Calendar.Julian
+import Linen.Time.Calendar.Easter
+import Linen.Time.CalendarDiffTime
+import Linen.Time.UniversalTime
+import Linen.Time.Clock.TAI
 import Linen.System.TimeManager
 import Linen.System.Posix.Compat
 import Linen.Network.Socket.Types

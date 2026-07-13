@@ -223,6 +223,14 @@ import Tests.Linen.Network.HTTP.ReqTest
 import Tests.Linen.Data.Time.ClockTest
 import Tests.Linen.Data.Time.CalendarTest
 import Tests.Linen.Data.Time.LocalTimeTest
+import Tests.Linen.Time.Calendar.CalendarDiffDaysTest
+import Tests.Linen.Time.Calendar.MonthTest
+import Tests.Linen.Time.Calendar.QuarterTest
+import Tests.Linen.Time.Calendar.JulianTest
+import Tests.Linen.Time.Calendar.EasterTest
+import Tests.Linen.Time.CalendarDiffTimeTest
+import Tests.Linen.Time.UniversalTimeTest
+import Tests.Linen.Time.Clock.TAITest
 import Tests.Linen.System.TimeManagerTest
 import Tests.Linen.System.Posix.CompatTest
 import Tests.Linen.Network.Socket.TypesTest

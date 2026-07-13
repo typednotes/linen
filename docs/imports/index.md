@@ -47,7 +47,22 @@ it depends on).
 37. [`HttpConduit`](HttpConduit/dependencies.md) (done) — 3 module(s)
 38. [`Req`](Req/dependencies.md) (done) — 2 module(s)
 39. [`Text`](Text/dependencies.md) (done) — 3 module(s)
-40. [`Time`](Time/dependencies.md) (done) — 2 module(s)
+40. [`Time`](Time/dependencies.md) (done) — 11 module(s): 3 reconciled onto
+    `Std.Time` (`Linen.Data.Time.Clock`/`.Calendar`/`.LocalTime`, ported ad
+    hoc before this codebase's import process had `Std.Time` in its
+    precedence analysis, now rebuilt on it — the reconciliation also fixed
+    `getCurrentTime`, which had read a monotonic clock rather than
+    wall-clock time; `Linen.System.Time`, the ad hoc FFI wall-clock shim this
+    bug had motivated, is deleted, subsumed by
+    `Std.Time.DateTime.Timestamp.now`) plus 8 new modules
+    (`Linen.Time.Calendar.CalendarDiffDays`/`.Month`/`.Quarter`/`.Julian`/
+    `.Easter`, `Linen.Time.CalendarDiffTime`, `Linen.Time.UniversalTime`,
+    `Linen.Time.Clock.TAI`). Full Hackage-import pass against
+    [`time`](https://hackage.haskell.org/package/time) v1.15 and Lean's own
+    `Std.Time` (already covers almost everything else — Gregorian/ISO-week/
+    ordinal calendar arithmetic, clocks, durations, IANA-tzdata timezones,
+    locale-aware `strftime`-style formatting); see the `dependencies.md`'s
+    status note for details.
 41. [`TimeManager`](TimeManager/dependencies.md) (done) — 2 module(s)
 42. [`UnixCompat`](UnixCompat/dependencies.md) (done) — 2 module(s)
 43. [`UnliftIO`](UnliftIO/dependencies.md) (done) — 2 module(s)

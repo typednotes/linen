@@ -98,7 +98,7 @@ private def millisToTimeOfDay (msInDay : Nat) : TimeOfDay :=
   let rem2 := rem1 % 60000
   let secWhole := rem2 / 1000
   let fracMillis := rem2 % 1000
-  ⟨hour, minute, secWhole.toFloat + fracMillis.toFloat / 1000⟩
+  TimeOfDay.ofHourMinuteSec hour minute (secWhole.toFloat + fracMillis.toFloat / 1000)
 
 /-- Shift a local `(day, timeOfDay)` pair by a UTC offset (in minutes east of
     UTC), rolling the calendar day over as needed — the substitute for
@@ -118,7 +118,7 @@ private def epochDay : Day := Day.fromGregorian 1970 1 1
 def dayAndTimeOfDayToUTCTime (day : Day) (t : TimeOfDay) : UTCTime :=
   let days : Int := Day.diffDays day epochDay
   let ms := timeOfDayToMillis t
-  ⟨(max 0 (days * 86400000 + ms)).toNat * 1000000⟩
+  UTCTime.ofNanosSinceEpoch ((max 0 (days * 86400000 + ms)).toNat * 1000000)
 
 /-- Decompose a `UTCTime` back into its UTC calendar day and time-of-day. -/
 def utcTimeToDayAndTimeOfDay (t : UTCTime) : Day × TimeOfDay :=

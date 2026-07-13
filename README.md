@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>539 modules</strong> · <strong>370 compile-time theorems</strong> · <strong>7881 <code>#guard</code> checks</strong>
+  <strong>547 modules</strong> · <strong>376 compile-time theorems</strong> · <strong>7969 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -58,6 +58,13 @@ for the full per-module feature list and module table.
   encode→decode round trips.
 - **`Data.Map` / `Data.Set` / `Data.IntMap` / `Data.List'` / `Data.List.NonEmpty`
   / …** — Haskell-style container and list APIs over core `Std`/`List` types.
+- **`Time`** — a `time`-style calendar/clock layer over Lean's own `Std.Time`:
+  Julian-calendar conversion, Gregorian/Orthodox Easter dates, absolute
+  `Month`/`Quarter` counters, `(months, days)`/`(months, Duration)` calendar
+  periods, UT1 mean-solar-time conversion, and TAI↔UTC leap-second
+  conversion — the pieces `Std.Time` itself doesn't cover; `Data.Time.*`'s
+  day/UTC-instant/time-of-day types are `Std.Time.Date.PlainDate`/
+  `Std.Time.Duration`/`Std.Time.Zoned` underneath.
 - **`Network.HTTP` / `HTTP2` / `HTTP3` / `Socket` / `TLS` / `QUIC` /
   `WebSockets`** — a full network stack: HTTP/1.1 client & wire types,
   HTTP/2 framing + HPACK, HTTP/3 over QUIC + QPACK, POSIX sockets with a
@@ -180,7 +187,7 @@ open Data.Functor Control.Monad
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 539 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 547 modules).
 
 ## Build & Test
 
