@@ -182,6 +182,35 @@ it depends on).
     already-linked `ffi/jose.c` OpenSSL dependency) rather than importing
     the whole package. See the `dependencies.md`'s "External dependencies"
     section for the full rationale on each.
+77. [`profunctors`](profunctors/dependencies.md) (done) — `Profunctor`/
+    `Strong`/`Choice`/`Traversing`/… classes (`Data.Profunctor.*`), a
+    prerequisite of `lens` (modern `lens`'s optics are defined as
+    constrained profunctor transformations), 16 module(s).
+78. [`indexed-traversable`](indexed-traversable/dependencies.md) (done) —
+    `FunctorWithIndex`/`FoldableWithIndex`/`TraversableWithIndex` classes, a
+    prerequisite of `lens` (`Control.Lens.Indexed` and most per-container
+    instance modules), 4 module(s) (folds in
+    `indexed-traversable-instances`, no separate entry — see that file's own
+    note).
+79. [`lens`](lens/dependencies.md) (done) — van Laarhoven/profunctor optics
+    (`Control.Lens.*`) ([source](https://hackage.haskell.org/package/lens)),
+    66 new-port module(s) (the plan's 64 plus `Control.Lens.Zoom`/
+    `.Reified`, gap-filled after batch B) against 84 upstream
+    `exposed-modules` + 1 `other-modules`; built on `profunctors` (#77) and
+    `indexed-traversable` (#78). **Template Haskell note:** `Control.Lens.TH`
+    (`makeLenses`/`makePrisms`) has no Lean 4 equivalent (no TH); the
+    substitution is hand-written per-field/constructor lens/prism
+    definitions, the same treatment `Linen.Database.DuckDB.Simple.Generic`
+    already gives GHC-`Generic`-derived code — see the `dependencies.md`'s
+    "Template Haskell substitution strategy" section. **Scope note:** GHC/TH
+    -specific modules with no Lean analogue (`Data.Data.Lens`,
+    `.Dynamic.Lens`, `.Typeable.Lens`, `GHC.Generics.Lens`,
+    `Language.Haskell.TH.Lens`, `Control.Lens.TH` and its support modules,
+    `Control.Parallel.Strategies.Lens`, `Control.Seq.Lens`) are dropped, and
+    four per-container instance modules (`Data.IntSet.Lens`,
+    `Data.Sequence.Lens`, `Data.Tree.Lens`, `Data.Text.Lazy.Lens`) are
+    deferred pending their own (not yet ported) container — see the
+    `dependencies.md`'s "dropped"/"deferred" sections.
 
 ### `hip` dependencies covered by the Lean stdlib or an existing port (no separate Hackage import needed)
 

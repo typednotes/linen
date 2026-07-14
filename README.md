@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>547 modules</strong> · <strong>376 compile-time theorems</strong> · <strong>7969 <code>#guard</code> checks</strong>
+  <strong>628 modules</strong> · <strong>379 compile-time theorems</strong> · <strong>8741 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -51,6 +51,12 @@ for the full per-module feature list and module table.
   missing from core (`Compose`/`Product`/`FunctorSum`, `Bifunctor`,
   `Foldable`/`Traversable`, `mtl`-style `Reader`/`State`/`Except`, STM,
   green-thread concurrency, …).
+- **`Control.Lens`** — a `lens`-style profunctor-optics library (plus its
+  `profunctors`/`indexed-traversable` prerequisites): `Lens`/`Prism`/`Iso`/
+  `Traversal`/`Fold`/`Getter`/`Setter`/`Review` and indexed variants, with
+  `Ixed`/`At`/`Each`/`Cons`/`Snoc`/`Wrapped` instances over most existing
+  containers; `makeLenses`-generated accessors are hand-written per field
+  instead, since Lean has no Template Haskell.
 - **`Data.ByteString*` / `Data.String` / `Data.Word8`** — byte strings (strict,
   lazy, short, builder), Base64, case-insensitive text, and ASCII byte
   classification.
@@ -187,7 +193,7 @@ open Data.Functor Control.Monad
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 547 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 628 modules).
 
 ## Build & Test
 

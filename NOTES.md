@@ -19,9 +19,7 @@ https://woob.tech/?
 mmap - Memory Mapped File ?
 
 Add:
-- https://hackage.haskell.org/package/time
 - https://hackage.haskell.org/package/pandoc ?
-- https://hackage.haskell.org/package/lens ?
 - https://hackage.haskell.org/package/hedis ?
 - https://hackage.haskell.org/package/streamly
 

@@ -1612,11 +1612,84 @@ package is ported as `Linen.Graphics.Image.*`.
   already a direct port of the same `System.Random` this module builds on)
   as a pure, explicit-seed generator.
 
+### `Control.Lens` — a profunctor-optics library (`lens`, `profunctors`, `indexed-traversable`)
+
+A port of [`lens`](https://hackage.haskell.org/package/lens) v5.3.6 (see
+[`docs/imports/lens/dependencies.md`](imports/lens/dependencies.md)) together
+with its two load-bearing prerequisites,
+[`profunctors`](https://hackage.haskell.org/package/profunctors) (see
+[`docs/imports/profunctors/dependencies.md`](imports/profunctors/dependencies.md))
+and
+[`indexed-traversable`](https://hackage.haskell.org/package/indexed-traversable)
+(see
+[`docs/imports/indexed-traversable/dependencies.md`](imports/indexed-traversable/dependencies.md)):
+`Lens`/`Prism`/`Iso`/`Traversal`/`Fold`/`Getter`/`Setter`/`Review`/`Equality`
+and their indexed variants, all encoded — as modern `lens` itself does — as a
+constrained natural transformation between profunctors (`type Lens s t a b =
+forall p. Strong p => Optic p s t a b`, etc.), plus `Ixed`/`At`/`Each`/
+`Cons`/`Snoc`/`Wrapped` instances over most of `linen`'s existing container
+types.
+
+- **The profunctor encoding.** None of `Profunctor`/`Strong`/`Choice`/
+  `Closed`/`Traversing`/`Mapping`/`Sieve`/`Rep` existed anywhere in the Lean
+  stdlib or `linen` before this import — they are new, foundational
+  typeclasses (`Control.Profunctor.*`, 16 modules), not a substitution for
+  anything already ported. `Control.Lens.Internal.*` (17 modules —
+  `Profunctor`/`Indexed`/`Instances`/`Context`/`Magma`/`Bazaar`/`Iso`/
+  `Prism`/`Review`/`Getter`/`Setter`/`Fold`/`Level`/`Deque`/`List`/`Zoom`
+  plus a re-exporting facade) is the profunctor-optics machinery every
+  visible optic module builds on: `Bazaar`/`Magma` reify a traversal as
+  data, `Context`/`Pretext` back the van Laarhoven `Lens` representation,
+  `Exchange`/`Market` back `Iso`/`Prism`.
+- **Template Haskell substitution.** `Control.Lens.TH` (`makeLenses`,
+  `makePrisms`, `makeClassy`, …) has no Lean counterpart — Lean 4 has no
+  `Q`/`reify`/`splice` metaprogramming facility over arbitrary
+  already-elaborated declarations (the same gap
+  `Linen.Database.DuckDB.Simple.Generic`'s port already hit for
+  GHC-`Generic`-based derivation). Every `makeLenses ''Foo` call site is
+  substituted with a hand-written accessor per field/constructor using the
+  ordinary `lens`/`prism`/`prism'` smart constructors, e.g. `def Foo.bar :
+  Lens' Foo Bar := Control.Lens.lens (·.bar) (fun s v => { s with bar := v
+  })` — the generation step has no equivalent, but composition, `Traversal`,
+  `%~`/`.~`, and indexed optics are unaffected.
+- **The optics core** (`Control.Lens.Type`/`.Equality`/`.Getter`/`.Setter`/
+  `.Lens`/`.Iso`/`.Prism`/`.Review`/`.Fold`/`.Traversal`/`.Indexed`/`.Each`/
+  `.At`/`.Cons`/`.Empty`/`.Plated`/`.Level`/`.Zoom`/`.Reified`/`.Tuple`/
+  `.Unsound`/`.Wrapped`/`.Extras`/`.Combinators`/`.Operators`/`.Profunctor`,
+  plus the top-level `Control.Lens` facade — 44 modules total) provides the
+  same combinators upstream does: `(^.)`/`(.~)`/`(%~)`/`(^..)`/`toListOf`/
+  `preview`/`view`/`over`/`zoom`/`magnify`, indexed variants (`itraverse`,
+  `(<.>)`), and the explicitly-unlawful `Control.Lens.Unsound` combinators
+  ported as-is with upstream's own warning intact.
+- **`indexed-traversable`** (`Data.Functor.WithIndex`/`.Foldable.WithIndex`/
+  `.Foldable1.WithIndex`/`.Traversable.WithIndex`, 4 modules) supplies
+  `FunctorWithIndex`/`FoldableWithIndex`/`TraversableWithIndex` — Lean's own
+  `Functor`/`Foldable`/`Traversable` classes have no indexed variants, so
+  this is a small but genuinely new port, not a substitution.
+- **Per-container instance modules** (`Data.Array.Lens`, `Data.Bits.Lens`,
+  `Data.ByteString.Lens`, `Data.ByteString.Lazy.Lens`, `Data.Complex.Lens`,
+  `Data.HashSet.Lens`, `Data.List.Lens`, `Data.Map.Lens`, `Data.Set.Lens`,
+  `Data.Text.Lens`, `Data.Vector.Lens`, `System.Exit.Lens`,
+  `System.FilePath.Lens`, plus the earlier `Control.Exception.Lens`/
+  `Control.Monad.Error.Lens`/`Numeric.Lens`/`Numeric.Natural.Lens`) each add
+  `Ixed`/`At`/instances over a container `linen` already has, rather than
+  reimplementing the container.
+- **Dropped or deferred.** GHC-runtime/TH-specific modules with no Lean
+  analogue (`Data.Data.Lens`, `.Dynamic.Lens`, `.Typeable.Lens`,
+  `GHC.Generics.Lens`, `Language.Haskell.TH.Lens`, `Control.Lens.TH` and its
+  `Internal.*TH`/`.Doctest`/`.CTypes` support modules,
+  `Control.Parallel.Strategies.Lens`, `Control.Seq.Lens`) are dropped
+  outright; `Data.IntSet.Lens`/`Data.Sequence.Lens`/`Data.Tree.Lens`/
+  `Data.Text.Lazy.Lens` are deferred pending a `Linen.Data.IntSet`/
+  `.Sequence`/`.Tree`/lazy-`Text` port that doesn't exist yet; `System.IO.Error.Lens`
+  is likewise not yet ported.
+
 ## Module Table
 
 | Module | Description |
 |---|---|
 | `Linen.Data.Functor` | `Compose`, `Const`, `Product`, `FunctorSum`, `Contravariant` |
+| `Linen.Data.Array.Lens` | `lens`'s `Data.Array.Lens`: `Ixed`/`TraverseMax`/`TraverseMin` instances over Lean's native `Array` (substitutes for the `array` package's `Ix`-indexed `Data.Array`, narrowed to the one `Nat`-indexed case) |
 | `Linen.Data.Array.Shaped` | `repa`'s package facade: re-exports `Shape`/`Index`/`Slice`/`Base`, every representation/operator/`Specialised.Dim2`/`Stencil` module below |
 | `Linen.Data.Array.Shaped.Base` | the `Source` class of readable array representations (`repa`'s associated-data-family `Array r sh e` becomes concrete types per representation) |
 | `Linen.Data.Array.Shaped.Index` | index/shape types (`Z`, `Snoc`/`:.`) and their `Shape` instances |
@@ -1641,8 +1714,10 @@ package is ported as `Linen.Graphics.Image.*`.
 | `Linen.Data.Base64` | RFC 4648 `encode`/`decode` over `ByteArray` (structural, no `partial`) |
 | `Linen.Data.Bifunctor` | `Bifunctor`/`LawfulBifunctor`, `bimap`, `Prod`/`Sum`/`Except` instances |
 | `Linen.Data.ByteString` | slice over `ByteArray` (O(1) `take`/`drop`/`splitAt`); full `Data.ByteString` API + `BEq`/`Ord`/`Hashable` |
+| `Linen.Data.ByteString.Lens` | `lens`'s `Data.ByteString.Lens`: `Ixed`/`Cons`/`Snoc`/`Wrapped` instances over `Linen.Data.ByteString` (folds in `Data.ByteString.Strict.Lens` and `Control.Lens.Internal.ByteString`) |
 | `Linen.Data.ByteString.Char8` | Latin-1 `Char` view of `ByteString`: `String`↔`ByteString`, `lines`/`words`/`unlines`/`unwords` |
 | `Linen.Data.ByteString.Lazy` | chunked lazy byte strings (`Thunk` tail): `fromChunks`/`toStrict`, lazy `append`, `take`/`drop`, folds |
+| `Linen.Data.ByteString.Lazy.Lens` | `lens`'s `Data.ByteString.Lazy.Lens`: `Ixed`/`Cons`/`Snoc`/`Wrapped` instances over `Linen.Data.ByteString.Lazy` |
 | `Linen.Data.ByteString.Lazy.Char8` | Latin-1 `Char` view of `LazyByteString`: `String`↔`LazyByteString`, char-wise ops |
 | `Linen.Data.ByteString.Short` | `ShortByteString` (`ByteArray` newtype): `pack`/`unpack`/`index`, `toShort`/`fromShort` |
 | `Linen.Data.ByteString.Builder` | difference-list builder (O(1) `append`): word/UTF-8/decimal/hex encoders + monoid laws |
@@ -1669,15 +1744,21 @@ package is ported as `Linen.Graphics.Image.*`.
 | `Linen.Data.Default` | `Default` typeclass (sensible defaults) + instances for `Bool`/`Nat`/`String`/`List`/`Option`/… |
 | `Linen.Data.IntMap` | `Data.IntMap` API over `Std.HashMap Nat v`: union/intersection/difference/folds/`toAscList`/min-max |
 | `Linen.Data.Map` | ordered `Data.Map k v` over `Lean.RBMap`: union/intersection/difference/`mapKeys`/folds/min-max + laws |
+| `Linen.Data.Map.Lens` | `lens`'s `Data.Map.Lens`: `At`/`Ixed` instances over `Linen.Data.Map` |
 | `Linen.Data.Set` | ordered `Data.Set` (`Set'`) over `Lean.RBMap _ Unit`: member/union/intersection/`isSubsetOf`/folds/min-max |
+| `Linen.Data.Set.Lens` | `lens`'s `Data.Set.Lens`: `At`/`Ixed`/`Contains` instances over `Linen.Data.Set` |
+| `Linen.Data.HashSet.Lens` | `lens`'s `Data.HashSet.Lens`: `At`/`Ixed`/`Contains` instances over Lean stdlib `Std.HashSet` |
 | `Linen.Data.Bits` | `Bits`/`FiniteBits` over `UInt8/16/32/64`: `popCount`, `testBit`, `setBit`, bounded clz/ctz |
+| `Linen.Data.Bits.Lens` | `lens`'s `Data.Bits.Lens`: `Ixed`/`bits`/`bitAt` combinators over `Linen.Data.Bits` |
 | `Linen.Data.Bool` | `guard'` (list-valued guard; `bool` is already in Lean core) |
 | `Linen.Data.Char` | `Data.Char'` predicates (`isAscii`/`isControl`/…) + `digitToInt`/`intToDigit` |
 | `Linen.Data.Complex` | `Complex α` over any numeric type: arithmetic, `conjugate`, `magnitudeSquared` |
+| `Linen.Data.Complex.Lens` | `lens`'s `Data.Complex.Lens`: `_polar`/`_conjugate` isos over `Linen.Data.Complex` |
 | `Linen.Data.Fixed` | `Fixed p` fixed-point decimals with type-level precision: exact `+`/`-`, rescaling `*`, `toRat` |
 | `Linen.Data.Function` | `on`, `applyTo` (the `Data.Function` combinators core lacks) |
 | `Linen.Data.Ix` | `Ix` index class: `range`/`rangeSize`/`inRange` + proof-carrying `index`, `Nat`/`Int`/`Char`/`Bool`/product |
 | `Linen.Data.List` | `Data.List'` extras: `transpose`, `tails`/`inits`, `permutations`, `sortOn`, `maximumBy`, `unionBy`, … |
+| `Linen.Data.List.Lens` | `lens`'s `Data.List.Lens`: `Ixed`/`At`/`Cons`/`Snoc` instances over Lean stdlib `List` |
 | `Linen.Data.List.NonEmpty` | non-empty list: total `head`/`last`, `length ≥ 1`, `foldr1`/`foldl1`, `Functor`/`Monad` |
 | `Linen.Data.Foldable` | `Foldable` class + derived `sum`/`any`/`find?`/`minimum?`/…; `List`/`Option`/`NonEmpty`/`Sum` |
 | `Linen.Data.Newtype` | monoid wrappers `Dual`/`Endo`/`First`/`Last`/`Sum`/`Product`/`All`/`Any` (+ assoc laws) |
@@ -1688,6 +1769,7 @@ package is ported as `Linen.Graphics.Image.*`.
 | `Linen.Data.IP` | IPv4/IPv6 addresses, CIDR `AddrRange` (bounded mask proof) with `isMatchedTo`, `parseIPv4`/`parseCIDR4` |
 | `Linen.Data.String` | `IsString` class + `String.words`/`unwords`/`unlines` (`lines` is core's `splitOn`) |
 | `Linen.Data.Text` | Haskell-compatible `Data.Text` API (`Text := String`): `chunksOf`/`isInfixOf`/`transpose`/… over Lean's UTF-8 `String`, no fuel counters |
+| `Linen.Data.Text.Lens` | `lens`'s `Data.Text.Lens`: `Ixed`/`Cons`/`Snoc`/`Wrapped` instances over `Linen.Data.Text` (folds in `Data.Text.Strict.Lens`) |
 | `Linen.Data.Text.Encoding` | `Text`↔`ByteString` UTF-8 codec: `encodeUtf8`/`decodeUtf8'` (via `String.fromUTF8?`), `decodeUtf8With` (well-founded byte scanner, ≥1 byte consumed per step) |
 | `Linen.Data.Time.Calendar` | proleptic Gregorian calendar `Day` (Modified-Julian-Day count), `fromGregorian`/`toGregorian`/`fromGregorianValid`, built on `Std.Time.Date.PlainDate` |
 | `Linen.Data.Time.Clock` | UTC time/durations: `NominalDiffTime` (`Std.Time.Duration`), `UTCTime` (`Std.Time.DateTime.Timestamp`; `getCurrentTime` is genuine wall-clock time via `Timestamp.now`, `diffUTCTime`/`addUTCTime`) |
@@ -1704,10 +1786,76 @@ package is ported as `Linen.Graphics.Image.*`.
 | `Linen.Data.Unique` | globally unique ids: `newUnique : IO Unique` from a global counter (`BEq`/`Ord`/`Hashable`) |
 | `Linen.Data.Vault` | type-safe heterogeneous map: `Key α` tokens (unique, `IO`-minted) over a `Std.HashMap Nat Erased`, `insert`/`lookup`/`delete`/`newKey` |
 | `Linen.Data.Vector` | the handful of `Data.Vector` combinators `Array` lacks: `generate`/`ifilter`/`foldl1'`/`ifoldl'`/`and`/`or`/`product`/`notElem`/`backpermute`/`slice` |
+| `Linen.Data.Vector.Lens` | `lens`'s `Data.Vector.Lens`: `Ixed`/`sliced` instances over `Linen.Data.Vector` (folds in `Data.Vector.Generic.Lens`) |
 | `Linen.Data.Void` | vacuous `Empty` instances (`BEq`/`Ord`/`Hashable`/`ToString`) + `Empty → α` singleton law |
+| `Linen.Control.Profunctor.Unsafe` | `profunctors`'s `Data.Profunctor.Unsafe`: the base `Profunctor` class (`dimap`, `lmap`/`rmap` defaults) and its `(→)` instance |
+| `Linen.Control.Profunctor.Types` | `profunctors`'s `Data.Profunctor.Types`: `Star`, `Costar`, `WrappedArrow`, `Forget`, `Tagged`, with their `Profunctor` instances |
+| `Linen.Control.Profunctor.Strong` | `profunctors`'s `Data.Profunctor.Strong`: `Strong` class (`first'`/`second'`), backs `Control.Lens.Lens` |
+| `Linen.Control.Profunctor.Choice` | `profunctors`'s `Data.Profunctor.Choice`: `Choice` class (`left'`/`right'`), backs `Control.Lens.Prism` |
+| `Linen.Control.Profunctor.Sieve` | `profunctors`'s `Data.Profunctor.Sieve`: `Sieve` class (`sieve : p a b → a → f b`), relates a profunctor to a covariant functor it "runs into" |
+| `Linen.Control.Profunctor.Rep` | `profunctors`'s `Data.Profunctor.Rep`: `Representable` class (`Distributive`-backed factoring of `Star`), folds in the minimal `Distributive` class |
+| `Linen.Control.Profunctor.Closed` | `profunctors`'s `Data.Profunctor.Closed`: `Closed` class (`closed : p a b → p (x → a) (x → b)`), backs `Control.Lens.Internal.Zoom`'s function-space handling |
+| `Linen.Control.Profunctor.Traversing` | `profunctors`'s `Data.Profunctor.Traversing`: `Traversing` class (`traverse'`/`wander`), the profunctor counterpart of `Control.Lens.Traversal`'s van Laarhoven encoding |
+| `Linen.Control.Profunctor.Mapping` | `profunctors`'s `Data.Profunctor.Mapping`: `Mapping` class (`map'`), the `Setter`-side dual of `Traversing` |
+| `Linen.Control.Profunctor.Composition` | `profunctors`'s `Data.Profunctor.Composition`: `Procompose`/`Rift`, profunctor composition |
+| `Linen.Control.Profunctor.Adjunction` | `profunctors`'s `Data.Profunctor.Adjunction`: `Adjunction` class relating a profunctor to an adjoint functor pair |
+| `Linen.Control.Profunctor.Cayley` | `profunctors`'s `Data.Profunctor.Cayley`: `Cayley`, an applicative-functor-indexed profunctor product; folds in the minimal `Comonad` class |
+| `Linen.Control.Profunctor.Monad` | `profunctors`'s `Data.Profunctor.Monad`: `ProfunctorFunctor`/`ProfunctorMonad`/`ProfunctorComonad` classes over profunctor transformers |
+| `Linen.Control.Profunctor.Ran` | `profunctors`'s `Data.Profunctor.Ran`: `Ran`/`Rift`, profunctor right Kan extension |
+| `Linen.Control.Profunctor.Yoneda` | `profunctors`'s `Data.Profunctor.Yoneda`: `Yoneda`/`Coyoneda` for profunctors |
+| `Linen.Control.Profunctor` | `profunctors`'s `Data.Profunctor`: package facade re-exporting `Unsafe`/`Types`/`Strong`/`Choice`/`Traversing`/`Mapping`/`Sieve`/`Rep` — the classes `lens` actually consumes |
+| `Linen.Data.Functor.WithIndex` | `indexed-traversable`'s `Data.Functor.WithIndex`: `FunctorWithIndex i f` class (`mapWithIndex`) + instances for `List`/`Option`/`Prod`/`Std.HashMap`/`Linen.Data.Map`/`Linen.Data.IntMap` |
+| `Linen.Data.Foldable.WithIndex` | `indexed-traversable`'s `Data.Foldable.WithIndex`: `FoldableWithIndex i f` class (`foldrWithIndex`/`ifoldMap`), same instance set as `Functor.WithIndex` |
+| `Linen.Data.Foldable1.WithIndex` | `indexed-traversable`'s `Data.Foldable1.WithIndex`: `Foldable1WithIndex`, the non-empty-witnessing variant (`ifoldMap1`) |
+| `Linen.Data.Traversable.WithIndex` | `indexed-traversable`'s `Data.Traversable.WithIndex`: `TraversableWithIndex i t` class (`itraverse`), the class `Control.Lens.Indexed`/`.Traversal` build indexed optics on |
+| `Linen.Control.Lens.Internal.Profunctor` | `lens`'s `Control.Lens.Internal.Profunctor`: `Bicontravariant`, `Conjoined`, `Indexable` classes over `Control.Profunctor.*` |
+| `Linen.Control.Lens.Internal.Indexed` | `lens`'s `Control.Lens.Internal.Indexed`: the `Indexed i a b` profunctor, backing `Internal.Profunctor`'s `Indexable` |
+| `Linen.Control.Lens.Internal.Instances` | `lens`'s `Control.Lens.Internal.Instances`: misc `Applicative`/`Traversable` instances `lens` needs but `base`/Lean stdlib doesn't provide |
+| `Linen.Control.Lens.Internal.Context` | `lens`'s `Control.Lens.Internal.Context`: the `Context`/`Pretext` comonad backing `Control.Lens.Lens`'s van Laarhoven representation; folds in the minimal `Comonad` class |
+| `Linen.Control.Lens.Internal.Magma` | `lens`'s `Control.Lens.Internal.Magma`: `Magma`/`Molten`, the free-semigroupoid tree `Bazaar` reifies traversal order into |
+| `Linen.Control.Lens.Internal.Bazaar` | `lens`'s `Control.Lens.Internal.Bazaar`: `Bazaar`/`BazaarT`, the reified-traversal type `Control.Lens.Traversal` is built on |
+| `Linen.Control.Lens.Internal.Iso` | `lens`'s `Control.Lens.Internal.Iso`: the `Exchange` profunctor backing `Control.Lens.Iso` |
+| `Linen.Control.Lens.Internal.Prism` | `lens`'s `Control.Lens.Internal.Prism`: the `Market` profunctor backing `Control.Lens.Prism` |
+| `Linen.Control.Lens.Internal.Review` | `lens`'s `Control.Lens.Internal.Review`: `Bizarre`/co-`Bazaar` machinery backing `Control.Lens.Review` |
+| `Linen.Control.Lens.Internal.Getter` | `lens`'s `Control.Lens.Internal.Getter`: `Accessing`/`noEffect` helpers backing `Control.Lens.Getter` |
+| `Linen.Control.Lens.Internal.Setter` | `lens`'s `Control.Lens.Internal.Setter`: `Settable`, `Mutator` (the strict `Identity`-alike `Setter` forces updates through) backing `Control.Lens.Setter` |
+| `Linen.Control.Lens.Internal.Fold` | `lens`'s `Control.Lens.Internal.Fold`: `Folding`/`Leftmost`/`Rightmost` monoid helpers backing `Control.Lens.Fold` |
+| `Linen.Control.Lens.Internal.Level` | `lens`'s `Control.Lens.Internal.Level`: `Level`, a breadth-first-numbered tree backing `Control.Lens.Level` |
+| `Linen.Control.Lens.Internal.Deque` | `lens`'s `Control.Lens.Internal.Deque`: a banker's-queue double-ended queue, a breadth-first-traversal performance helper |
+| `Linen.Control.Lens.Internal.List` | `lens`'s `Control.Lens.Internal.List`: small `List`-manipulation helpers `Control.Lens.Cons`/`.Plated` share |
+| `Linen.Control.Lens.Internal.Zoom` | `lens`'s `Control.Lens.Internal.Zoom`: `Zoomed`/`Focusing` families letting `zoom`/`magnify` retarget a `StateT`/`ReaderT` computation through a lens |
+| `Linen.Control.Lens.Internal` | `lens`'s `Control.Lens.Internal`: facade, re-exports the `Internal.*` machinery above |
+| `Linen.Control.Lens.Type` | `lens`'s `Control.Lens.Type`: the `Optic`/`Lens'`/`Traversal'`/… type-alias family every other module names |
+| `Linen.Control.Lens.Equality` | `lens`'s `Control.Lens.Equality`: `(:=:)`, the identity optic |
+| `Linen.Control.Lens.Getter` | `lens`'s `Control.Lens.Getter`: `Getter`, `to`, `view`, `(^.)` |
+| `Linen.Control.Lens.Setter` | `lens`'s `Control.Lens.Setter`: `Setter`, `sets`, `over`, `(.~)`, `(%~)` |
+| `Linen.Control.Lens.Lens` | `lens`'s `Control.Lens.Lens`: `Lens`, `lens`, `(%%~)` |
+| `Linen.Control.Lens.Iso` | `lens`'s `Control.Lens.Iso`: `Iso`, `iso`, `from`, `withIso` |
+| `Linen.Control.Lens.Prism` | `lens`'s `Control.Lens.Prism`: `Prism`, `prism`, `prism'`, `_Left`/`_Right`/`_Just`/`_Nothing` |
+| `Linen.Control.Lens.Review` | `lens`'s `Control.Lens.Review`: `Review`, `un`, `re`, `(#)` |
+| `Linen.Control.Lens.Fold` | `lens`'s `Control.Lens.Fold`: `Fold`, `folding`, `(^..)`, `toListOf`, `preview` |
+| `Linen.Control.Lens.Traversal` | `lens`'s `Control.Lens.Traversal`: `Traversal`, `traverseOf`, `(%%~)`, `both`; folds in the minimal `Bitraversable` class as a small addition to `Linen.Data.Bifunctor` |
+| `Linen.Control.Lens.Indexed` | `lens`'s `Control.Lens.Indexed`: `Indexed`, `Control.Lens.Traversal`'s indexed variants (`itraverse`, `(<.>)`, …) |
+| `Linen.Control.Lens.Each` | `lens`'s `Control.Lens.Each`: `Each` class, `each` |
+| `Linen.Control.Lens.At` | `lens`'s `Control.Lens.At`: `At`/`Ixed` classes, `at`, `ix`; the container-specific modules below each add one instance here rather than redefining the classes |
+| `Linen.Control.Lens.Cons` | `lens`'s `Control.Lens.Cons`: `Cons`/`Snoc` classes, `_head`/`_tail`/`_init`/`_last`, `(<\|)`/`(\|>)` |
+| `Linen.Control.Lens.Empty` | `lens`'s `Control.Lens.Empty`: `AsEmpty` class, `_Empty` |
+| `Linen.Control.Lens.Plated` | `lens`'s `Control.Lens.Plated`: `Plated` class/generic tree-rewriting combinators (`transform`, `rewrite`, …) |
+| `Linen.Control.Lens.Level` | `lens`'s `Control.Lens.Level`: `levels`, breadth-first traversal orderings over a `Plated` structure |
+| `Linen.Control.Lens.Zoom` | `lens`'s `Control.Lens.Zoom`: `Zoom`/`Magnify` classes, `zoom`/`magnify` |
+| `Linen.Control.Lens.Reified` | `lens`'s `Control.Lens.Reified`: `ReifiedLens`/`ReifiedGetter`/…, ordinary-data wrappers around each optic (bare optics are `forall`-polymorphic functions, not directly storable in most containers) |
+| `Linen.Control.Lens.Tuple` | `lens`'s `Control.Lens.Tuple`: `Field1`…`Field9` classes/instances (`_1`, `_2`, …) over `Prod`-nested tuples |
+| `Linen.Control.Lens.Unsound` | `lens`'s `Control.Lens.Unsound`: `lensProduct`/`lensSum`/`adjoin`, explicitly-marked-unlawful combinators, ported as-is with upstream's own warning |
+| `Linen.Control.Lens.Wrapped` | `lens`'s `Control.Lens.Wrapped`: `Wrapped`/`_Wrapped'` class, an `Iso` between a newtype-like structure and its single field; ties into `Linen.Data.Newtype`'s wrapper types (`Dual`, `Sum`, `Product`, `All`, `Any`, …) |
+| `Linen.Control.Lens.Extras` | `lens`'s `Control.Lens.Extras`: `is` (does a `Prism`/`Fold` match) |
+| `Linen.Control.Lens.Combinators` | `lens`'s `Control.Lens.Combinators`: facade, re-exports the optics core minus a couple of deliberately-excluded name clashes upstream itself documents |
+| `Linen.Control.Lens.Operators` | `lens`'s `Control.Lens.Operators`: facade, operator-only re-export of `Combinators` for callers who want `(^.)`/`(.~)`/… without the named functions |
+| `Linen.Control.Lens.Profunctor` | `lens`'s `Control.Lens.Profunctor`: small profunctor-optic-specific combinators (`Choicy`, `Bizarre1`) not already covered by `Internal.Profunctor`'s re-export |
+| `Linen.Control.Lens` | `lens`'s top-level `Control.Lens` facade: re-exports `Combinators`/`Operators`/`Profunctor` plus the container-instance modules below |
 | `Linen.Control.Applicative` | `asum` |
 | `Linen.Control.Monad` | `join`, `replicateM`, `replicateM_`, `when`, `unless` |
 | `Linen.Control.Monad.Except` | `mtl` names over core `ExceptT`/`Except`: `throwError`, `catchError`, `liftEither`, `mapExceptT`, `withExceptT`, `runExceptT` |
+| `Linen.Control.Monad.Error.Lens` | `lens`'s `Control.Monad.Error.Lens`: `throwing`/`throwing_`/`catching`/`catching_`/`handling`/`handling_`/`trying` over `MonadExcept`, taking a `Prism' e a` directly (a deliberate deviation from upstream's `Getting`, incompatible with this codebase's `Prism` encoding) |
 | `Linen.Control.Monad.Reader` | `Reader` alias + `mtl` names over core `ReaderT`/`read`/`adapt`: `ask`, `asks`, `local`, `runReaderT`, `runReader`, `mapReaderT` |
 | `Linen.Control.Monad.State` | `State` alias + `mtl` names over core `StateT`: `put`, `gets`, `runStateT`, `evalStateT`, `execStateT`, `runState`, `evalState`, `execState` (`get`/`set`/`modify` reused as-is) |
 | `Linen.Control.Monad.Trans` | `mtl` name `lift` over core `MonadLift`/`monadLift`, plus generic `lift_pure`/`lift_bind` laws (no bespoke `MonadTrans` class or per-transformer instances) |
@@ -1716,6 +1864,7 @@ package is ported as `Linen.Graphics.Image.*`.
 | `Linen.Control.Category` | `Category`, `LawfulCategory`, `Fun`, the `≫` operator |
 | `Linen.Control.Arrow` | `Arrow`/`ArrowChoice`: `arr`/`first`/`split`/`left`/`right`/`fanin`, `Fun` instances |
 | `Linen.Control.Exception` | IO `bracket` / `onException` (resource safety & failure cleanup) |
+| `Linen.Control.Exception.Lens` | `lens`'s `Control.Exception.Lens`: one `Prism' IO.Error _` per `IO.Error` constructor (`_UserError`, `_NoFileOrDirectory`, `_AlreadyExists`, …), re-exporting `Control.Monad.Error.Lens`'s combinators |
 | `Linen.Control.AutoUpdate` | periodically cached values on a dedicated thread |
 | `Linen.Control.Concurrent.MVar` | promise-based synchronisation variable (`take`/`put`/`swap`/…) |
 | `Linen.Control.Concurrent.Chan` | unbounded FIFO channel with `dup` (`write`/`read`/`tryRead`) |
@@ -1733,6 +1882,8 @@ package is ported as `Linen.Graphics.Image.*`.
 | `Linen.Data.Json` | JSON AST, `ToJSON`/`FromJSON`, encode/decode + roundtrip proofs |
 | `Linen.System.Console.Ansi` | ANSI terminal colors and styles |
 | `Linen.System.Exit` | `ExitCode` (success/failure) + `exitWith`/`exitSuccess`/`exitFailure` over `IO.Process.exit` |
+| `Linen.System.Exit.Lens` | `lens`'s `System.Exit.Lens`: `_ExitSuccess`/`_ExitFailure` prisms over `Linen.System.Exit` |
+| `Linen.System.FilePath.Lens` | `lens`'s `System.FilePath.Lens`: `directory`/`filename`/`extension`/`basename` lenses over Lean's own `System.FilePath` |
 | `Linen.System.Keychain` | OS credential store (`keyring` crate): `Entry`, `setPassword`/`getPassword`/`deleteCredential`, `setSecret`/`getSecret` (macOS Keychain / libsecret / Credential Manager FFI) |
 | `Linen.System.Log.FastLogger` | buffered thread-safe logger (`Std.Mutex`): `newLoggerSet`/`pushLogStr`/`flushLogStr`/`withFastLogger` |
 | `Linen.System.TimeManager` | connection-timeout sweeper: `Manager` (dedicated-task cooperative-cancellation loop over `Std.CancellationToken`), `Handle.tickle`/`cancel`/`pause`/`resume` |
@@ -2057,6 +2208,8 @@ package is ported as `Linen.Graphics.Image.*`.
 | `Linen.Network.WebSockets.Client` | `runClient`: outbound (client-side) connections, RFC 6455 §4.1 opening handshake |
 | `Linen.Network.WebSockets` | the package aggregator: `Types`/`Frame`/`Handshake`/`Connection`/`Client` |
 | `Linen.Data.Word8` | ASCII byte classification (`isUpper`/`isDigit`/…), case conversion, named byte constants |
+| `Linen.Numeric.Lens` | `lens`'s `Numeric.Lens`: `integral` (`Prism' Int Nat`), `base`/`binary`/`octal`/`decimal`/`hex` (`Prism' String Nat`), `adding`/`subtracting`/`negated`/`multiplying`/`dividing`/`exponentiating` (`Iso'`) |
+| `Linen.Numeric.Natural.Lens` | `lens`'s `Numeric.Natural.Lens`: `_Pair`/`_Sum`/`_Naturals` (`Iso' Nat _`), Gödel-numbering self-similarity isomorphisms, `_Pair` reformulated as bit-interleaving for a terminating proof |
 | `Linen.CDP.Definition` | the protocol's self-description: `Domain`/`Command`/`Event`/`TypeDef` |
 | `Linen.CDP.Internal.Utils` | `Config`/`Handle`, `SessionId`/`CommandId`, `ProtocolError`, the `Command`/`Event` classes |
 | `Linen.CDP.Domains.CacheStorage` | the `CacheStorage` CDP domain |

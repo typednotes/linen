@@ -245,6 +245,19 @@ instance : LawfulContravariant Predicate where
   contramap_id _ := rfl
   contramap_comp _ _ _ := rfl
 
+/-- `Contravariant` instance for `Const α`: the phantom parameter is
+    contravariant too (trivially — there is nothing to touch).
+
+    $$\text{contramap}\;f\;(\text{Const}\;a) = \text{Const}\;a$$ -/
+instance : Contravariant (Const α) where
+  contramap _ c := ⟨c.getConst⟩
+
+/-- `Const α` is a lawful contravariant functor — both laws hold
+    definitionally. -/
+instance : LawfulContravariant (Const α) where
+  contramap_id _ := rfl
+  contramap_comp _ _ _ := rfl
+
 /-- An equivalence relation $R : \alpha \to \alpha \to \text{Prop}$, wrapped as a
 contravariant functor.
 
@@ -262,5 +275,14 @@ instance : Contravariant Equivalence where
 instance : LawfulContravariant Equivalence where
   contramap_id _ := rfl
   contramap_comp _ _ _ := rfl
+
+/-- `Prod α` is a `Functor` in its second component (Haskell's
+    `instance Functor ((,) a)`): $\text{fmap}\;g\;(a, b) = (a, g\,b)$. Needed
+    by `Linen.Control.Lens.Lens`'s `(<%~)`/`(<<%~)`, which instantiate a
+    `Lens`'s functor at `Prod b`/`Prod a` to recover the written/read value
+    alongside the rewritten structure — no such instance exists in Lean's
+    core or `linen` prior to this. -/
+instance : Functor (Prod α) where
+  map g p := (p.1, g p.2)
 
 end Data.Functor

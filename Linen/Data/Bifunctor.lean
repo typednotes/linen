@@ -78,4 +78,41 @@ instance : LawfulBifunctor Except where
   bimap_id x := by cases x <;> rfl
   bimap_comp _ _ _ _ x := by cases x <;> rfl
 
+-- ── Bitraversable ──────────────────────────────
+
+/-- A **bitraversable** bifunctor: both components can be traversed with an
+    effectful function at once, collecting the results (Haskell's
+    `Data.Bitraversable.Bitraversable`, ported here as a new method on
+    `Bifunctor` — following this module's existing shape, where
+    `mapFst`/`mapSnd` are likewise given as `Bifunctor` methods rather than a
+    separate `Bifoldable`/`Bitraversable` class hierarchy).
+
+    $$\text{bitraverse}\; f\; g : F\,\alpha\,\beta \to G\,(F\,\gamma\,\delta)$$
+    for an `Applicative` $G$, given $f : \alpha \to G\,\gamma$ and
+    $g : \beta \to G\,\delta$. Needed by `Linen.Control.Lens.Traversal`'s
+    `both`, which is exactly `bitraverse`'s single-function specialization
+    (`bitraverse f f`). -/
+class Bitraverse (F : Type u → Type u → Type u) extends Bifunctor F where
+  /-- Traverse both components at once with an effectful function each,
+      collecting the results in a common `Applicative` `G`. -/
+  bitraverse {G : Type u → Type u} [Applicative G] {α β γ δ : Type u} :
+    (α → G γ) → (β → G δ) → F α β → G (F γ δ)
+
+/-- `Bitraverse` instance for `Prod`: traverse both components independently
+    and pair the results. -/
+instance : Bitraverse Prod where
+  bitraverse f g p := Prod.mk <$> f p.1 <*> g p.2
+
+/-- `Bitraverse` instance for `Sum`: traverse whichever branch is present. -/
+instance : Bitraverse Sum where
+  bitraverse f g
+    | .inl a => Sum.inl <$> f a
+    | .inr b => Sum.inr <$> g b
+
+/-- `Bitraverse` instance for `Except`: traverse whichever branch is present. -/
+instance : Bitraverse Except where
+  bitraverse f g
+    | .error a => Except.error <$> f a
+    | .ok b => Except.ok <$> g b
+
 end Data
