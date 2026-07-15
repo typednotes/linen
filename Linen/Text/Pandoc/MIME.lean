@@ -93,7 +93,7 @@ def mediaCategory (fp : String) : Option String :=
 
 /-- A plausible file extension for a MIME type (the reverse lookup). -/
 def extensionFromMimeType (mimetype : MimeType) : Option String :=
-  let mt := (mimetype.takeWhile (· != ';')).toString.trim
+  let mt := (mimetype.takeWhile (· != ';')).toString.trimAscii.toString
   match mt with
   | "text/plain" => some "txt"
   | "video/quicktime" => some "mov"
@@ -109,7 +109,7 @@ def extensionFromMimeType (mimetype : MimeType) : Option String :=
 
 /-- Extract an (upper-cased) charset parameter from a MIME type, if present. -/
 def getCharset (mimetype : MimeType) : Option String :=
-  let parts := (mimetype.splitOn ";").map String.trim
+  let parts := (mimetype.splitOn ";").map (·.trimAscii.toString)
   (parts.find? (fun p => "charset=".isPrefixOf p.toLower)).map fun p =>
     (p.drop "charset=".length).toString.toUpper
 

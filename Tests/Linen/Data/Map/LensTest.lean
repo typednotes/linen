@@ -22,8 +22,8 @@ namespace Tests.Linen.Data.Map.Lens
 
 #guard ((Data.Map.fromList [("a", 1)] : Map String Nat) ^. «at» "a") = some 1
 #guard ((Data.Map.fromList [("a", 1)] : Map String Nat) ^. «at» "z") = none
-#guard (((«at» "b" .~ some 2) (Data.Map.fromList [("a", 1)] : Map String Nat)).find? "b") = some 2
-#guard (((«at» "a" .~ none) (Data.Map.fromList [("a", 1)] : Map String Nat)).find? "a") = none
+#guard (((«at» "b" .~ some 2) (Data.Map.fromList [("a", 1)] : Map String Nat)).get? "b") = some 2
+#guard (((«at» "a" .~ none) (Data.Map.fromList [("a", 1)] : Map String Nat)).get? "a") = none
 
 -- ── `toMapOf` ────────────────────────────────────
 -- (indexed by list position, via `ifolded : IndexedFold Nat (List A) A`)

@@ -111,13 +111,13 @@ def readTranslations (input : String) : Except String Translations := do
   let stripComment (l : String) : String :=
     (l.takeWhile (· != '#')).toString
   let entries := (input.splitOn "\n").filterMap fun rawLine =>
-    let line := (stripComment rawLine).trim
+    let line := (stripComment rawLine).trimAscii.toString
     if line == "" then none
     else match line.splitOn ":" with
       | key :: rest =>
-          match Term.ofName? key.trim with
+          match Term.ofName? key.trimAscii.toString with
           | some t =>
-              let val := (":".intercalate rest).trim
+              let val := (":".intercalate rest).trimAscii.toString
               -- strip optional surrounding quotes
               let vchars := val.toList
               let quoted := vchars.length >= 2 &&

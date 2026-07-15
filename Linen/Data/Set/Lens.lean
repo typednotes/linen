@@ -13,7 +13,7 @@
   setOf l = views l Set.singleton  -- (simplified: folds every focused element)
   ```
 
-  translated against `Linen.Data.Set`'s `Set'` (a `Lean.RBMap`-backed
+  translated against `Linen.Data.Set`'s `Set'` (a `Std.TreeSet`-backed
   `abbrev`, named `Set'` in `linen` to avoid clashing with Lean's own
   `Set`). `Ixed`/`At` are additionally given here (upstream places its own
   `Set`/`IntSet`/`HashSet` "presence" access behind the separate `Contains`

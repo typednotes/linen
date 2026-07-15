@@ -27,6 +27,11 @@ import Linen.Data.Stream.Step
 
 namespace Data.Producer
 
+-- `m`'s domain and codomain universes are independent by design, but always
+-- co-occur syntactically in `unfoldrM`, so the linter can't tell they need
+-- to stay free.
+set_option linter.checkUnivs false
+
 open Data.Stream (Step)
 
 -- ── The Producer type ───────────────────────────────────────────────────────

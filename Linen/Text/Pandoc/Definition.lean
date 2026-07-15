@@ -19,8 +19,9 @@
 
   * `MetaValue.MetaMap` holds an association `List (String × MetaValue)`
     rather than a `Data.Map`: Lean's kernel rejects a recursive inductive
-    that occurs nested inside `Data.Map` (an `RBMap`, i.e. a `Subtype` of
-    `RBNode`), so the self-referential map field must be a plain list.  The
+    that occurs nested inside `Data.Map` (a `Std.TreeMap`, itself a
+    well-formedness-bundled balanced tree), so the self-referential map field
+    must be a plain list.  The
     non-recursive `Meta` newtype still wraps a genuine `Data.Map`.  Both
     serialise to a JSON object, matching aeson.
   * The `RowSpan`/`ColSpan`/`RowHeadColumns` newtypes over `Int` become bare

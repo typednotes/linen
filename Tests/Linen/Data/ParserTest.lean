@@ -13,6 +13,10 @@ open Data.Fold (Fold)
 
 namespace Tests.Data.Parser
 
+-- `a`/`b`'s universes are independent by design, but always co-occur
+-- syntactically in `run`, so the linter can't tell they need to stay free.
+set_option linter.checkUnivs false
+
 private unsafe def check (name : String) (cond : Bool) : IO Unit :=
   unless cond do throw (IO.userError s!"Parser test failed: {name}")
 

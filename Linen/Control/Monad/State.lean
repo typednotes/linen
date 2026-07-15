@@ -14,6 +14,12 @@
 
 namespace Control.Monad.State
 
+-- `m`'s domain and codomain universes are independent by design (a monad
+-- transformer may map a smaller universe to a larger one), but always
+-- co-occur syntactically in these thin `StateT` wrappers, so the linter
+-- can't tell they need to stay free.
+set_option linter.checkUnivs false
+
 /-- The `State` monad: `StateT` over `Id`.
 
     $$\text{State}\ \sigma\ \alpha = \text{StateT}\ \sigma\ \text{Id}\ \alpha = \sigma \to (\alpha \times \sigma)$$ -/

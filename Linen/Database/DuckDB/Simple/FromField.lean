@@ -71,6 +71,11 @@ import Linen.Database.DuckDB.Simple.Types
 
 namespace Database.DuckDB.Simple
 
+-- The tuple-of-`FromField` instances' per-component universes are
+-- independent by design, but always co-occur syntactically, so the linter
+-- can't tell they need to stay free.
+set_option linter.checkUnivs false
+
 open Database.DuckDB.FFI.Types (Date Time Timestamp TimeTz Interval HugeInt UHugeInt Decimal)
 open Database.DuckDB.Simple.LogicalRep (StructValue UnionValue StructField UnionMemberType)
 

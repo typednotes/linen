@@ -76,7 +76,7 @@ def insertMedia (fp : String) (mbMime : Option MIME.MimeType) (contents : ByteAr
     | some m => m
     | none =>
         if fp.endsWith ".gz" then
-          MIME.getMimeTypeDef (fp.dropRight 3)
+          MIME.getMimeTypeDef (fp.dropEnd 3).toString
         else
           MIME.getMimeTypeDef fp
   let item : MediaItem := { mediaMimeType := mime, mediaPath := path, mediaContents := contents }

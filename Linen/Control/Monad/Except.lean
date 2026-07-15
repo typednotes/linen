@@ -13,6 +13,12 @@
 
 namespace Control.Monad.Except
 
+-- `m`/`n`'s domain and codomain universes are independent by design (a monad
+-- transformer may map a smaller universe to a larger one), but always
+-- co-occur syntactically in these thin `ExceptT` wrappers, so the linter
+-- can't tell they need to stay free.
+set_option linter.checkUnivs false
+
 export ExceptT (run mk)
 
 /-- Throw an error in `ExceptT`.

@@ -57,6 +57,11 @@ import Linen.Data.Tuple.Strict
 
 namespace Data.Parser
 
+-- `m`'s domain and codomain universes are independent by design, but always
+-- co-occur syntactically in `parseBreakList`/`parseList`, so the linter
+-- can't tell they need to stay free.
+set_option linter.checkUnivs false
+
 open Data.Fold (Fold)
 open Data.Either (Either')
 open Data.Tuple (Tuple')

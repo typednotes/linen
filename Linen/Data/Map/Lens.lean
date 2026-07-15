@@ -20,8 +20,8 @@
   toMapOf l = views l (uncurry Map.singleton) -- (simplified: folds over pairs)
   ```
 
-  translated against `Linen.Data.Map`'s `Map` (a `Lean.RBMap`-backed
-  `abbrev`, whose `find?`/`insert`/`erase` are used directly via dot
+  translated against `Linen.Data.Map`'s `Map` (a `Std.TreeMap`-backed
+  `abbrev`, whose `get?`/`insert`/`erase` are used directly via dot
   notation). -/
 
 import Linen.Control.Lens.At
@@ -36,7 +36,7 @@ open Data (Map)
     any) at key `k`. -/
 instance instIxedMap {K V : Type u} [Ord K] : Ixed (Map K V) K V where
   ix k := fun {F} [Applicative F] (f : V → F V) (m : Map K V) =>
-    match m.find? k with
+    match m.get? k with
     | some v => (fun v' => m.insert k v') <$> f v
     | none => pure m
 
@@ -46,7 +46,7 @@ instance instAtMap {K V : Type u} [Ord K] : At (Map K V) K V where
   «at» k := fun {F} [Functor F] (f : Option V → F (Option V)) (m : Map K V) =>
     (fun
       | some v' => m.insert k v'
-      | none => m.erase k) <$> f (m.find? k)
+      | none => m.erase k) <$> f (m.get? k)
 
 /-- `toMapOf :: Ord k => Getting (Map k v) s (k, v) -> s -> Map k v`: collect
     every `(k, v)` pair an `IndexedFold` visits into a `Map`, later entries

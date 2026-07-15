@@ -35,6 +35,11 @@ import Linen.Data.Tuple.Strict
 
 namespace Data.Refold
 
+-- `m`'s domain and codomain universes are independent by design, but always
+-- co-occur syntactically in `append`, so the linter can't tell they need to
+-- stay free.
+set_option linter.checkUnivs false
+
 open Data.Fold (Step)
 open Data.Tuple (Tuple')
 

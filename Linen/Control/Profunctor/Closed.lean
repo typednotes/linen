@@ -17,6 +17,11 @@ import Linen.Control.Profunctor.Types
 
 open Control
 
+-- The profunctor `p`'s two argument universes are independent by design,
+-- but always co-occur syntactically in `curry'`, so the linter can't tell
+-- they need to stay free.
+set_option linter.checkUnivs false
+
 namespace Control.Profunctor
 
 /-- A **closed profunctor** lets the closed (function-space) structure of

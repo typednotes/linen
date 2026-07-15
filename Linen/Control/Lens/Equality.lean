@@ -72,12 +72,12 @@ abbrev Equality' (S A : Type) := Equality S S A A
 /-- Recover the type equality `s = a` witnessed by an `Equality s t a b`, by
     instantiating it at the profunctor `fun x _ => PLift (x = a)` (with `f :=
     id`): feeding in the trivial witness `a = a` yields exactly `s = a`. -/
-@[inline] def runEq {S T A B : Type} (eq : Equality S T A B) : S = A :=
+theorem runEq {S T A B : Type} (eq : Equality S T A B) : S = A :=
   (eq (P := fun X _ => PLift (X = A)) (F := id) ⟨rfl⟩).down
 
 /-- Recover the type equality `t = b` witnessed by an `Equality s t a b`, the
     counterpart of `runEq` for the second index pair. -/
-@[inline] def runEq' {S T A B : Type} (eq : Equality S T A B) : T = B :=
+theorem runEq' {S T A B : Type} (eq : Equality S T A B) : T = B :=
   (eq (P := fun _ Y => PLift (Y = B)) (F := id) ⟨rfl⟩).down
 
 /-- `mapEq`: transport an `f s` value along the type equality an `Equality s

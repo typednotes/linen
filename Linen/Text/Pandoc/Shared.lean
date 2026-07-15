@@ -136,19 +136,19 @@ def camelCaseToHyphenated (s : String) : String :=
 
 /-- The Roman-numeral rendering of a `Nat`, peeling one symbol at a time. -/
 private def romanNat (n : Nat) : String :=
-  if h : n ≥ 1000 then "M" ++ romanNat (n - 1000)
-  else if h : n ≥ 900 then "CM" ++ romanNat (n - 900)
-  else if h : n ≥ 500 then "D" ++ romanNat (n - 500)
-  else if h : n ≥ 400 then "CD" ++ romanNat (n - 400)
-  else if h : n ≥ 100 then "C" ++ romanNat (n - 100)
-  else if h : n ≥ 90 then "XC" ++ romanNat (n - 90)
-  else if h : n ≥ 50 then "L" ++ romanNat (n - 50)
-  else if h : n ≥ 40 then "XL" ++ romanNat (n - 40)
-  else if h : n ≥ 10 then "X" ++ romanNat (n - 10)
-  else if h : n ≥ 9 then "IX" ++ romanNat (n - 9)
-  else if h : n ≥ 5 then "V" ++ romanNat (n - 5)
-  else if h : n ≥ 4 then "IV" ++ romanNat (n - 4)
-  else if h : n ≥ 1 then "I" ++ romanNat (n - 1)
+  if _h : n ≥ 1000 then "M" ++ romanNat (n - 1000)
+  else if _h : n ≥ 900 then "CM" ++ romanNat (n - 900)
+  else if _h : n ≥ 500 then "D" ++ romanNat (n - 500)
+  else if _h : n ≥ 400 then "CD" ++ romanNat (n - 400)
+  else if _h : n ≥ 100 then "C" ++ romanNat (n - 100)
+  else if _h : n ≥ 90 then "XC" ++ romanNat (n - 90)
+  else if _h : n ≥ 50 then "L" ++ romanNat (n - 50)
+  else if _h : n ≥ 40 then "XL" ++ romanNat (n - 40)
+  else if _h : n ≥ 10 then "X" ++ romanNat (n - 10)
+  else if _h : n ≥ 9 then "IX" ++ romanNat (n - 9)
+  else if _h : n ≥ 5 then "V" ++ romanNat (n - 5)
+  else if _h : n ≥ 4 then "IV" ++ romanNat (n - 4)
+  else if _h : n ≥ 1 then "I" ++ romanNat (n - 1)
   else ""
   termination_by n
   decreasing_by all_goals omega

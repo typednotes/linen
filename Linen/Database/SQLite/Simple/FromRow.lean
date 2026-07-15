@@ -72,6 +72,11 @@ import Linen.Database.SQLite.Simple.FromField
 
 namespace Database.SQLite.Simple
 
+-- The tuple-of-`FromField` `FromRow` instances' per-component universes are
+-- independent by design, but always co-occur syntactically, so the linter
+-- can't tell they need to stay free.
+set_option linter.checkUnivs false
+
 -- ────────────────────────────────────────────────────────────────────
 -- `RowParser`
 -- ────────────────────────────────────────────────────────────────────

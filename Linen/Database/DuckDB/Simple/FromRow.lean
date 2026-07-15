@@ -46,6 +46,11 @@ import Linen.Database.DuckDB.Simple.FromField
 
 namespace Database.DuckDB.Simple
 
+-- The tuple-of-`FromField` `FromRow` instances' per-component universes are
+-- independent by design, but always co-occur syntactically, so the linter
+-- can't tell they need to stay free.
+set_option linter.checkUnivs false
+
 -- ────────────────────────────────────────────────────────────────────
 -- `RowParser`
 -- ────────────────────────────────────────────────────────────────────

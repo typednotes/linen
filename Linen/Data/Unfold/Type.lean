@@ -33,6 +33,11 @@ import Linen.Data.Stream.Step
 
 namespace Data.Unfold
 
+-- `m`'s domain and codomain universes are independent by design, but always
+-- co-occur syntactically in `unfoldr`/`unfoldrM`, so the linter can't tell
+-- they need to stay free.
+set_option linter.checkUnivs false
+
 open Data.Stream (Step)
 
 -- ── The Unfold type ─────────────────────────────────────────────────────────
