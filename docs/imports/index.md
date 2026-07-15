@@ -238,6 +238,127 @@ it depends on).
   `repa`'s use of these is an implementation detail we reimplement directly
   without them.
 
+80. [`hedis`](hedis/dependencies.md) (done) — Redis
+    client (`Database.Redis.*`)
+    ([source](https://hackage.haskell.org/package/hedis)), 19 module(s)
+    (the plan's 18 plus one structural split, `Database.Redis.PubSub.Types` —
+    a small dependency-free module holding the pure Pub/Sub value types
+    (`Message`/`PubSub`/`Cmd`) and the subscription-change algebra, carved out
+    of `Database.Redis.PubSub` to break the `Hooks`↔`PubSub` import cycle that
+    upstream breaks with a `{-# SOURCE #-}` boot import; see that module's own
+    doc-comment for the full rationale), ported as `Linen.Database.Redis.*`.
+    **Headline finding:** unlike
+    `lens` (#77–79), no separate Hackage-import package is needed first —
+    every `build-depends` entry resolves against the Lean stdlib, an
+    already-ported `linen` module, or a narrow (1–7-function) slice
+    substituted with directly-inlined code (`scanner`, `bytestring-lexing`,
+    `errors`, `exceptions`, `async`, `resource-pool`, `HTTP`) — see the
+    `dependencies.md`'s "External dependencies" section for the
+    function-by-function resolution of each. RESP2 wire-protocol framing
+    (`Database.Redis.Protocol`) is the one genuinely new port, built on
+    `Std.Internal.Parsec` over the already-ported `Linen.Network.Socket`/
+    `Linen.Network.TLS`, the same "frame parser over an existing socket
+    abstraction" shape as `Linen.Network.HTTP2.Frame.*`. **Scope note:**
+    upstream `hedis` 0.16.1 itself only implements RESP2, not RESP3 — this
+    plan ports exactly that upstream scope, nothing deferred.
+
+81. [`streamly`](streamly/dependencies.md) (done) —
+    high-performance stream-fusion / streaming library, scoped to its
+    foundational [`streamly-core`](https://hackage.haskell.org/package/streamly-core)
+    package (v0.3.1), 36 module(s) ported (the plan projected 39 in-scope
+    modules of ~95 upstream library modules; a few of the plan's separately
+    counted facades/`.Type` splits were consolidated during porting),
+    ported as `Linen.Data.Stream.*` and sibling `Linen.Data.*` families
+    (`StreamK`/`Fold`/`Scanl`/`Unfold`/`Parser`/`Producer`/`Refold`, plus
+    unboxed `Array`/`MutArray`/`MutByteArray`/`Unbox`). **Headline finding:**
+    like `hedis` (#80) and unlike `lens` (#77–79), no separate not-yet-ported
+    Hackage prerequisite is needed first — every `build-depends` entry
+    resolves against the Lean stdlib, an already-ported `linen` module, a
+    narrow inline (`exceptions` → `Linen.Control.Exception`), or a drop
+    (`fusion-plugin-types`/`ghc-bignum`/`integer-gmp`/`ghc-prim`/
+    `template-haskell`/`heaps`/`monad-control`/`filepath`/`Win32` — GHC
+    toolchain, laziness-fusion, and TH-codegen shims with no Lean analogue).
+    This is a genuinely new streaming *paradigm* — stream-fusion via the
+    `Step`/`skip`/`stop` state machine — distinct from the coroutine-pipeline
+    `Conduit` port (#30) already in `linen`; the port reproduces streamly's
+    fused *data encoding* faithfully but not the GHC `fusion-plugin` that
+    optimizes it (eager Lean has no such rewrite-rule pass). **Scope note:**
+    bounded to `streamly-core`, deferring the full `streamly` package's
+    concurrent `SVar` scheduler (the same way `hedis`'s doc bounds itself to
+    upstream's RESP2 scope); and within `streamly-core`, deferring the
+    `FileSystem.*`/`Path`/Posix/Windows, `Unicode.*`, `Serialize`/`Unbox.TH`
+    (Template-Haskell codegen), `Time.*`, `Console`/`ForkIO`, and secondary
+    combinator/container/`Generic`-array/deprecated subtrees — see the
+    `dependencies.md`'s "Scope note" section.
+
+82. [`doclayout`](doclayout/dependencies.md) (done) — a small, self-contained
+    Wadler/Leijen-style pretty-printer
+    ([source](https://hackage.haskell.org/package/doclayout)), v0.5.0.3, all 4
+    library modules ported (`Text.DocLayout` + `HasChars`/`ANSIFont`/
+    `Attributed`) as `Linen.Text.DocLayout.*` (the `Text.` domain prefix maps
+    to `Linen.Text.`, sitting beside its consumer `Linen.Text.Pandoc`;
+    `DocLayout` is a descriptive name, not GHC/Haskell branding, so no
+    Lean-ify rename). **Headline finding:** a genuine new port — `linen` had
+    no Wadler/Leijen pretty-printer (`Linen.Data.PDF.*` and the ad-hoc
+    `ShowS`/builder emitters are not it) — and a **blocking prerequisite of
+    `pandoc` (#83)**, imported first as its own entry the way `profunctors`
+    (#77)/`indexed-traversable` (#78) preceded `lens` (#79): every pandoc
+    writer renders through its `Doc`/`render`/`literal`/`charWidth`. All
+    `build-depends` resolved against the Lean stdlib or existing ports
+    (`base`/`text`/`containers`/`mtl` → `Base`/`Text` (#39)/`Containers`
+    (#10)/`Mtl` (#22)), a narrow inline (`safe` → two one-liners; the
+    `emojis` `baseEmojis` width table folded in), or a drop (`GHC.Generics`/
+    `Data.Data` generic-deriving — no Lean analogue). The render engine
+    (`render`/`offset`/`height` and transitive callers, 17 `unsafe def`) uses
+    `unsafe` per the `Data.Conduit`/`StreamK`/`Stream` precedent (structural
+    but non-well-founded reassociation); `flatten`/`normalize` are total. The
+    multi-thousand-entry `baseEmojis` grapheme-cluster table is out of scope —
+    `charWidth` uses a wcwidth-style range approximation instead. See the
+    `dependencies.md` for the full resolution.
+83. [`pandoc`](pandoc/dependencies.md) (done) — the
+    universal document converter
+    ([source](https://hackage.haskell.org/package/pandoc)), v3.10, scoped to a
+    focused core of 34 in-scope modules (out of `pandoc`'s ~170 library modules
+    plus the separate [`pandoc-types`](https://hackage.haskell.org/package/pandoc-types)
+    AST package's 6, whose 5 library modules —
+    `Definition`/`Builder`/`Walk`/`Generic`/`JSON` — are folded in as the
+    foundation tier, the same "raw dependency folded into the one wrapper that
+    uses it" treatment `sqlite-simple` gives `direct-sqlite`), planned as
+    `Linen.Text.Pandoc.*` (`Pandoc` kept as a proper-noun tool name, not
+    GHC/Haskell branding — the same reasoning `hedis` keeps `Redis` and `lens`
+    keeps `Lens`). **Headline finding:** unlike `hedis` (#80)/`streamly` (#81)
+    and like `lens` (#77–79), there is a **blocking not-yet-ported
+    prerequisite** — [`doclayout`](doclayout/dependencies.md) (#82),
+    the `Doc` pretty-printing algebra every writer renders through, which must
+    be imported first as its own entry (the way `profunctors` preceded `lens`);
+    plus `tagsoup` (HTML tokenizer) and a bounded YAML front-matter parser as
+    two reader-side prerequisites. `blaze-html`/`blaze-markup` substitute onto
+    the existing `Linen.Web.Html`, and `aeson`/`containers`/`text`/`mtl`/
+    `network-uri`/`mime-types`/`parsec`/`scientific` all resolve against the
+    Lean stdlib or existing ports (`syb`/`ghc-prim`/`template-haskell`/
+    `file-embed`/`QuickCheck`/`semigroups` dropped). **Scope note:** bounded to
+    the AST + shared reader/writer infrastructure + the two most central
+    formats (**Markdown** and **HTML**, both read and write) plus the
+    AST-native `Native`/`JSON` round-trip — deferring the long tail of exotic
+    format readers/writers, the binary/zip formats (DOCX/ODT/EPUB/Pptx/Xlsx),
+    the Lua-scripting/filter system, syntax highlighting (`skylighting`), math
+    typesetting (`texmath`), citations (`citeproc`), templating
+    (`doctemplates`), and the App/CLI/PDF/`IO`-monad outer shell — the same
+    scoping discipline `streamly` (scoped to `streamly-core`) and `hedis`
+    (RESP2 only) applied. See the `dependencies.md`'s "Scope note" section.
+    **Result:** all 34 modules ported as `Linen.Text.Pandoc.*` plus the
+    top-level `Linen.Text.Pandoc` facade (`getReader`/`getWriter`/`convert`
+    format dispatch), giving a working Markdown↔AST↔HTML round-trip plus the
+    AST-native `Native`/`JSON` formats. Both reader-side prerequisites
+    flagged above were resolved as bounded inline folds rather than separate
+    entries: a permissive HTML tokenizer (`TagTok`/`tokenize`) inside
+    `Readers/HTML.lean` substitutes for `tagsoup`, and a YAML-subset block-
+    mapping/sequence/scalar parser over `Std.Internal.Parsec` inside
+    `Readers/Markdown.lean` substitutes for the `HsYAML`-backed
+    `Readers.Metadata` front-matter machinery — both citing the
+    `Emoji.lean`/`MIME.lean` fold-in precedent. `blaze-html` substitutes onto
+    `Linen.Web.Html` as planned. `lake build Linen Tests` passes at 4334 jobs.
+
 ## Crates (crates.io)
 
 Same convention as above, applied to Rust crates per AGENTS.md's

@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>628 modules</strong> · <strong>379 compile-time theorems</strong> · <strong>8741 <code>#guard</code> checks</strong>
+  <strong>721 modules</strong> · <strong>379 compile-time theorems</strong> · <strong>9616 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -117,6 +117,47 @@ for the full per-module feature list and module table.
   `fold`/`fold_`, `withTransaction`) built on the appender-free
   prepared-statement/`DataChunk` fetch pipeline. Completes the
   `sqlite-simple` → `duckdb-ffi` → `duckdb-simple` import chain.
+- **`Database.Redis`** — a `hedis`-style Redis client: the RESP2 wire
+  protocol (`Reply` encoder/parser over `Std.Internal.Parsec.ByteArray`) and
+  request/response pipelining over `Network.Socket`/`Network.TLS`; the
+  `Redis` monad with `RedisCtx`/`MonadRedis`; the full command surface
+  (simple + irregular `ManualCommands`); `ConnectInfo`/`redis://`-URL parsing
+  and an `IO.Ref`-guarded connection pool; `MULTI`/`EXEC`/`WATCH`
+  transactions; Pub/Sub (`publish`, `pubSub`, `pubSubForever`); Redis Cluster
+  (CRC16 hash slots, topology, `MOVED`/`ASK` redirects); and Sentinel-based
+  master discovery with failover — no separate prerequisite Hackage package
+  needed, every dependency resolving onto the Lean stdlib, an existing
+  `linen` port, or a small inlined slice.
+- **`Data.Stream`** — a `streamly-core`-style stream-fusion library: the
+  fused, direct-style `Stream` (a `Yield`/`Skip`/`Stop` `Step`-machine stepper)
+  and the CPS-encoded `StreamK`, bridged both ways; `Fold`/`Scanl` terminating
+  left folds and scans, `Unfold`/`Producer` generators, and a backtracking
+  streaming `Parser`; plus an unboxed-array subsystem (`MutByteArray`/`Unbox`,
+  `MutArray`, `Array.Unboxed`). A distinct streaming paradigm from the existing
+  `Conduit` port — the fused data encoding is reproduced faithfully, without
+  GHC's `fusion-plugin` optimizer that eager Lean has no analogue for; bounded
+  to `streamly-core`, deferring the concurrent `SVar` scheduler.
+- **`Text.DocLayout`** — a Wadler/Leijen-style pretty-printer: the `Doc`
+  document algebra (`literal`, `<+>`, `$$`, `vcat`, `nest`, `hang`, `flush`,
+  side-by-side blocks, ANSI/OSC-8 styling) and its `render`/`renderANSI` line-
+  wrapping engine, plus the `HasChars`/`Attributed`/`ANSIFont` layers beneath
+  it. `linen`'s first document-layout algebra, and a blocking prerequisite of
+  `pandoc` — every pandoc writer renders through it.
+- **`Text.Pandoc`** — a `pandoc`-style universal document converter: the
+  shared AST (`Pandoc`/`Block`/`Inline`, folded in from `pandoc-types`) with
+  its `Walk`/`Generic` traversals and `Builder` combinator API; the shared
+  reader/writer infrastructure (`Extensions`, `Options`, `Parsing`,
+  `Shared`, `Templates`, `Writers.Shared`'s `gridTable`) and the pure
+  `PandocMonad`/`PandocPure`; and a working Markdown↔AST↔HTML round-trip
+  (`Readers`/`Writers.{Markdown,HTML}`) plus the AST-native `Native`/`JSON`
+  formats, dispatched through a top-level `getReader`/`getWriter`/`convert`
+  facade. `tagsoup` (the HTML tokenizer) and a YAML front-matter parser had
+  no other consumer, so each is folded in as a bounded slice directly inside
+  its one reader module rather than imported as its own package; `blaze-html`
+  substitutes onto the existing `Web.Html`. Scoped to the AST plus Markdown
+  and HTML (both directions) — the long tail of exotic formats, binary/zip
+  formats, the Lua-filter system, syntax highlighting, math typesetting,
+  citations, and templating are all deferred.
 - **`Crypto.JOSE`** — JOSE/JWT verification (HMAC/RSA/EC) over OpenSSL.
 - **`Network.OAuth2`** — a `hoauth2`-style OAuth2 client: authorization-code,
   client-credentials, device-authorization, JWT-bearer, resource-owner-password
@@ -193,7 +234,7 @@ open Data.Functor Control.Monad
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 628 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 721 modules).
 
 ## Build & Test
 

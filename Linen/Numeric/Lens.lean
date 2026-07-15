@@ -143,7 +143,7 @@ def digitsToNat (b : Nat) (s : List Char) : Option Nat :=
     round-trips to `"7"`, not back to `"007"`), which `Iso`/`Prism`'s
     unenforced round-trip law already tolerates in this codebase. -/
 def base (b : Nat) (hb : 2 ≤ b ∧ b ≤ 36) : Prism' String Nat :=
-  prism' (fun n => String.mk (natDigits b n hb.1)) (fun s => digitsToNat b s.toList)
+  prism' (fun n => String.ofList (natDigits b n hb.1)) (fun s => digitsToNat b s.toList)
 
 /-- `binary = base 2`. -/
 def binary : Prism' String Nat := base 2 (by decide)

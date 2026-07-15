@@ -29,15 +29,23 @@ namespace Control
 /-- A **profunctor** $P : \mathsf{Type}^{\mathsf{op}} \times \mathsf{Type} \to \mathsf{Type}$:
     contravariant in its first argument, covariant in its second.
 
-    You may define a `Profunctor` by giving `dimap` alone, or by giving both
-    `lmap` and `rmap`. Laws (definitional when only `dimap` is supplied):
+    Upstream's `MINIMAL dimap | lmap, rmap` lets an instance give either
+    `dimap` alone or both `lmap`/`rmap`; that mutual pair of defaults (each
+    defined via the other) is exactly the shape Lean's class elaborator
+    cannot instantiate a default for when a further subclass doesn't
+    concretely supply any of the three (it warns "could not be
+    instantiated" rather than reject the declaration). Every instance in
+    this codebase already supplies `dimap` concretely, so `dimap` is made
+    the required primitive here and `lmap`/`rmap` keep their upstream
+    defaults, now defined non-circularly in terms of it. Laws (definitional
+    when only `dimap` is supplied):
 
     $$\text{dimap}\;\text{id}\;\text{id} = \text{id}$$
     $$\text{dimap}\;f\;g = \text{lmap}\;f \circ \text{rmap}\;g$$ -/
 class Profunctor (P : Type u → Type u → Type v) where
   /-- Map over both arguments at once: $\text{dimap}\;f\;g : P\,b\,c \to P\,a\,d$
       for $f : a \to b$, $g : c \to d$. -/
-  dimap : (α → β) → (γ → δ) → P β γ → P α δ := fun f g => lmap f ∘ rmap g
+  dimap : (α → β) → (γ → δ) → P β γ → P α δ
   /-- Map the first argument contravariantly: $\text{lmap}\;f = \text{dimap}\;f\;\text{id}$. -/
   lmap : (α → β) → P β γ → P α γ := fun f => dimap f id
   /-- Map the second argument covariantly: $\text{rmap}\;g = \text{dimap}\;\text{id}\;g$. -/

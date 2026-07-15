@@ -32,12 +32,16 @@ def swapSum : α ⊕ β → β ⊕ α
     pass through it — the generalization of `Costar` of a functor that is
     strong with respect to `Sum` rather than `Prod`.
 
+    Same mutual-default note as `Strong` (see `Linen.Control.Profunctor.Strong`):
+    `left'` is made the required primitive, `right'` keeps its upstream
+    default non-circularly.
+
     Laws:
     $$\text{left}' = \text{dimap}\;\text{swapE}\;\text{swapE} \circ \text{right}'$$
     $$\text{rmap}\;\text{inl} = \text{lmap}\;\text{inl} \circ \text{left}'$$ -/
 class Choice (P : Type u → Type u → Type v) extends Profunctor P where
   /-- Thread an extra alternative `γ` through on the left: $\text{left}' : P\,α\,β \to P\,(α ⊕ γ)\,(β ⊕ γ)$. -/
-  left' : P α β → P (α ⊕ γ) (β ⊕ γ) := fun p => dimap swapSum swapSum (right' p)
+  left' : P α β → P (α ⊕ γ) (β ⊕ γ)
   /-- Thread an extra alternative `γ` through on the right: $\text{right}' : P\,α\,β \to P\,(γ ⊕ α)\,(γ ⊕ β)$. -/
   right' : P α β → P (γ ⊕ α) (γ ⊕ β) := fun p => dimap swapSum swapSum (left' p)
 
@@ -72,10 +76,12 @@ instance [ArrowChoice P] : Choice (WrappedArrow P) where
 
 -- ── Cochoice ───────────────────────────────────
 
-/-- The dual of `Choice`: costrength with respect to `Sum`. -/
+/-- The dual of `Choice`: costrength with respect to `Sum`. Same
+    mutual-default note as `Choice`: `unleft` is the required primitive,
+    `unright` keeps its upstream default non-circularly. -/
 class Cochoice (P : Type u → Type u → Type v) extends Profunctor P where
   /-- Discharge an extra alternative `δ` from the left. -/
-  unleft : P (α ⊕ δ) (β ⊕ δ) → P α β := fun p => unright (dimap swapSum swapSum p)
+  unleft : P (α ⊕ δ) (β ⊕ δ) → P α β
   /-- Discharge an extra alternative `δ` from the right. -/
   unright : P (δ ⊕ α) (δ ⊕ β) → P α β := fun p => unleft (dimap swapSum swapSum p)
 

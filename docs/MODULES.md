@@ -1684,6 +1684,188 @@ types.
   `.Sequence`/`.Tree`/lazy-`Text` port that doesn't exist yet; `System.IO.Error.Lens`
   is likewise not yet ported.
 
+### `Database.Redis` — a Redis client (`hedis`)
+
+A port of [`hedis`](https://hackage.haskell.org/package/hedis) 0.16.1 (see
+[`docs/imports/hedis/dependencies.md`](imports/hedis/dependencies.md)), ported
+as `Linen.Database.Redis.*`. Unlike `lens`, no separate prerequisite Hackage
+package is imported first: every `build-depends` entry resolves onto the Lean
+stdlib, an already-ported `linen` module, or a narrow inlined slice
+(`scanner`, `bytestring-lexing`, `resource-pool`, `unordered-containers`, …).
+Upstream `hedis` 0.16.1 implements RESP2, not RESP3, and this port covers
+exactly that scope.
+
+- **The wire protocol.** `Database.Redis.Protocol` is the one genuinely new
+  port: the RESP2 `Reply` type, `renderRequest`, and an incremental `reply`
+  parser written directly against `Std.Internal.Parsec.ByteArray` (the same
+  "frame parser over an existing socket abstraction" shape as
+  `Network.HTTP2.Frame.*`), substituting for the `scanner` package.
+  `Database.Redis.ProtocolPipelining` layers a request/response pipeline
+  queue over a `ConnectionContext`, batching writes with strict `IO` rather
+  than upstream's `unsafeInterleaveIO`-driven lazy reply list.
+- **The `Redis` monad.** `Core.Internal` defines `Redis` as a plain `abbrev`
+  for `ReaderT RedisEnv IO` (Lean's `ReaderT` already carries every instance
+  `GeneralizedNewtypeDeriving` gives upstream's `newtype`), and `Core` adds
+  the `RedisCtx`/`MonadRedis` classes plus `send`/`recv`/`sendRequest` and the
+  `runRedisInternal`/`runRedisClusteredInternal` dispatchers. `Types` supplies
+  the `RedisArg`/`RedisResult` encode/decode classes (with hand-written
+  number parsers standing in for `bytestring-lexing`).
+- **Commands.** `Commands` ports the uniform "simple" command surface (each
+  building a RESP request list handed to `sendRequest`); `ManualCommands`
+  ports every command with an irregular argument/reply encoding (`SET`,
+  `ZADD`, the `SCAN` family, `SORT`, the Stream/Geo/Cluster families, …),
+  upstream's option records becoming Lean `structure`s.
+- **Connection & transactions.** `ConnectionContext` is the raw connection
+  handle (`connect`/`send`/`recv`/`flush`/`enableTLS`) over
+  `Linen.Network.Socket`/`Linen.Network.TLS`; `Connection` adds
+  `ConnectInfo`, the `connect`/`checkedConnect`/`connectCluster` family,
+  `runRedis`, and an `IO.Ref`-guarded connection pool (substituting
+  `resource-pool`); `URL` parses `redis://`/`rediss://`/`redis-socket://`
+  connection strings; `Transactions` provides `MULTI`/`EXEC`/`WATCH` and the
+  `Queued`/`TxResult`/`RedisTx` (an `abbrev` for `StateT Nat Redis`) types.
+- **Pub/Sub.** `PubSub.Types` is a small dependency-free module holding the
+  pure Pub/Sub value types (`Message`/`PubSub`/`Cmd`) and the
+  subscription-change algebra, split out of `PubSub` purely to break the
+  `Hooks`↔`PubSub` import cycle that upstream breaks with a `{-# SOURCE #-}`
+  boot import (Lean has no `.hs-boot` mechanism). `Hooks` carries the
+  before/after-request instrumentation hooks, and `PubSub` provides `publish`,
+  the single-threaded `pubSub` interface, the continuous `pubSubForever`
+  controller, and `withPubSub`.
+- **Cluster & Sentinel.** `Cluster.HashSlot` computes CRC16/XMODEM key→slot
+  hashing (honouring `{…}` hash tags); `Cluster.Command` parses `COMMAND`
+  replies into an `InfoMap` over `Std.HashMap` (substituting
+  `unordered-containers`); `Cluster` implements cluster topology,
+  key-hash-slot request routing, and `MOVED`/`ASK` retry-on-redirect (the
+  implicit-pipelining scheduler and cluster-side `MULTI`/`EXEC` state machine
+  are out of scope for this batch). `Sentinel` builds on the public facade to
+  discover the current master via Redis Sentinel and reconnect on failover.
+- **The facade.** `Database.Redis` is an `export`-based re-export assembling
+  the whole public surface under `Database.Redis.*`, mirroring upstream's
+  curated export list.
+
+### `Data.Stream` — a stream-fusion library (`streamly-core`)
+
+A port of [`streamly-core`](https://hackage.haskell.org/package/streamly-core)
+0.3.1 (see
+[`docs/imports/streamly/dependencies.md`](imports/streamly/dependencies.md)),
+36 modules ported as `Linen.Data.Stream.*` and sibling `Linen.Data.*`
+families. This is a genuinely new streaming *paradigm* distinct from the
+coroutine-pipeline `Conduit` port (#30) already in `linen`: streamly is a
+**stream-fusion** library built on the `Yield`/`Skip`/`Stop` `Step`
+state-machine encoding that upstream's GHC `fusion-plugin` inlines into tight
+loops. Lean (eager, no rewrite-rule fusion pass) has no such optimizer, so the
+port reproduces streamly's fused *data encoding* faithfully but not the
+optimization that erases it. Like `hedis` (#80), no separate prerequisite
+Hackage package is imported first — every `build-depends` entry resolves onto
+the Lean stdlib, an already-ported `linen` module, a narrow inline
+(`exceptions` → `Linen.Control.Exception`), or a toolchain/TH shim with no Lean
+analogue that is simply dropped. The port is bounded to `streamly-core`,
+deferring the full `streamly` package's concurrent `SVar` scheduler.
+
+The modules form a strict dependency layering:
+
+- **Foundations.** `Stream.Step` is the `Yield`/`Skip`/`Stop` state machine at
+  the bottom; `Stream.SVarType` the pure stream-scheduling `State` record;
+  `Stream.BaseCompat` the `base`-compatibility helpers. The strict-data
+  accumulators `Tuple.Strict`, `Maybe.Strict`, and `Either.Strict` back
+  folds and scans.
+- **The two stream representations.** `Stream.Type` is the fused, direct-style
+  stream (`Stream m a`, upstream's `StreamD`): an existential-state stepper
+  `State → s → m (Step s a)`. `StreamK.Type`/`StreamK` is the CPS-encoded,
+  non-fused stream, bridged to the fused form by `fromStreamK`/`toStreamK`.
+  The `Stream.{Generate,Eliminate,Transform,Nesting,Lift}` operation modules
+  supply generators, consumers, transforms, interleave/merge combinators, and
+  inner-monad lifting; `Stream` is the public facade.
+- **Folds, scans, unfolds, parsers.** `Fold`/`Scanl` are the terminating
+  left-fold and stateful left-scan (each a `Step`-driven stepper with its own
+  `Fold.Step`/`.Type` core and facade); `Unfold` is the seed→stream generator
+  (`Unfold.Enumeration` adds `Enum`-range unfolds); `Parser` is the
+  backtracking streaming parser; `Producer` an `Unfold` with an extractable
+  seed; `Refold` a seed-parameterized fold.
+- **`unsafe`-justified drivers.** The direct-style stepper loops that drive a
+  `Step` state machine to a fixpoint are written with `unsafe` recursion where
+  a structural/well-founded termination measure is not available on the
+  existentially-hidden state (the loop terminates on `Stop`, not on a
+  shrinking Lean-visible argument) — the one place the fused encoding cannot be
+  expressed as plain structural recursion.
+- **The unboxed array subsystem.** `MutByteArray` (over Lean's `ByteArray`)
+  and the `Unbox` fixed-size (de)serialization class underpin `MutArray` (the
+  growable unboxed mutable array) and `Array.Unboxed` (its immutable
+  counterpart), with `System.IO` supplying the default array/chunk buffer
+  sizes for streaming I/O.
+
+### `Text.DocLayout` — a Wadler/Leijen-style pretty-printer (`doclayout`)
+
+A port of [`doclayout`](https://hackage.haskell.org/package/doclayout)
+0.5.0.3 (see
+[`docs/imports/doclayout/dependencies.md`](imports/doclayout/dependencies.md)),
+all 4 modules ported as `Linen.Text.DocLayout.*`. `linen` had no
+Wadler/Leijen-style document-layout algebra before this — `Linen.Data.PDF.*`
+and the codebase's various ad-hoc `ShowS`/builder emitters are unrelated. This
+is also a **blocking prerequisite of the (upcoming) `pandoc` import**: every
+pandoc writer renders through `doclayout`'s `Doc`/`render`/`literal`/
+`charWidth`, the same "prerequisite before dependent" sequencing
+`profunctors`/`indexed-traversable` followed before `lens`.
+
+The four modules layer straightforwardly: `ANSIFont` (leaf SGR/OSC-8 styling
+types) underpins `Attributed` (font-attributed string-chunk runs), which
+underpins `HasChars` (the string-abstraction class generalizing char-folding
+over `String`/`Attributed`), which the top-level `DocLayout` module builds on
+for the `Doc a` document algebra and its `render`/`renderANSI` layout engine.
+The render engine's line-wrapping/block-merging drivers (`render`/`offset`/
+`height` and their transitive callers, 17 `unsafe def` total) use `unsafe`
+per the `Data.Conduit`/`StreamK`/`Stream` precedent — they terminate, but on a
+non-structural custom measure; `flatten`/`normalize` are ordinary total
+recursion. The multi-thousand-entry `baseEmojis` grapheme-cluster width table
+is out of scope; `charWidth` uses a wcwidth-style range approximation instead.
+
+### `Text.Pandoc` — a universal document converter (`pandoc`)
+
+A port of [`pandoc`](https://hackage.haskell.org/package/pandoc) 3.10 (see
+[`docs/imports/pandoc/dependencies.md`](imports/pandoc/dependencies.md)),
+scoped to a focused core of 34 modules (out of upstream's ~170) as
+`Linen.Text.Pandoc.*` plus the top-level `Linen.Text.Pandoc` facade. The
+separate [`pandoc-types`](https://hackage.haskell.org/package/pandoc-types)
+AST package (`Definition`/`Builder`/`Walk`/`Generic`/`JSON`) is folded in as
+the foundation tier, the same "raw dependency folded into the one wrapper
+that uses it" treatment `sqlite-simple` gives `direct-sqlite`. `Pandoc` is
+kept as a proper-noun tool name, not GHC/Haskell branding — the same
+reasoning `hedis` keeps `Redis` and `lens` keeps `Lens`.
+
+The scope gives a self-contained core: the AST, the shared reader/writer
+infrastructure and the pure `PandocMonad`/`PandocPure`, and a working
+Markdown↔AST↔HTML round-trip plus the AST-native `Native`/`JSON` formats. It
+stands on [`Text.DocLayout`](#textdoclayout--a-wadlerleijen-style-pretty-printer-doclayout)
+(#82), a blocking prerequisite every writer renders through, imported first
+the way `profunctors`/`indexed-traversable` preceded `lens`. Two further
+reader-side gaps — `tagsoup` (the HTML tokenizer) and a YAML front-matter
+parser — had no other consumer in `linen`, so per AGENTS.md's precedent for
+small, single-consumer dependencies (the same treatment `Emoji.lean`/
+`MIME.lean` give their own folded-in subsets) each was ported as a bounded
+slice directly inside its one consuming module rather than as a separate
+`docs/imports/` entry: a permissive `Tag`/`tokenize` lexer inside
+`Readers/HTML.lean` (quoted/unquoted/bare attributes, self-closing tags,
+comments, void elements — not full HTML5 tree-construction), and a YAML
+block-mapping/sequence/scalar subset over `Std.Internal.Parsec` inside
+`Readers/Markdown.lean` (indentation-nested mappings, `- item` sequences,
+quoted/unquoted scalars, `true`/`false` — no anchors/tags/flow-collections).
+`blaze-html`/`blaze-markup` substitute onto the existing `Linen.Web.Html` for
+`Writers.Blaze` (the same fixed-tag-set tradeoff `Writers.HTML` itself makes,
+rendering tags as escaped strings directly rather than through `Web.Html`).
+
+Deferred, per the `dependencies.md`'s "Scope note": the long tail of exotic
+format readers/writers, the binary/zip formats (DOCX/ODT/EPUB/Pptx/Xlsx), the
+Lua-scripting/filter system, syntax highlighting (`skylighting`), math
+typesetting (`texmath` — `Writers.Math` keeps only raw/MathML passthrough),
+citations (`citeproc`), templating (`doctemplates` — writers run
+template-free), and the App/CLI/PDF/`IO`-monad outer shell (only the pure
+`PandocPure` instance is in scope, not `PandocIO`). The recursive-descent
+parsers and direct-string renderers in `Readers/HTML`, `Writers/HTML`,
+`Readers/Markdown`, `Writers/Markdown`, and `Writers/Shared.gridTable` use
+`unsafe def` per the `Text.DocLayout.render`/`Generic.topDown` precedent
+(structural over the remaining input, but not a decreasing subterm Lean's
+termination checker can see); everything else is ordinary total recursion.
+
 ## Module Table
 
 | Module | Description |
@@ -2000,6 +2182,25 @@ types.
 | `Linen.Database.DuckDB.Simple.Function` | user-defined scalar SQL function registration via `ScalarFunctions` |
 | `Linen.Database.DuckDB.Simple.Generic` | hand-written `STRUCT`/`UNION` decode combinators standing in for GHC-`Generic`-derived instances |
 | `Linen.Database.DuckDB.Simple` | public facade: `withConnection`, `query`/`query_`/`execute`/`execute_`, `fold`/`fold_`, `withTransaction` |
+| `Linen.Database.Redis.Types` | `hedis`'s `Database.Redis.Types`: the `RedisArg`/`RedisResult` encode/decode classes over `Reply`, with hand-written `readSignedDecimal`/`readSignedExponential` number parsers substituting for `bytestring-lexing` |
+| `Linen.Database.Redis.Protocol` | `hedis`'s `Database.Redis.Protocol`: the RESP2 `Reply` type, `renderRequest`, and incremental `reply` parser over `Std.Internal.Parsec.ByteArray` (substitutes for the `scanner` package) |
+| `Linen.Database.Redis.ProtocolPipelining` | `hedis`'s `Database.Redis.ProtocolPipelining`: a request/response pipeline queue over a `ConnectionContext`, batching writes with strict `IO` (no `unsafeInterleaveIO`) |
+| `Linen.Database.Redis.ConnectionContext` | `hedis`'s `Database.Redis.ConnectionContext`: the raw connection handle (`connect`/`send`/`recv`/`flush`/`enableTLS`) over `Linen.Network.Socket`/`Linen.Network.TLS` |
+| `Linen.Database.Redis.Core.Internal` | `hedis`'s `Database.Redis.Core.Internal`: the `Redis` monad (an `abbrev` for `ReaderT RedisEnv IO`) and its `RedisEnv`/`envLastReply` environment |
+| `Linen.Database.Redis.Core` | `hedis`'s `Database.Redis.Core`: the `RedisCtx`/`MonadRedis` classes, `send`/`recv`/`sendRequest`, and `runRedisInternal`/`runRedisClusteredInternal` |
+| `Linen.Database.Redis.Commands` | `hedis`'s `Database.Redis.Commands`: the uniform "simple" command surface, each command building a RESP request list handed to `sendRequest` |
+| `Linen.Database.Redis.ManualCommands` | `hedis`'s `Database.Redis.ManualCommands`: commands with irregular argument/reply encodings (`SET`/`ZADD`/`SCAN`/`SORT`/Stream/Geo/Cluster families), option records as `structure`s |
+| `Linen.Database.Redis.Connection` | `hedis`'s `Database.Redis.Connection`: `ConnectInfo`/`defaultConnectInfo`, the `connect`/`checkedConnect`/`connectCluster` family, `runRedis`, and an `IO.Ref`-guarded connection pool (substitutes `resource-pool`) |
+| `Linen.Database.Redis.Transactions` | `hedis`'s `Database.Redis.Transactions`: `MULTI`/`EXEC`/`WATCH` transactions, `multiExec`, and the `Queued`/`TxResult`/`RedisTx` (an `abbrev` for `StateT Nat Redis`) types |
+| `Linen.Database.Redis.PubSub.Types` | the pure Pub/Sub value types (`Message`/`PubSub`/`Cmd`) and subscription-change algebra, split into a dependency-free module to break the `Hooks`↔`PubSub` import cycle (the Lean substitute for upstream's `{-# SOURCE #-}` boot file) |
+| `Linen.Database.Redis.Hooks` | `hedis`'s `Database.Redis.Hooks`: before/after-request instrumentation hooks (all five, including the Pub/Sub-typed `sendPubSubHook`/`callbackHook`) |
+| `Linen.Database.Redis.PubSub` | `hedis`'s `Database.Redis.PubSub`: `publish`, the single-threaded `pubSub` interface, the continuous `pubSubForever`/`PubSubController`, and `withPubSub` (re-exporting `PubSub.Types`) |
+| `Linen.Database.Redis.Cluster.HashSlot` | `hedis`'s `Database.Redis.Cluster.HashSlot`: CRC16/XMODEM key→slot hashing (`CRC16(key) mod 16384`, honouring `{…}` hash tags) |
+| `Linen.Database.Redis.Cluster.Command` | `hedis`'s `Database.Redis.Cluster.Command`: `COMMAND`/`CLUSTER COMMAND` reply parsing and key-position extraction, `InfoMap` over `Std.HashMap` (substitutes `unordered-containers`) |
+| `Linen.Database.Redis.Cluster` | `hedis`'s `Database.Redis.Cluster`: cluster topology (node/shard maps), key-hash-slot request routing, and `MOVED`/`ASK` retry-on-redirect handling |
+| `Linen.Database.Redis.URL` | `hedis`'s `Database.Redis.URL`: `parseConnectInfo` for `redis://`/`rediss://`/`redis-socket://` connection-string URLs |
+| `Linen.Database.Redis.Sentinel` | `hedis`'s `Database.Redis.Sentinel`: a `Database.Redis`-like interface that discovers the current master via Redis Sentinel (`SENTINEL get-master-addr-by-name`) and reconnects on failover |
+| `Linen.Database.Redis` | the top-level public facade: an `export`-based re-export assembling the `Redis` monad, connection, command, transaction, and Pub/Sub surface under `Database.Redis.*` |
 | `Linen.Crypto.JOSE.FFI` | `@[extern]` OpenSSL bindings: HMAC, RSA/EC verify, JWK→DER key build, base64url (`ffi/jose.c`) |
 | `Linen.Crypto.JOSE.Types` | JOSE/JWT/JWK types: `JWSAlgorithm`/`ECCurve`/`JWKKeyType`, proof-carrying `JWK`, `ClaimsSet`, `JWSHeader`, `JwtError` + laws |
 | `Linen.Crypto.JOSE.JWK` | JWK helpers: `parseOctKey` (base64url), `toDerPublicKey` (RSA/EC → DER via OpenSSL) |
@@ -2316,3 +2517,77 @@ types.
 | `Linen.Graphics.Image.Processing.Ahe` | adaptive (local-rank) histogram equalization |
 | `Linen.Graphics.Image.Processing.Hough` | the linear Hough transform for line detection (a vote-count heatmap over discretized angle/distance) |
 | `Linen.Graphics.Image.Processing.Noise` | salt-and-pepper (impulse) noise generation, threading Lean core's `StdGen`/`randNat` as a pure, explicit-seed generator |
+| `Linen.Data.Stream.Step` | `streamly-core`'s stream-fusion `Step` state machine: the `Yield`/`Skip`/`Stop` stepper result at the bottom of the layering |
+| `Linen.Data.Stream.SVarType` | the pure stream-scheduling `State` record (the concurrent `SVar` scheduler itself is out of scope) |
+| `Linen.Data.Stream.BaseCompat` | `base`-compatibility helpers for the stream modules |
+| `Linen.Data.Stream.Type` | the fused, direct-style stream `Stream m a` (upstream's `StreamD`): an existential-state stepper `State → s → m (Step s a)` |
+| `Linen.Data.Stream.Generate` | fused-stream generators (`fromList`/`unfoldr`/`replicate`/… building `Stream` values) |
+| `Linen.Data.Stream.Eliminate` | fused-stream consumers (`toList`/`fold`/`drain`/… driving a `Stream` to a result) |
+| `Linen.Data.Stream.Transform` | fused-stream transforms (`map`/`filter`/`scan`/… stepper-to-stepper) |
+| `Linen.Data.Stream.Nesting` | interleave / merge combinators for fused streams |
+| `Linen.Data.Stream.Lift` | transform the inner monad of a fused stream |
+| `Linen.Data.Stream` | the public facade for the fused direct-style stream, re-exporting the operation modules above |
+| `Linen.Data.StreamK.Type` | the `StreamK` stream: streamly's CPS-encoded, non-fused stream, bridged to `Stream` by `fromStreamK`/`toStreamK` |
+| `Linen.Data.StreamK` | the public facade for the CPS-encoded stream `StreamK` |
+| `Linen.Data.Fold.Step` | the fold `Step` state machine (`Partial`/`Done` fold stepper result) |
+| `Linen.Data.Fold.Type` | the `Fold` terminating left fold: a `Step`-driven stepper with initial/step/extract |
+| `Linen.Data.Fold` | the public facade for the terminating left-fold `Fold` |
+| `Linen.Data.Scanl.Type` | the `Scanl` stateful left-scan type |
+| `Linen.Data.Scanl` | the public facade for the stateful left-scan `Scanl` |
+| `Linen.Data.Unfold.Type` | the `Unfold` seed→stream generator (a stepper from a seed) |
+| `Linen.Data.Unfold.Enumeration` | `Enum`-range unfolds |
+| `Linen.Data.Unfold` | the public facade for the seed→stream generator `Unfold` |
+| `Linen.Data.Parser.Type` | the backtracking streaming-parser type (`Parser`) |
+| `Linen.Data.Parser` | streaming-parser combinators |
+| `Linen.Data.Producer.Type` | the `Producer` (an `Unfold` with an extractable seed) |
+| `Linen.Data.Producer` | `Producer` combinators |
+| `Linen.Data.Refold.Type` | the `Refold` seed-parameterized fold |
+| `Linen.Data.MutByteArray.Type` | a mutable byte array over Lean's `ByteArray` |
+| `Linen.Data.MutByteArray` | the public facade for the mutable byte array and its combinators |
+| `Linen.Data.Unbox` | fixed-size (de)serialization to/from a `MutByteArray` (the `Unbox` class) |
+| `Linen.Data.MutArray.Type` | the growable unboxed mutable array (`Unbox`-backed, over `MutByteArray`) |
+| `Linen.Data.MutArray` | mutable-array combinators |
+| `Linen.Data.Array.Unboxed.Type` | the immutable unboxed array |
+| `Linen.Data.Array.Unboxed` | immutable unboxed-array combinators |
+| `Linen.Data.Tuple.Strict` | strict tuple accumulators for folds and scans |
+| `Linen.Data.Maybe.Strict` | a strict `Maybe` accumulator |
+| `Linen.Data.Either.Strict` | a strict `Either` accumulator |
+| `Linen.System.IO` | default array/chunk buffer sizes for streaming I/O |
+| `Linen.Text.DocLayout.ANSIFont` | ANSI/terminal styling types and SGR/OSC-8 escape-code renderers |
+| `Linen.Text.DocLayout.Attributed` | font-attributed string-chunk runs (`Attr`/`Attributed`) |
+| `Linen.Text.DocLayout.HasChars` | the `HasChars` string-abstraction class over `String`/`Attributed` |
+| `Linen.Text.DocLayout` | the `Doc` document-layout algebra and `render`/`renderANSI` engine |
+| `Linen.Text.Pandoc.Definition` | `pandoc-types`'s `Text.Pandoc.Definition`: the universal document AST (`Pandoc`/`Block`/`Inline`/`Meta`/tables) and its hand-written `ToJSON`/`FromJSON` tagged-object bridge |
+| `Linen.Text.Pandoc.Walk` | `pandoc-types`'s `Text.Pandoc.Walk`: the `Walkable` class and generic `walk`/`walkM`/`query` traversal over the AST |
+| `Linen.Text.Pandoc.Generic` | `pandoc-types`'s `Text.Pandoc.Generic`: `bottomUp`/`bottomUpM`/`topDown`/`topDownM` generic rewrites over the AST |
+| `Linen.Text.Pandoc.Builder` | `pandoc-types`'s `Text.Pandoc.Builder`: the `Many`-based smart-constructor combinator API for building `Blocks`/`Inlines` |
+| `Linen.Text.Pandoc.JSON` | `pandoc-types`'s `Text.Pandoc.JSON`: the JSON filter wire-format encode/decode for the AST |
+| `Linen.Text.Pandoc.Extensions` | `pandoc`'s `Text.Pandoc.Extensions`: the `Extensions` bitset, enable/disable/membership, and format-to-default-extension-set presets |
+| `Linen.Text.Pandoc.Options` | `pandoc`'s `Text.Pandoc.Options`: `ReaderOptions`/`WriterOptions` and their sub-option records (wrap mode, HTML math method, table-of-contents, …) |
+| `Linen.Text.Pandoc.Error` | `pandoc`'s `Text.Pandoc.Error`: the `PandocError` sum type and its rendering |
+| `Linen.Text.Pandoc.Logging` | `pandoc`'s `Text.Pandoc.Logging`: the `LogMessage`/`Verbosity` structured-warning types |
+| `Linen.Text.Pandoc.UTF8` | `pandoc`'s `Text.Pandoc.UTF8`: UTF-8 encode/decode helpers over `String`/`ByteArray` |
+| `Linen.Text.Pandoc.MIME` | `pandoc`'s `Text.Pandoc.MIME`: file-extension-to-MIME-type lookup |
+| `Linen.Text.Pandoc.URI` | `pandoc`'s `Text.Pandoc.URI`: URI parsing/escaping and relative-URI resolution |
+| `Linen.Text.Pandoc.Asciify` | `pandoc`'s `Text.Pandoc.Asciify`: Unicode-to-ASCII transliteration for identifier/slug generation |
+| `Linen.Text.Pandoc.Emoji` | `pandoc`'s `Text.Pandoc.Emoji`: the `:emoji_name:` shortcode-to-codepoint lookup table (folds in the `emojis` package's data, the same single-consumer treatment `tagsoup`/YAML get inside their own reader modules) |
+| `Linen.Text.Pandoc.XML` | `pandoc`'s `Text.Pandoc.XML`: XML/entity escaping, numeric/named entity decoding, and attribute allowlists |
+| `Linen.Text.Pandoc.Sources` | `pandoc`'s `Text.Pandoc.Sources`: the `Sources`/`ToSources` abstraction over one or more named input chunks |
+| `Linen.Text.Pandoc.MediaBag` | `pandoc`'s `Text.Pandoc.MediaBag`: an in-memory store of fetched media items (path → bytes/MIME type) |
+| `Linen.Text.Pandoc.Shared` | `pandoc`'s `Text.Pandoc.Shared`: general reader/writer utilities (`stringify`, `romanNumeral` (`romanNat`), text-normalization helpers) shared across formats |
+| `Linen.Text.Pandoc.Translations` | `pandoc`'s `Text.Pandoc.Translations`: the `Term`/`Translations` localization lookup for writer-generated strings (e.g. "Figure") |
+| `Linen.Text.Pandoc.Class.CommonState` | `pandoc`'s `Text.Pandoc.Class.CommonState`: the state record (media bag, log, input/output files, translations, …) threaded through every `PandocMonad` instance |
+| `Linen.Text.Pandoc.Class.PandocMonad` | `pandoc`'s `Text.Pandoc.Class.PandocMonad`: the `PandocMonad` class (logging, media, files, timestamp, translation) every reader/writer is polymorphic over |
+| `Linen.Text.Pandoc.Class.PandocPure` | `pandoc`'s `Text.Pandoc.Class.PandocPure`: the pure `PandocPure`/`runPure` instance of `PandocMonad` (the in-scope substitute for `PandocIO`) |
+| `Linen.Text.Pandoc.Parsing` | `pandoc`'s `Text.Pandoc.Parsing`: shared `Std.Internal.Parsec`-based parsing combinators (position tracking, reference-key/quote-context state, …) used by every reader |
+| `Linen.Text.Pandoc.Templates` | `pandoc`'s `Text.Pandoc.Templates`: template-free `compileTemplate`/`renderTemplate`/`getDefaultTemplate` stand-ins (the full `doctemplates` grammar is out of scope) |
+| `Linen.Text.Pandoc.Writers.Shared` | `pandoc`'s `Text.Pandoc.Writers.Shared`: cross-writer helpers — template-context fields, metadata lookups, HTML attribute/CSS helpers, math/typographic helpers, `toLegacyTable`, and the ASCII `gridTable` layout engine |
+| `Linen.Text.Pandoc.Writers.Math` | `pandoc`'s `Text.Pandoc.Writers.Math`: math-conversion entry points, scoped to raw-TeX/MathML passthrough (`texmath` is out of scope) |
+| `Linen.Text.Pandoc.Writers.Blaze` | `pandoc`'s `Text.Pandoc.Writers.Blaze`: a `blaze-html`/`blaze-markup`-equivalent renderer retargeted onto `Linen.Web.Html`'s typed `Html Category` tree |
+| `Linen.Text.Pandoc.Readers.Native` | `pandoc`'s `Text.Pandoc.Readers.Native`: parses the AST's own `Show`-shaped literal syntax via hand-written recursive descent (Lean has no derived `Read`) |
+| `Linen.Text.Pandoc.Writers.Native` | `pandoc`'s `Text.Pandoc.Writers.Native`: the inverse pretty-printer emitting that same unqualified-constructor value syntax |
+| `Linen.Text.Pandoc.Readers.HTML` | `pandoc`'s `Text.Pandoc.Readers.HTML` (+ tagsoup): HTML→AST, folding in a bounded `Tag`/`tokenize` HTML tokenizer as the `tagsoup` substitute |
+| `Linen.Text.Pandoc.Writers.HTML` | `pandoc`'s `Text.Pandoc.Writers.HTML`: AST→HTML5, the headline output format |
+| `Linen.Text.Pandoc.Readers.Markdown` | `pandoc`'s `Text.Pandoc.Readers.Markdown` (+ `Readers.Metadata`): Markdown→AST, pandoc's flagship reader, folding in a bounded YAML-subset front-matter parser over `Std.Internal.Parsec` |
+| `Linen.Text.Pandoc.Writers.Markdown` | `pandoc`'s `Text.Pandoc.Writers.Markdown`: AST→Markdown, pandoc's flagship writer |
+| `Linen.Text.Pandoc` | the top-level facade: `getReader`/`getWriter` format-name registries and a `convert` helper dispatching over the in-scope Markdown/HTML/Native formats |

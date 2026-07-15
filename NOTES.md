@@ -19,9 +19,10 @@ https://woob.tech/?
 mmap - Memory Mapped File ?
 
 Add:
-- https://hackage.haskell.org/package/pandoc ?
-- https://hackage.haskell.org/package/hedis ?
-- https://hackage.haskell.org/package/streamly
+- https://hackage.haskell.org/package/toml-parser
+- https://hackage.haskell.org/package/yaml
+
+Add config utilities: TOML
 
 Find from: https://hackage.haskell.org/packages
 Or from: https://github.com/krispo/awesome-haskell

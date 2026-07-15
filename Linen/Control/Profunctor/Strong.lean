@@ -33,12 +33,19 @@ namespace Control.Profunctor
     through it. Every `Functor` in Lean is strong with respect to `Prod`, so
     `Strong` generalizes `Star` of a functor.
 
+    Upstream's `MINIMAL first' | second'` mutual default (as with
+    `Profunctor`'s `dimap`/`lmap`/`rmap`, see that module's note) is not
+    something Lean's class elaborator can instantiate a default for; every
+    instance here already supplies both concretely, so `first'` is made the
+    required primitive and `second'` keeps its upstream default, now
+    non-circular.
+
     Laws:
     $$\text{first}' = \text{dimap}\;\text{swap}\;\text{swap} \circ \text{second}'$$
     $$\text{lmap}\;\text{fst} = \text{rmap}\;\text{fst} \circ \text{first}'$$ -/
 class Strong (P : Type u → Type u → Type v) extends Profunctor P where
   /-- Thread an extra component `γ` through on the left: $\text{first}' : P\,a\,b \to P\,(a,γ)\,(b,γ)$. -/
-  first' : P α β → P (α × γ) (β × γ) := fun p => dimap Prod.swap Prod.swap (second' p)
+  first' : P α β → P (α × γ) (β × γ)
   /-- Thread an extra component `γ` through on the right: $\text{second}' : P\,a\,b \to P\,(γ,a)\,(γ,b)$. -/
   second' : P α β → P (γ × α) (γ × β) := fun p => dimap Prod.swap Prod.swap (first' p)
 
@@ -77,11 +84,14 @@ instance : Strong (Forget R) where
 /-- The dual of `Strong`: costrength with respect to `Prod`, analogous to
     `ArrowLoop` (`unfirst` is `loop`).
 
+    Same mutual-default note as `Strong`: `unfirst` is made the required
+    primitive, `unsecond` keeps its upstream default non-circularly.
+
     Laws:
     $$\text{unfirst} = \text{unsecond} \circ \text{dimap}\;\text{swap}\;\text{swap}$$ -/
 class Costrong (P : Type u → Type u → Type v) extends Profunctor P where
   /-- Discharge an extra threaded component `δ` from the left. -/
-  unfirst : P (α × δ) (β × δ) → P α β := fun p => unsecond (dimap Prod.swap Prod.swap p)
+  unfirst : P (α × δ) (β × δ) → P α β
   /-- Discharge an extra threaded component `δ` from the right. -/
   unsecond : P (δ × α) (δ × β) → P α β := fun p => unfirst (dimap Prod.swap Prod.swap p)
 
