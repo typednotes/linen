@@ -154,6 +154,18 @@ opaque setKeepAlive (sock : @& RawSocket) (enable : UInt8) : IO Unit
 @[extern "linen_socket_set_linger"]
 opaque setLinger (sock : @& RawSocket) (enable : UInt8) (seconds : USize) : IO Unit
 
+/-- Set SO_RCVTIMEO: bound how long a blocking receive may wait, in
+    milliseconds. Zero restores the default of waiting indefinitely.
+    $$\text{setRecvTimeout} : \text{Socket} \to \text{USize} \to \text{IO}(\text{Unit})$$ -/
+@[extern "linen_socket_set_recv_timeout"]
+opaque setRecvTimeout (sock : @& RawSocket) (millis : USize) : IO Unit
+
+/-- Set SO_SNDTIMEO: bound how long a blocking send may wait, in milliseconds.
+    Zero restores the default of waiting indefinitely.
+    $$\text{setSendTimeout} : \text{Socket} \to \text{USize} \to \text{IO}(\text{Unit})$$ -/
+@[extern "linen_socket_set_send_timeout"]
+opaque setSendTimeout (sock : @& RawSocket) (millis : USize) : IO Unit
+
 /-- Set SO_RCVBUF size.
     $$\text{setRecvBuf} : \text{Socket} \to \text{USize} \to \text{IO}(\text{Unit})$$ -/
 @[extern "linen_socket_set_recvbuf"]

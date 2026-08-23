@@ -29,6 +29,7 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/select.h>
+#include <sys/time.h>   /* struct timeval, for SO_RCVTIMEO/SO_SNDTIMEO */
 #include <sys/resource.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -740,6 +741,39 @@ LEAN_EXPORT lean_obj_res linen_socket_set_linger(b_lean_obj_arg sock, uint8_t en
     lg.l_onoff = enable ? 1 : 0;
     lg.l_linger = (int)seconds;
     if (setsockopt(fd, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg)) < 0) {
+        return mk_io_errno_error();
+    }
+    return lean_io_result_mk_ok(lean_box(0));
+}
+
+/**
+ * setsockopt SO_RCVTIMEO — bound how long a blocking recv may wait.
+ *
+ * A zero timeout restores the default of blocking indefinitely. Without this,
+ * a peer that accepts a connection and then stalls hangs the caller forever.
+ * SO_RCVTIMEO is POSIX and behaves the same on macOS and Linux; a timed-out
+ * recv fails with EAGAIN/EWOULDBLOCK.
+ */
+LEAN_EXPORT lean_obj_res linen_socket_set_recv_timeout(b_lean_obj_arg sock, size_t millis) {
+    int fd = get_socket_fd(sock);
+    struct timeval tv;
+    tv.tv_sec  = (time_t)(millis / 1000);
+    tv.tv_usec = (suseconds_t)((millis % 1000) * 1000);
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+        return mk_io_errno_error();
+    }
+    return lean_io_result_mk_ok(lean_box(0));
+}
+
+/**
+ * setsockopt SO_SNDTIMEO — bound how long a blocking send may wait.
+ */
+LEAN_EXPORT lean_obj_res linen_socket_set_send_timeout(b_lean_obj_arg sock, size_t millis) {
+    int fd = get_socket_fd(sock);
+    struct timeval tv;
+    tv.tv_sec  = (time_t)(millis / 1000);
+    tv.tv_usec = (suseconds_t)((millis % 1000) * 1000);
+    if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0) {
         return mk_io_errno_error();
     }
     return lean_io_result_mk_ok(lean_box(0));

@@ -78,6 +78,10 @@ structure Request where
   isSecure : Bool := false
   /-- HTTP version to use. -/
   httpVersion : HttpVersion := http11
+  /-- How long a single socket read or write may block, in milliseconds.
+      `0` waits indefinitely. Applied by `Client.connect`; see
+      `Client.defaultTimeoutMillis` for why the default is not `0`. -/
+  timeoutMillis : Nat := 30000
 
 /-- HTTP client response — the parsed representation.
 

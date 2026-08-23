@@ -511,9 +511,15 @@ private def buildQueryString (params : List (String × String)) : String :=
     if v.isEmpty then urlEncodeParam k
     else s!"{urlEncodeParam k}={urlEncodeParam v}")
 
-/-- Build a wire-level `Network.HTTP.Client.Request` from the typed req parameters. -/
+/-- Build a wire-level `Network.HTTP.Client.Request` from the typed req parameters.
+
+    `timeoutMillis` comes from `ReqOption.timeout` when the caller set one and
+    otherwise from `HttpConfig.httpConfigTimeout`, which is what makes both
+    settings actually take effect — before socket timeouts existed, both were
+    declared and neither was ever read. -/
 private def buildClientRequest [inst : HttpMethod methodTy] [HttpBody bodyTy]
     (_m : methodTy) (url : Url scheme) (b : bodyTy) (options : ReqOption scheme)
+    (configTimeout : Nat)
     : IO Network.HTTP.Client.Request := do
   let portVal := options.portOverride.getD url.defaultPort
   -- Get body bytes
@@ -540,6 +546,7 @@ private def buildClientRequest [inst : HttpMethod methodTy] [HttpBody bodyTy]
     headers := hdrs
     body := bodyBytes
     isSecure := url.isSecure
+    timeoutMillis := options.timeout.getD configTimeout
   }
 
 /-- Make a type-safe HTTP request.
@@ -560,7 +567,7 @@ def req [HttpMethod methodTy] [HttpBody bodyTy] [HttpResponse response]
     (_responseHint : response) (options : ReqOption scheme := (EmptyCollection.emptyCollection))
     : Req response :=
   ⟨fun cfg => do
-    let clientReq ← buildClientRequest m url b options
+    let clientReq ← buildClientRequest m url b options cfg.httpConfigTimeout
     -- Execute with redirects
     let clientResp ← Network.HTTP.Client.executeWithRedirects cfg.httpConfigRedirectCount clientReq
     -- Check response status

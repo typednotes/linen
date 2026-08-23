@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>725 modules</strong> · <strong>384 compile-time theorems</strong> · <strong>9765 <code>#guard</code> checks</strong>
+  <strong>726 modules</strong> · <strong>384 compile-time theorems</strong> · <strong>9787 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -165,6 +165,12 @@ for the full per-module feature list and module table.
 - **`Text.XML`** — an XML reader (the counterpart to `Text.Pandoc.XML`'s
   escaping): a character-at-a-time state machine feeding a stack-based tree
   builder, so nesting needs no `partial` and no fuel.
+- **`Network.HTTP.Client.Retry`** — capped exponential backoff with equal
+  jitter over connection errors and 408/429/5xx, honouring `Retry-After`.
+  Alongside it, socket read/write deadlines (`SO_RCVTIMEO`/`SO_SNDTIMEO` plus
+  `poll`-based waiting) now bound every request: the blocking wrappers used to
+  retry `EAGAIN` in a hot loop, so a stalled peer meant an indefinite hang at
+  100% CPU.
 - **`Network.OAuth2`** — a `hoauth2`-style OAuth2 client: authorization-code,
   client-credentials, device-authorization, JWT-bearer, resource-owner-password
   and refresh-token grants; PKCE (`S256`) via two new OpenSSL-backed
@@ -240,7 +246,7 @@ open Data.Functor Control.Monad
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 725 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 726 modules).
 
 ## Build & Test
 

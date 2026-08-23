@@ -77,13 +77,13 @@ def executeWithRedirects (maxRedirects : Nat) (req : Request) : IO Response := d
 where
   go : Nat → Request → IO Response
   | 0, req => do
-    let conn ← connect req.host req.port req.isSecure
+    let conn ← connect req.host req.port req.isSecure req.timeoutMillis
     try
       performRequest conn req
     finally
       conn.connClose
   | n + 1, req => do
-    let conn ← connect req.host req.port req.isSecure
+    let conn ← connect req.host req.port req.isSecure req.timeoutMillis
     let resp ← try
       performRequest conn req
     finally

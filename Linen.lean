@@ -369,6 +369,7 @@ import Linen.Network.HTTP.Client.Request
 import Linen.Network.HTTP.Client.Response
 import Linen.Network.HTTP.Client.Connection
 import Linen.Network.HTTP.Client.Redirect
+import Linen.Network.HTTP.Client.Retry
 import Linen.Network.HTTP.Client.Conduit
 import Linen.Network.HTTP.Simple
 import Linen.Network.HTTP.Req

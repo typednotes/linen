@@ -71,7 +71,7 @@ def parseUrl! (url : String) : IO Request := do
     $$\text{simpleHttp} : \text{String} \to \text{IO ByteArray}$$ -/
 def simpleHttp (url : String) : IO ByteArray := do
   let req ← parseUrl! url
-  let conn ← connect req.host req.port req.isSecure
+  let conn ← connect req.host req.port req.isSecure req.timeoutMillis
   try
     let resp ← performRequest conn req
     return resp.body
@@ -82,7 +82,7 @@ def simpleHttp (url : String) : IO ByteArray := do
     $$\text{httpBS} : \text{Request} \to \text{IO Response}$$ -/
 def httpBS (req : Request) : IO Response := do
   let port := if req.port == 0 then defaultPort req.isSecure else req.port
-  let conn ← connect req.host port req.isSecure
+  let conn ← connect req.host port req.isSecure req.timeoutMillis
   try
     performRequest conn req
   finally

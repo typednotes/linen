@@ -332,6 +332,7 @@ import Tests.Linen.Network.HTTP.Types.StatusTest
 import Tests.Linen.Network.HTTP.Types.URITest
 import Tests.Linen.Network.HTTP.Types.VersionTest
 import Tests.Linen.Network.HTTP.Client.TypesTest
+import Tests.Linen.Network.HTTP.Client.RetryTest
 import Tests.Linen.Network.HTTP.Client.ContribTest
 import Tests.Linen.Network.HTTP.Client.RequestTest
 import Tests.Linen.Network.HTTP.Client.ResponseTest

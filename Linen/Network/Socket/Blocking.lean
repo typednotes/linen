@@ -5,11 +5,20 @@
   and present the old blocking-style signatures. Intended for tests, scripts,
   and code that doesn't need event-loop integration.
 
-  These functions call the underlying non-blocking FFI and simply retry on
-  EAGAIN. They are suitable for sockets that are still in blocking mode
-  (the default after `socket()`), where EAGAIN should never actually occur,
-  but they also work correctly on non-blocking sockets (they'll spin-wait,
-  which is inefficient — use `EventDispatcher` for production non-blocking I/O).
+  These functions call the underlying non-blocking FFI and, on EAGAIN, wait
+  for readiness with `poll` before retrying. They work on sockets in blocking
+  mode (the default after `socket()`) and on non-blocking ones.
+
+  ## Timeouts, and why the retry is a `poll`
+
+  Each retry loop takes a `timeoutMillis` and throws once it elapses, so a
+  peer that connects and then stalls cannot hang the caller forever.
+
+  An earlier version retried EAGAIN immediately, with no wait. That busy-spun
+  at 100% CPU on a non-blocking socket, and — worse — it made socket-level
+  timeouts unusable: `SO_RCVTIMEO` reports expiry *as* EAGAIN, so setting one
+  turned a silent block into a hot loop. Waiting on `poll` fixes both, and
+  matches what `connectFinishLoop` in this module already did.
 
   ## No `partial`
 
@@ -25,13 +34,35 @@ namespace Network.Socket.Blocking
 
 open Network.Socket
 
+/-- How long these wrappers wait for readiness before giving up, in
+    milliseconds. Matches `connectFinishLoop`'s long-standing connect timeout
+    and `Network.HTTP.Client.defaultTimeoutMillis`. -/
+def defaultTimeoutMillis : Nat := 30000
+
+/-- Wait for the socket to become ready, or fail saying which operation gave
+    up and after how long. `0` waits indefinitely, which is the old behaviour
+    and is available for callers that genuinely want it. -/
+private def waitReady (s : Socket state) (mode : PollMode) (timeoutMillis : Nat)
+    (op : String) : IO Unit := do
+  if timeoutMillis == 0 then
+    -- No deadline: still poll rather than spin, just without one.
+    match ← Network.Socket.poll s mode 0 with
+    | .error e => throw e
+    | _        => pure ()
+  else
+    match ← Network.Socket.poll s mode timeoutMillis with
+    | .ready   => pure ()
+    | .timeout => throw (IO.userError s!"{op} timed out after {timeoutMillis}ms")
+    | .error e => throw e
+
 /-- Blocking accept: loops until a connection is accepted or an error occurs.
     $$\text{accept} : \text{Socket}\ \texttt{.listening} \to \text{IO}(\text{Socket}\ \texttt{.connected} \times \text{SockAddr})$$ -/
-def accept (s : Socket .listening) : IO (Socket .connected × SockAddr) := do
+def accept (s : Socket .listening) (timeoutMillis : Nat := defaultTimeoutMillis) :
+    IO (Socket .connected × SockAddr) := do
   while true do
     match ← Network.Socket.accept s with
     | .accepted sock addr => return (sock, addr)
-    | .wouldBlock => pure ()
+    | .wouldBlock => waitReady s .read timeoutMillis "accept"
     | .error e => throw e
   unreachable!
 
@@ -72,31 +103,34 @@ def connect (s : Socket .fresh) (addr : SockAddr) : IO (Socket .connected) := do
 
 /-- Blocking send: returns bytes sent, throws on error.
     $$\text{send} : \text{Socket}\ \texttt{.connected} \to \text{ByteArray} \to \text{IO}\ \mathbb{N}$$ -/
-def send (s : Socket .connected) (data : ByteArray) : IO Nat := do
+def send (s : Socket .connected) (data : ByteArray)
+    (timeoutMillis : Nat := defaultTimeoutMillis) : IO Nat := do
   while true do
     match ← Network.Socket.send s data with
     | .sent n => return n
-    | .wouldBlock => pure ()
+    | .wouldBlock => waitReady s .write timeoutMillis "send"
     | .error e => throw e
   unreachable!
 
 /-- Blocking sendAll: sends all bytes, looping on partial writes and wouldBlock.
     $$\text{sendAll} : \text{Socket}\ \texttt{.connected} \to \text{ByteArray} \to \text{IO}(\text{Unit})$$ -/
-def sendAll (s : Socket .connected) (data : ByteArray) : IO Unit := do
+def sendAll (s : Socket .connected) (data : ByteArray)
+    (timeoutMillis : Nat := defaultTimeoutMillis) : IO Unit := do
   let mut offset := 0
   while offset < data.size do
     match ← Network.Socket.send s (data.extract offset data.size) with
     | .sent n => offset := offset + n
-    | .wouldBlock => pure ()
+    | .wouldBlock => waitReady s .write timeoutMillis "send"
     | .error e => throw e
 
 /-- Blocking recv: returns received bytes, throws on error, returns empty on EOF.
     $$\text{recv} : \text{Socket}\ \texttt{.connected} \to \mathbb{N} \to \text{IO ByteArray}$$ -/
-def recv (s : Socket .connected) (maxlen : Nat := 4096) : IO ByteArray := do
+def recv (s : Socket .connected) (maxlen : Nat := 4096)
+    (timeoutMillis : Nat := defaultTimeoutMillis) : IO ByteArray := do
   while true do
     match ← Network.Socket.recv s maxlen with
     | .data bytes => return bytes
-    | .wouldBlock => pure ()
+    | .wouldBlock => waitReady s .read timeoutMillis "recv"
     | .eof => return ByteArray.empty
     | .error e => throw e
   unreachable!

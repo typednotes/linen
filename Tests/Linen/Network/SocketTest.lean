@@ -150,4 +150,47 @@ example : Socket .connected → IO (Socket .closed)       := (close ·)
   let _ ← close connQ
   let _ ← close p
 
+-- Timeouts: a peer that connects and then says nothing must not hang the
+-- reader, and must not busy-spin either. This is the defect the timeout work
+-- exists to fix, so it is checked behaviourally — the server accepts and
+-- deliberately never sends, and `recv` must give up on its own.
+#eval show IO Unit from do
+  let server ← listenTCP "127.0.0.1" 0
+  let addr ← getSockName server
+  let serverTask ← IO.asTask (prio := .dedicated) (Blocking.accept server)
+  let client ← socket .inet .stream
+  let conn ← Blocking.connect client addr
+  let mut accepted := false
+  for _ in [0:200] do
+    if ← IO.hasFinished serverTask then accepted := true; break
+    IO.sleep 10
+  unless accepted do throw (IO.userError "accept did not complete within ~2s")
+  -- 300 ms is plenty to tell "gave up" from "blocked forever".
+  let start ← IO.monoNanosNow
+  let outcome ← (Blocking.recv conn 16 300).toBaseIO
+  let elapsedMillis := ((← IO.monoNanosNow) - start) / 1000000
+  match outcome with
+  | .ok bytes => throw (IO.userError
+      s!"expected recv to time out on a silent peer, got {bytes.size} bytes")
+  | .error _ => pure ()
+  -- Bounded above: it really did give up. Bounded below: it waited rather
+  -- than failing instantly, so the deadline is doing the work.
+  unless elapsedMillis ≥ 250 && elapsedMillis < 5000 do
+    throw (IO.userError s!"recv returned after {elapsedMillis}ms, expected ~300ms")
+  match serverTask.get with
+  | .error e => throw e
+  | .ok (a, _) => let _ ← close a
+  let _ ← close conn
+  let _ ← close server
+
+-- The socket-level options accept both a real deadline and zero ("no
+-- deadline"), on every platform the FFI builds for.
+#eval show IO Unit from do
+  let s ← socket .inet .stream
+  setRecvTimeout s 1500
+  setSendTimeout s 1500
+  setRecvTimeout s 0
+  setSendTimeout s 0
+  let _ ← close s
+
 end Tests.Network.Socket

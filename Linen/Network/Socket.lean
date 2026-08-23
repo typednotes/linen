@@ -232,6 +232,20 @@ def recvFrom (s : Socket .connected) (maxlen : Nat := 4096) : IO (ByteArray × S
 @[inline] def setLinger (s : Socket state) (enable : Bool) (seconds : Nat := 0) : IO Unit :=
   FFI.setLinger s.raw (if enable then 1 else 0) seconds.toUSize
 
+/-- Bound how long a blocking receive may wait (SO_RCVTIMEO), in milliseconds.
+
+    Zero restores the default of waiting indefinitely. Without a timeout, a peer
+    that accepts a connection and then stalls hangs the caller forever, so any
+    client talking to a network it does not control wants this set. A receive
+    that times out fails with `EAGAIN`. -/
+@[inline] def setRecvTimeout (s : Socket state) (millis : Nat) : IO Unit :=
+  FFI.setRecvTimeout s.raw millis.toUSize
+
+/-- Bound how long a blocking send may wait (SO_SNDTIMEO), in milliseconds.
+    Zero restores the default of waiting indefinitely. -/
+@[inline] def setSendTimeout (s : Socket state) (millis : Nat) : IO Unit :=
+  FFI.setSendTimeout s.raw millis.toUSize
+
 /-- Set the receive buffer size (SO_RCVBUF). -/
 @[inline] def setRecvBufSize (s : Socket state) (size : Nat) : IO Unit :=
   FFI.setRecvBuf s.raw size.toUSize

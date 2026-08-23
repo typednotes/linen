@@ -2084,6 +2084,7 @@ termination checker can see); everything else is ordinary total recursion.
 | `Linen.Network.HTTP.Client.Response` | HTTP/1.1 response parsing (`receiveResponse`/`performRequest`): status/headers + Content-Length/chunked/until-close bodies |
 | `Linen.Network.HTTP.Client.Connection` | HTTP/1.1 client connections: `connect` (TCP/TLS), `defaultPort`, `Connection.connClose` |
 | `Linen.Network.HTTP.Client.Redirect` | HTTP redirect following: `executeWithRedirects` (bounded hop count, relative/absolute `Location` resolution) |
+| `Linen.Network.HTTP.Client.Retry` | retry transient failures (connection errors, 408/429/5xx) with capped exponential backoff, equal jitter, and `Retry-After` support |
 | `Linen.Network.HTTP.Client.Conduit` | conduit bridge for HTTP client bodies: `httpSource`/`httpSink` (streaming, `unsafe` via `ConduitT`), `withResponse` |
 | `Linen.Network.HTTP.Simple` | `http-conduit`-style convenience client: `parseUrl`/`parseUrl!`, `simpleHttp`/`httpBS`/`httpLbs` |
 | `Linen.Network.HTTP.Req` | type-safe `req` client (`req`/library): phantom `Scheme`-indexed `Url`/`ReqOption` (HTTPS-only auth), `HttpMethod`/`HttpBody`/`HttpBodyAllowed` compile-time method-body constraints, `Req` monad, `runReq` |
