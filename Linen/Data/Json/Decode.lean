@@ -19,6 +19,7 @@
   The mutually recursive value/array/object parsers rely on that `<` invariant
   to discharge their `decreasing_by` obligations.
 -/
+import Linen.Data.Float
 import Linen.Data.Json.Types
 
 namespace Data.Json.Decode
@@ -311,13 +312,11 @@ private def parseNumber (inp : List Char) :
         let fracPart := digitsToNat fracDigits
         let mantissa := intPart * (10 ^ fracLen) + fracPart
         let expVal := digitsToNat expDigits
-        let netExpPos := if expNeg then 0 else expVal
-        let netExpNeg := fracLen + (if expNeg then expVal else 0)
-        let fAbs := if netExpNeg > netExpPos then
-          Float.ofScientific mantissa true (netExpNeg - netExpPos)
-        else
-          Float.ofScientific mantissa false (netExpPos - netExpNeg)
-        let f := if neg then -fAbs else fAbs
+        -- Sign, mantissa and net decimal exponent are assembled by the shared
+        -- `Data.Float`; the scanning above stays here because it must return
+        -- the unconsumed input with its termination proof.
+        let f := Data.Float.ofScientificParts neg mantissa
+          ((if expNeg then -(expVal : Int) else (expVal : Int)) - (fracLen : Int))
         .ok (f, ⟨ex.val, by
           have h1 : (spanList isDigit r0).2.length < r0.length :=
             spanList_nonempty_lt isDigit r0 hd

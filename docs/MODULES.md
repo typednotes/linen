@@ -1894,7 +1894,9 @@ termination checker can see); everything else is ordinary total recursion.
 | `Linen.Data.Array.Shaped.Stencil.Dim2` | applies a stencil to a 2D array by folding over its offsets (generalizes upstream's fixed 7×7 GHC-optimiser unrolling) |
 | `Linen.Data.Array.Shaped.Stencil.Partition` | pure 2D geometry for partitioning a region for stencil application |
 | `Linen.Data.Base64` | RFC 4648 `encode`/`decode` over `ByteArray` (structural, no `partial`) |
+| `Linen.Data.Float` | `parseFloat?` and `ofScientificParts`: the shared float-from-text implementation behind `Data.Json.Decode`, `Data.Yaml` and `Database.SQL.Decoders` (Lean core has no `String.toFloat?`) |
 | `Linen.Data.Hex` | RFC 4648 Base16: lowercase/uppercase `encode`, case-insensitive `decode`; zero-padded per byte (unlike `Builder.wordHex`) |
+| `Linen.Data.Ini` | `[section]` / `key = value` config files (`~/.aws/credentials`, `.gitconfig`); first-separator split so values keep `=`/`:`; `parse`/`render` round-trip |
 | `Linen.Data.Bifunctor` | `Bifunctor`/`LawfulBifunctor`, `bimap`, `Prod`/`Sum`/`Except` instances |
 | `Linen.Data.ByteString` | slice over `ByteArray` (O(1) `take`/`drop`/`splitAt`); full `Data.ByteString` API + `BEq`/`Ord`/`Hashable` |
 | `Linen.Data.ByteString.Lens` | `lens`'s `Data.ByteString.Lens`: `Ixed`/`Cons`/`Snoc`/`Wrapped` instances over `Linen.Data.ByteString` (folds in `Data.ByteString.Strict.Lens` and `Control.Lens.Internal.ByteString`) |
@@ -2064,6 +2066,7 @@ termination checker can see); everything else is ordinary total recursion.
 | `Linen.Data.Json.Encode` | `Value → String` rendering (`encode`/`encodePretty`) |
 | `Linen.Data.Json.Decode` | a `String → Except String Value` parser (`decode`), plus `decodeAs` via `FromJSON` |
 | `Linen.Data.Json` | JSON AST, `ToJSON`/`FromJSON`, encode/decode + roundtrip proofs |
+| `Linen.Data.Yaml` | YAML 1.2 core schema: block/flow collections, quoted and block scalars, multi-document; anchors, aliases, merge keys and tags rejected rather than mis-parsed; no `partial` |
 | `Linen.System.Console.Ansi` | ANSI terminal colors and styles |
 | `Linen.System.Exit` | `ExitCode` (success/failure) + `exitWith`/`exitSuccess`/`exitFailure` over `IO.Process.exit` |
 | `Linen.System.Exit.Lens` | `lens`'s `System.Exit.Lens`: `_ExitSuccess`/`_ExitFailure` prisms over `Linen.System.Exit` |

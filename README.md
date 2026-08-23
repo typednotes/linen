@@ -19,7 +19,11 @@
 </p>
 
 <p align="center">
-  <strong>726 modules</strong> · <strong>384 compile-time theorems</strong> · <strong>9787 <code>#guard</code> checks</strong>
+  <!-- Counts are produced by, and should be refreshed with:
+         modules:  find Linen -name '*.lean' | wc -l
+         theorems: grep -rhE '^theorem ' Linen Tests --include='*.lean' | wc -l
+         guards:   grep -rhE '^#guard'    Linen Tests --include='*.lean' | wc -l -->
+  <strong>729 modules</strong> · <strong>384 compile-time theorems</strong> · <strong>9918 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -62,6 +66,12 @@ for the full per-module feature list and module table.
   and ASCII byte classification.
 - **`Data.Json`** — a tiny JSON library with `ToJSON`/`FromJSON` and proven
   encode→decode round trips.
+- **`Data.Float`** — `parseFloat?` from text, shared by the JSON decoder, the
+  YAML reader and the SQL decoders; Lean core has no `String.toFloat?`.
+- **`Data.Ini` / `Data.Yaml`** — configuration formats: INI sections and pairs,
+  and YAML 1.2's core schema (block and flow collections, block scalars,
+  multi-document streams). Anchors, aliases, merge keys and custom tags are
+  rejected outright rather than silently mis-parsed.
 - **`Data.Map` / `Data.Set` / `Data.IntMap` / `Data.List'` / `Data.List.NonEmpty`
   / …** — Haskell-style container and list APIs over core `Std`/`List` types.
 - **`Time`** — a `time`-style calendar/clock layer over Lean's own `Std.Time`:
@@ -246,7 +256,7 @@ open Data.Functor Control.Monad
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 726 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 729 modules).
 
 ## Build & Test
 

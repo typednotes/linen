@@ -107,7 +107,10 @@ import Linen.Data.Array.Shaped.Stencil.Base
 import Linen.Data.Array.Shaped.Stencil.Dim2
 import Linen.Data.Array.Shaped.Stencil.Partition
 import Linen.Data.Base64
+import Linen.Data.Float
 import Linen.Data.Hex
+import Linen.Data.Ini
+import Linen.Data.Yaml
 import Linen.Data.Bifunctor
 import Linen.Data.ByteString
 import Linen.Data.ByteString.Char8

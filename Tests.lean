@@ -112,7 +112,10 @@ import Tests.Linen.Data.Array.Shaped.Stencil.Dim2Test
 import Tests.Linen.Data.Array.Shaped.Stencil.PartitionTest
 import Tests.Linen.Data.Array.LensTest
 import Tests.Linen.Data.Base64Test
+import Tests.Linen.Data.FloatTest
 import Tests.Linen.Data.HexTest
+import Tests.Linen.Data.IniTest
+import Tests.Linen.Data.YamlTest
 import Tests.Linen.Data.BifunctorTest
 import Tests.Linen.Data.ByteStringTest
 import Tests.Linen.Data.ByteString.Char8Test

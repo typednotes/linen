@@ -12,6 +12,7 @@
   - `Hasql.Decoders` (hasql package)
 -/
 
+import Linen.Data.Float
 import Linen.Database.SQL.Session
 import Linen.Database.PostgreSQL.LibPQ
 
@@ -27,47 +28,9 @@ open Database.SQL.Session
 private def charToDigit (c : Char) : Nat :=
   c.toNat - '0'.toNat
 
-/-- Parse a string as a `Float`. Handles optional sign, integer part,
-    optional decimal part, and optional exponent (`e`/`E`).
-    Returns `none` if the string is not a valid float literal. -/
-private def parseFloat? (s : String) : Option Float :=
-  let chars := s.trimAscii.toString.toList
-  if chars.isEmpty then none
-  else
-    let (negative, rest) := match chars with
-      | '-' :: cs => (true, cs)
-      | '+' :: cs => (false, cs)
-      | cs => (false, cs)
-    if rest.isEmpty then none
-    else
-      let (intDigits, afterInt) := rest.span Char.isDigit
-      let (fracDigits, afterFrac) := match afterInt with
-        | '.' :: cs => let (fd, r) := cs.span Char.isDigit; (fd, r)
-        | cs => ([], cs)
-      if intDigits.isEmpty && fracDigits.isEmpty then none
-      else
-        let parseExp := match afterFrac with
-          | 'e' :: rest' | 'E' :: rest' =>
-            let (en, ed) := match rest' with
-              | '-' :: ds => (true, ds)
-              | '+' :: ds => (false, ds)
-              | ds => (false, ds)
-            let (expDigits, trailing) := ed.span Char.isDigit
-            if !trailing.isEmpty || expDigits.isEmpty then none
-            else some (en, expDigits.foldl (fun acc c => acc * 10 + charToDigit c) 0)
-          | [] => some (false, 0)
-          | _ => none
-        match parseExp with
-        | none => none
-        | some (expNeg, ev) =>
-          let mantissa := (intDigits ++ fracDigits).foldl (fun acc c => acc * 10 + charToDigit c) 0
-          let fracLen := fracDigits.length
-          let netExp : Int := (if expNeg then -(ev : Int) else (ev : Int)) - (fracLen : Int)
-          let f := if netExp >= 0 then
-            Float.ofScientific mantissa false netExp.toNat
-          else
-            Float.ofScientific mantissa true (-netExp).toNat
-          some (if negative then -f else f)
+/-- Parse a string as a `Float`. Delegates to `Linen.Data.Float`, which is the
+    shared implementation; this used to be a private copy of it. -/
+private def parseFloat? (s : String) : Option Float := Data.Float.parseFloat? s
 
 -- ════════════════════════════════════════════════════════════════════
 -- Value decoders
