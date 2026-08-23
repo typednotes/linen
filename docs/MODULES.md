@@ -1894,6 +1894,7 @@ termination checker can see); everything else is ordinary total recursion.
 | `Linen.Data.Array.Shaped.Stencil.Dim2` | applies a stencil to a 2D array by folding over its offsets (generalizes upstream's fixed 7×7 GHC-optimiser unrolling) |
 | `Linen.Data.Array.Shaped.Stencil.Partition` | pure 2D geometry for partitioning a region for stencil application |
 | `Linen.Data.Base64` | RFC 4648 `encode`/`decode` over `ByteArray` (structural, no `partial`) |
+| `Linen.Data.Hex` | RFC 4648 Base16: lowercase/uppercase `encode`, case-insensitive `decode`; zero-padded per byte (unlike `Builder.wordHex`) |
 | `Linen.Data.Bifunctor` | `Bifunctor`/`LawfulBifunctor`, `bimap`, `Prod`/`Sum`/`Except` instances |
 | `Linen.Data.ByteString` | slice over `ByteArray` (O(1) `take`/`drop`/`splitAt`); full `Data.ByteString` API + `BEq`/`Ord`/`Hashable` |
 | `Linen.Data.ByteString.Lens` | `lens`'s `Data.ByteString.Lens`: `Ixed`/`Cons`/`Snoc`/`Wrapped` instances over `Linen.Data.ByteString` (folds in `Data.ByteString.Strict.Lens` and `Control.Lens.Internal.ByteString`) |
@@ -1955,6 +1956,7 @@ termination checker can see); everything else is ordinary total recursion.
 | `Linen.Data.Text.Encoding` | `Text`↔`ByteString` UTF-8 codec: `encodeUtf8`/`decodeUtf8'` (via `String.fromUTF8?`), `decodeUtf8With` (well-founded byte scanner, ≥1 byte consumed per step) |
 | `Linen.Data.Time.Calendar` | proleptic Gregorian calendar `Day` (Modified-Julian-Day count), `fromGregorian`/`toGregorian`/`fromGregorianValid`, built on `Std.Time.Date.PlainDate` |
 | `Linen.Data.Time.Clock` | UTC time/durations: `NominalDiffTime` (`Std.Time.Duration`), `UTCTime` (`Std.Time.DateTime.Timestamp`; `getCurrentTime` is genuine wall-clock time via `Timestamp.now`, `diffUTCTime`/`addUTCTime`) |
+| `Linen.Data.Time.ISO8601` | ISO 8601 *basic* format (`YYYYMMDDTHHMMSSZ`, `YYYYMMDD`) plus extended, over `Std.Time`; what wire protocols and request signing need |
 | `Linen.Data.Time.LocalTime` | `TimeOfDay` (`Std.Time.Time.PlainTime`) and `TimeZone` (signed-offset minutes, `Std.Time.Zoned.TimeZone.Offset`) |
 | `Linen.Time.Calendar.CalendarDiffDays` | a `(months, days)` calendrical period, `Semigroup`/`Monoid` under addition, `calendarDay`/`calendarWeek`/`calendarMonth`/`calendarYear` constants, scale-by-integer |
 | `Linen.Time.Calendar.Month` | an absolute month counter since a fixed origin, `addMonths`/`diffMonths`, `periodFirstDay`/`periodLastDay`/`dayPeriod` relating it to `Std.Time.Date.PlainDate` |
@@ -2207,6 +2209,7 @@ termination checker can see); everything else is ordinary total recursion.
 | `Linen.Crypto.JOSE.JWS` | JWS compact verification (RFC 7515): `splitCompact`, `verifySignature` (HMAC/RSA/EC via OpenSSL) |
 | `Linen.Crypto.JOSE.JWT` | JWT verification (RFC 7519): `validateClaims` (exp/nbf/aud/iss, bounded skew), `verifyJWT` (signature + claims) |
 | `Linen.Crypto.SHA256` | `@[extern]` OpenSSL SHA-256 digest (`ffi/jose.c`, reusing `Crypto.JOSE.FFI`'s OpenSSL link) |
+| `Linen.Crypto.SigV4` | AWS Signature Version 4 request signing (canonical request, string-to-sign, derived key, `Authorization`); verified against AWS's published vectors |
 | `Linen.Crypto.SecureRandom` | `@[extern]` OpenSSL `RAND_bytes` CSPRNG (`ffi/jose.c`, reusing `Crypto.JOSE.FFI`'s OpenSSL link) |
 | `Linen.Network.HTTP.Client.Contrib` | `handleResponse`/`handleResponseJSON` response-handling helpers shared by the OAuth2 HTTP flows |
 | `Linen.Network.OAuth2.Internal` | `OAuth2` client config, `AccessToken`/`RefreshToken`/`IdToken`/`ExchangeToken` newtypes, `ClientAuthenticationMethod`, URI/request helpers |
@@ -2572,6 +2575,7 @@ termination checker can see); everything else is ordinary total recursion.
 | `Linen.Text.Pandoc.Asciify` | `pandoc`'s `Text.Pandoc.Asciify`: Unicode-to-ASCII transliteration for identifier/slug generation |
 | `Linen.Text.Pandoc.Emoji` | `pandoc`'s `Text.Pandoc.Emoji`: the `:emoji_name:` shortcode-to-codepoint lookup table (folds in the `emojis` package's data, the same single-consumer treatment `tagsoup`/YAML get inside their own reader modules) |
 | `Linen.Text.Pandoc.XML` | `pandoc`'s `Text.Pandoc.XML`: XML/entity escaping, numeric/named entity decoding, and attribute allowlists |
+| `Linen.Text.XML` | XML *parsing*: elements, attributes, text, comments, CDATA, entities, namespace-prefixed names; a character-at-a-time state machine plus a stack-based tree builder, so no `partial` and no fuel |
 | `Linen.Text.Pandoc.Sources` | `pandoc`'s `Text.Pandoc.Sources`: the `Sources`/`ToSources` abstraction over one or more named input chunks |
 | `Linen.Text.Pandoc.MediaBag` | `pandoc`'s `Text.Pandoc.MediaBag`: an in-memory store of fetched media items (path → bytes/MIME type) |
 | `Linen.Text.Pandoc.Shared` | `pandoc`'s `Text.Pandoc.Shared`: general reader/writer utilities (`stringify`, `romanNumeral` (`romanNat`), text-normalization helpers) shared across formats |

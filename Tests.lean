@@ -112,6 +112,7 @@ import Tests.Linen.Data.Array.Shaped.Stencil.Dim2Test
 import Tests.Linen.Data.Array.Shaped.Stencil.PartitionTest
 import Tests.Linen.Data.Array.LensTest
 import Tests.Linen.Data.Base64Test
+import Tests.Linen.Data.HexTest
 import Tests.Linen.Data.BifunctorTest
 import Tests.Linen.Data.ByteStringTest
 import Tests.Linen.Data.ByteString.Char8Test
@@ -189,6 +190,7 @@ import Tests.Linen.Data.TextTest
 import Tests.Linen.Data.Text.EncodingTest
 import Tests.Linen.Data.Text.LensTest
 import Tests.Linen.Text.DocLayout.ANSIFontTest
+import Tests.Linen.Text.XMLTest
 import Tests.Linen.Text.DocLayout.AttributedTest
 import Tests.Linen.Text.DocLayout.HasCharsTest
 import Tests.Linen.Text.DocLayoutTest
@@ -260,6 +262,7 @@ import Tests.Linen.Crypto.MD5Test
 import Tests.Linen.Crypto.RC4Test
 import Tests.Linen.Crypto.SecureRandomTest
 import Tests.Linen.Crypto.SHA256Test
+import Tests.Linen.Crypto.SigV4Test
 import Tests.Linen.Crypto.AESTest
 import Tests.Linen.Data.PDF.StreamTest
 import Tests.Linen.Data.PDF.Core.NameTest
@@ -338,6 +341,7 @@ import Tests.Linen.Network.HTTP.Client.ConduitTest
 import Tests.Linen.Network.HTTP.SimpleTest
 import Tests.Linen.Network.HTTP.ReqTest
 import Tests.Linen.Data.Time.ClockTest
+import Tests.Linen.Data.Time.ISO8601Test
 import Tests.Linen.Data.Time.CalendarTest
 import Tests.Linen.Data.Time.LocalTimeTest
 import Tests.Linen.Time.Calendar.CalendarDiffDaysTest

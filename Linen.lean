@@ -107,6 +107,7 @@ import Linen.Data.Array.Shaped.Stencil.Base
 import Linen.Data.Array.Shaped.Stencil.Dim2
 import Linen.Data.Array.Shaped.Stencil.Partition
 import Linen.Data.Base64
+import Linen.Data.Hex
 import Linen.Data.Bifunctor
 import Linen.Data.ByteString
 import Linen.Data.ByteString.Char8
@@ -200,6 +201,7 @@ import Linen.Text.Pandoc.URI
 import Linen.Text.Pandoc.Asciify
 import Linen.Text.Pandoc.Emoji
 import Linen.Text.Pandoc.XML
+import Linen.Text.XML
 import Linen.Text.Pandoc.Sources
 import Linen.Text.Pandoc.MediaBag
 import Linen.Text.Pandoc.Shared
@@ -292,6 +294,7 @@ import Linen.Crypto.MD5
 import Linen.Crypto.RC4
 import Linen.Crypto.SecureRandom
 import Linen.Crypto.SHA256
+import Linen.Crypto.SigV4
 import Linen.Crypto.AES
 import Linen.Data.PDF.Stream
 import Linen.Data.PDF.Core.Name
@@ -372,6 +375,7 @@ import Linen.Network.HTTP.Req
 import Linen.Data.Time.Calendar
 import Linen.Data.Time.LocalTime
 import Linen.Data.Time.Clock
+import Linen.Data.Time.ISO8601
 import Linen.Time.Calendar.CalendarDiffDays
 import Linen.Time.Calendar.Month
 import Linen.Time.Calendar.Quarter

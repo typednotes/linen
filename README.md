@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>721 modules</strong> · <strong>379 compile-time theorems</strong> · <strong>9616 <code>#guard</code> checks</strong>
+  <strong>725 modules</strong> · <strong>384 compile-time theorems</strong> · <strong>9765 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -58,8 +58,8 @@ for the full per-module feature list and module table.
   containers; `makeLenses`-generated accessors are hand-written per field
   instead, since Lean has no Template Haskell.
 - **`Data.ByteString*` / `Data.String` / `Data.Word8`** — byte strings (strict,
-  lazy, short, builder), Base64, case-insensitive text, and ASCII byte
-  classification.
+  lazy, short, builder), Base64, Base16 (`Data.Hex`), case-insensitive text,
+  and ASCII byte classification.
 - **`Data.Json`** — a tiny JSON library with `ToJSON`/`FromJSON` and proven
   encode→decode round trips.
 - **`Data.Map` / `Data.Set` / `Data.IntMap` / `Data.List'` / `Data.List.NonEmpty`
@@ -159,6 +159,12 @@ for the full per-module feature list and module table.
   formats, the Lua-filter system, syntax highlighting, math typesetting,
   citations, and templating are all deferred.
 - **`Crypto.JOSE`** — JOSE/JWT verification (HMAC/RSA/EC) over OpenSSL.
+- **`Crypto.SigV4`** — AWS Signature Version 4 request signing, over the
+  existing SHA-256/HMAC FFI and RFC 3986 escaping; checked against AWS's
+  published test vectors, so it also serves S3-compatible clouds.
+- **`Text.XML`** — an XML reader (the counterpart to `Text.Pandoc.XML`'s
+  escaping): a character-at-a-time state machine feeding a stack-based tree
+  builder, so nesting needs no `partial` and no fuel.
 - **`Network.OAuth2`** — a `hoauth2`-style OAuth2 client: authorization-code,
   client-credentials, device-authorization, JWT-bearer, resource-owner-password
   and refresh-token grants; PKCE (`S256`) via two new OpenSSL-backed
@@ -234,7 +240,7 @@ open Data.Functor Control.Monad
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 721 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 725 modules).
 
 ## Build & Test
 

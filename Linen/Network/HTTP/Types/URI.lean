@@ -1,6 +1,7 @@
 /-
   Linen.Network.HTTP.Types.URI — Query string parsing and URL encoding
 -/
+import Linen.Network.URI
 
 namespace Network.HTTP.Types
 
@@ -46,6 +47,39 @@ def urlEncode (s : String) : String :=
       let hexChar (x : Nat) : Char :=
         if x < 10 then Char.ofNat (48 + x) else Char.ofNat (55 + x)
       s!"%{hexChar hi}{hexChar lo}")
+
+-- ── Canonical form ──
+
+/-- Percent-encode one query component strictly, escaping everything outside
+    RFC 3986 §2.3's unreserved set `A-Za-z0-9-_.~` with uppercase hex.
+
+    Stricter than `urlEncode`, which leaves `+` and other characters alone and
+    mishandles non-ASCII by encoding code points rather than UTF-8 bytes.
+    Delegates to `Network.URI.escapeURIString`, which is UTF-8 correct. -/
+def encodeQueryComponent (s : String) : String :=
+  Network.URI.escapeURIString Network.URI.isUnreserved s
+
+/-- Render a query in *canonical* form: every name and value strictly
+    percent-encoded, entries sorted by encoded name and then by encoded value,
+    joined with `&`, and no leading `?`. A valueless parameter renders as
+    `name=`.
+
+    Unlike `renderQuery`, this is deterministic — two queries differing only in
+    parameter order produce the same string. Signing schemes require exactly
+    that, AWS Signature Version 4 among them; `renderQuery` preserves the
+    caller's order and so cannot be used to sign.
+
+    $$\text{canonicalQuery}(q) =
+      \text{join}(\texttt{\&}, \text{sort}\ [\,e(k_i)\texttt{=}e(v_i)\,])$$ -/
+def canonicalQuery (q : Query) : String :=
+  let encoded := q.map fun (k, v) =>
+    (encodeQueryComponent k, encodeQueryComponent (v.getD ""))
+  let sorted := encoded.mergeSort fun a b =>
+    match compare a.1 b.1 with
+    | .lt => true
+    | .gt => false
+    | .eq => compare a.2 b.2 != .gt
+  "&".intercalate (sorted.map fun (k, v) => k ++ "=" ++ v)
 
 /-- Simple percent-decoding for URLs. -/
 def urlDecode (s : String) : String :=

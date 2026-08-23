@@ -50,4 +50,51 @@ namespace Tests.Network.HTTP.Types.URI
 #guard urlDecode (urlEncode "path/to/file?x=1") == "path/to/file?x=1"
 #guard urlDecode (urlEncode "a b+c") == "a b+c"    -- '+' survives (encoded as %2B)
 
+/-! ### encodeQueryComponent
+
+  Stricter than `urlEncode`, and UTF-8 correct where `urlEncode` is not. -/
+
+#guard encodeQueryComponent "a-b_c.d~e" == "a-b_c.d~e"   -- the unreserved set, untouched
+#guard encodeQueryComponent "a b" == "a%20b"             -- space is %20, never '+'
+#guard encodeQueryComponent "a/b" == "a%2Fb"             -- '/' is reserved, so escaped
+#guard encodeQueryComponent "a=b&c" == "a%3Db%26c"
+#guard encodeQueryComponent "" == ""
+-- Encoded from UTF-8 bytes, unlike `urlEncode`, which encodes the code point.
+#guard encodeQueryComponent "café" == "caf%C3%A9"
+#guard urlEncode "café" == "caf%E9"                      -- the difference, side by side
+-- Hex digits are uppercase, as RFC 3986 §2.1 prefers and signing schemes require.
+#guard encodeQueryComponent "\t" == "%09"
+
+/-! ### canonicalQuery
+
+  Deterministic: sorted, strictly encoded, no leading `?`. This is what makes a
+  query signable, and what `renderQuery` deliberately is not. -/
+
+#guard canonicalQuery [] == ""
+#guard canonicalQuery [("a", some "1")] == "a=1"
+#guard canonicalQuery [("b", some "2"), ("a", some "1")] == "a=1&b=2"   -- sorted by name
+#guard canonicalQuery [("x", none)] == "x="                             -- valueless
+#guard canonicalQuery [("a", some "z"), ("a", some "b")] == "a=b&a=z"   -- ties break on value
+
+-- Order-independence is the whole point: any permutation gives one string.
+#guard canonicalQuery [("a", some "1"), ("b", some "2")]
+     == canonicalQuery [("b", some "2"), ("a", some "1")]
+
+-- No leading '?', unlike `renderQuery`.
+#guard renderQuery [("a", some "1")] == "?a=1"
+#guard canonicalQuery [("a", some "1")] == "a=1"
+
+-- The AWS Query-protocol example: already sorted, and left alone.
+#guard canonicalQuery [("Action", some "ListUsers"), ("Version", some "2010-05-08")]
+     == "Action=ListUsers&Version=2010-05-08"
+
+-- Names and values are both encoded, so a literal '=' or '&' inside a component
+-- cannot be confused with the separators.
+#guard canonicalQuery [("a b", some "c&d")] == "a%20b=c%26d"
+
+/-! ### Signatures -/
+
+example : String → String := encodeQueryComponent
+example : Query → String := canonicalQuery
+
 end Tests.Network.HTTP.Types.URI
