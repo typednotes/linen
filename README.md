@@ -254,6 +254,75 @@ open Data.Functor Control.Monad
 #eval replicateM 3 (some 7)           -- some [7, 7, 7]
 ```
 
+### Using the FFI-backed modules
+
+Pure modules need nothing beyond the `require` above. The modules backed by
+native code — `System.Keychain`, `Crypto.*`, `Network.TLS`, `Network.HTTP`
+(over HTTPS), `Database.*` — need link flags in **your** lakefile.
+
+Lake does not propagate a dependency's `moreLinkArgs` to a dependent's
+executable: `liblinenffi.a` lands on your link line, but the flags its members
+need do not, so you get `undefined symbol: SecItemCopyMatching` or similar.
+Because the flags are platform-conditional, this needs `lakefile.lean` rather
+than `lakefile.toml`. Take only the lines for the features you use:
+
+```lean
+import Lake
+open System Lake DSL
+
+def pkgConfigFlags (args : Array String) : IO (Array String) := do
+  try
+    let out ← IO.Process.output { cmd := "pkg-config", args }
+    if out.exitCode != 0 then return #[]
+    return (out.stdout.trimAscii.copy.splitOn " ").toArray.map (·.trimAscii.copy)
+      |>.filter (· != "")
+  catch _ => return #[]
+
+def pkgLinkFlags (pkg : String) : IO (Array String) := do
+  let libs ← pkgConfigFlags #["--libs", pkg]
+  let libdir ← pkgConfigFlags #["--variable=libdir", pkg]
+  return (libdir.filter (· != "")).map ("-L" ++ ·) ++ libs
+
+/-- Lean ships its own `lld`, which has no default framework search path. -/
+def macSdkArgs : IO (Array String) := do
+  try
+    let out ← IO.Process.output { cmd := "xcrun", args := #["--show-sdk-path"] }
+    if out.exitCode != 0 then return #[]
+    let sdk := out.stdout.trimAscii.copy
+    if sdk.isEmpty then return #[]
+    return #["-F", sdk ++ "/System/Library/Frameworks", "-L", sdk ++ "/usr/lib"]
+  catch _ => return #[]
+
+open Lean Elab Command in
+run_cmd do
+  let mkDef (n : Name) (flags : Array String) : CommandElabM Unit := do
+    let lits : Array (TSyntax `term) := flags.map (fun s => quote s)
+    elabCommand (← `(def $(mkIdent n) : Array String := #[$lits,*]))
+  -- `System.Keychain`
+  let keychain : Array String ←
+    if System.Platform.isOSX then
+      (macSdkArgs).map (· ++ #["-framework", "Security", "-framework", "CoreFoundation"])
+    else if System.Platform.isWindows then pure #["-ladvapi32", "-lcredui"]
+    else pkgLinkFlags "libsecret-1"
+  -- `Crypto.*` and `Network.TLS`. The explicit `-L` matters on macOS: without
+  -- it these can bind to the system's incompatible `libboringssl`, which links
+  -- cleanly and then crashes on the first TLS call.
+  let ssl ← pkgLinkFlags "openssl"
+  mkDef `nativeLinkArgs (keychain ++ ssl)
+
+package myapp where
+  moreLinkArgs := nativeLinkArgs
+```
+
+Add `pkgLinkFlags "libpq"` for `Database.PostgreSQL`, `pkgLinkFlags "zlib"` for
+`Crypto.Zlib`, and DuckDB's `lib` directory for `Database.DuckDB`.
+
+Setting `precompileModules := true` on this package *would* make all of the
+above automatic, since Lake then links the extern library's shared form, which
+carries these flags. It is deliberately not the default: the shared form links
+the whole archive, so every dependent would need libpq, SQLite and DuckDB
+installed even to use, say, `Crypto.SigV4`.
+
 ## Modules
 
 See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 729 modules).
