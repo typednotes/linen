@@ -30,6 +30,7 @@
 #include <lean/lean.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #ifdef __APPLE__
 #include <Security/Security.h>

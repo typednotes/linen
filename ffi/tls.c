@@ -20,6 +20,7 @@
 #include <openssl/x509.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 /* ────────────────────────────────────────────────────────────
  * External classes for SSL_CTX and SSL
