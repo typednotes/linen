@@ -496,6 +496,7 @@ If nothing is listening, the example prints a short "could not connect" hint
 - [docs/MODULES.md](docs/MODULES.md) — the full module feature list and module table.
 - [docs/imports/index.md](docs/imports/index.md) — Hackage-package import order, with a
   per-package module dependency list under `docs/imports/<Package>/dependencies.md`.
+- [CHANGELOG.md](CHANGELOG.md) — notable changes per released version.
 - [AGENTS.md](AGENTS.md) — conventions for contributing to the library.
 
 ## License
