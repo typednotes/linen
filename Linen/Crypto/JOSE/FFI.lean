@@ -22,6 +22,25 @@ namespace Crypto.JOSE.FFI
 opaque hmac (key : @& ByteArray) (data : @& ByteArray)
     (algorithm : UInt8) : IO ByteArray
 
+/-- Create an RSA signature over `data` with a DER-encoded PKCS#8 private key.
+
+    The mirror of `rsaVerify`: same DER-in convention, same algorithm codes
+    (`0=SHA256, 1=SHA384, 2=SHA512`) and the same `pss` flag
+    (`0=PKCS1v15` for `RS*`, `1=PSS` for `PS*`). Returns the raw signature
+    bytes, which is what JWS base64url-encodes as its third segment. -/
+@[extern "linen_jose_rsa_sign"]
+opaque rsaSign (privkeyDer : @& ByteArray) (data : @& ByteArray)
+    (algorithm : UInt8) (pss : UInt8) : IO ByteArray
+
+/-- Convert a PEM-encoded private key to DER.
+
+    Private keys are distributed as PEM far more often than as DER, while
+    `rsaSign` takes DER to stay symmetric with `rsaVerify`. This is the
+    bridge, kept separate so neither function has to guess its input's
+    encoding. -/
+@[extern "linen_jose_privkey_pem_to_der"]
+opaque privkeyPemToDer (pem : @& String) : IO ByteArray
+
 /-- Verify an RSA signature.  Returns 1 if valid, 0 if invalid.
     `algorithm`: 0=SHA256, 1=SHA384, 2=SHA512.
     `usePss`: 1 for PSS padding, 0 for PKCS#1 v1.5. -/

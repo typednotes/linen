@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen Tests --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen Tests --include='*.lean' | wc -l -->
-  <strong>729 modules</strong> · <strong>384 compile-time theorems</strong> · <strong>9918 <code>#guard</code> checks</strong>
+  <strong>729 modules</strong> · <strong>384 compile-time theorems</strong> · <strong>9924 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -168,7 +168,7 @@ for the full per-module feature list and module table.
   and HTML (both directions) — the long tail of exotic formats, binary/zip
   formats, the Lua-filter system, syntax highlighting, math typesetting,
   citations, and templating are all deferred.
-- **`Crypto.JOSE`** — JOSE/JWT verification (HMAC/RSA/EC) over OpenSSL.
+- **`Crypto.JOSE`** — JOSE/JWT signing and verification (HMAC/RSA/EC) over OpenSSL.
 - **`Crypto.SigV4`** — AWS Signature Version 4 request signing, over the
   existing SHA-256/HMAC FFI and RFC 3986 escaping; checked against AWS's
   published test vectors, so it also serves S3-compatible clouds.

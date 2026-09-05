@@ -7,6 +7,8 @@
  * Features:
  * - HMAC computation (HS256/HS384/HS512)
  * - RSA signature verification (RS256/RS384/RS512, PS256/PS384/PS512)
+ * - RSA signature creation (same algorithms), from a PKCS#8 private key
+ * - PEM-to-DER private key conversion
  * - EC signature verification (ES256/ES384/ES512)
  * - JWK-to-DER public key construction (RSA and EC)
  * - Base64url encode/decode
@@ -28,6 +30,8 @@
 #include <openssl/param_build.h>
 #include <openssl/core_names.h>
 #include <openssl/rand.h>
+#include <openssl/pem.h>
+#include <openssl/bio.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -177,6 +181,149 @@ LEAN_EXPORT lean_obj_res linen_jose_rsa_verify(
 
     /* rc == 1 means valid, anything else means invalid (not necessarily error) */
     return lean_io_result_mk_ok(lean_box((unsigned)(rc == 1)));
+}
+
+/* ────────────────────────────────────────────────────────────
+ * RSA signature creation (RS256 / RS384 / RS512, PS256 / PS384 / PS512)
+ *
+ * @[extern "linen_jose_rsa_sign"]
+ * opaque rsaSign : @& ByteArray -> @& ByteArray -> UInt8 -> UInt8
+ *                -> IO ByteArray
+ *
+ * privkey_der : DER-encoded PKCS#8 PrivateKeyInfo
+ * data        : payload to sign (for JWS, "header.payload")
+ * algorithm   : 0=SHA256, 1=SHA384, 2=SHA512
+ * use_pss     : 0=PKCS1v15 (RS*), 1=PSS (PS*)
+ * Returns     : the raw signature bytes
+ *
+ * The mirror of linen_jose_rsa_verify above, and deliberately the same
+ * shape: DER in, raw signature out, the same algorithm and padding codes.
+ * EVP_DigestSign is called twice — once with a NULL buffer to learn the
+ * signature length, then again to produce it — which is OpenSSL's contract.
+ * ──────────────────────────────────────────────────────────── */
+
+LEAN_EXPORT lean_obj_res linen_jose_rsa_sign(
+    b_lean_obj_arg privkey_der_obj,
+    b_lean_obj_arg data_obj,
+    uint8_t algorithm,
+    uint8_t use_pss,
+    lean_obj_arg world
+) {
+    const EVP_MD *md = jose_select_md(algorithm);
+    if (!md) {
+        return jose_mk_io_error("RSA sign: unsupported algorithm");
+    }
+
+    const uint8_t *der  = lean_sarray_cptr(privkey_der_obj);
+    size_t der_len      = lean_sarray_size(privkey_der_obj);
+    const uint8_t *data = lean_sarray_cptr(data_obj);
+    size_t data_len     = lean_sarray_size(data_obj);
+
+    /* Parse DER-encoded PKCS#8 private key. d2i_AutoPrivateKey detects the
+     * key type rather than requiring it to be stated. */
+    const uint8_t *p = der;
+    EVP_PKEY *pkey = d2i_AutoPrivateKey(NULL, &p, (long)der_len);
+    if (!pkey) {
+        return jose_mk_io_error("RSA sign: failed to parse DER private key");
+    }
+
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    if (!ctx) {
+        EVP_PKEY_free(pkey);
+        return jose_mk_io_error("RSA sign: EVP_MD_CTX_new failed");
+    }
+
+    EVP_PKEY_CTX *pctx = NULL;
+    if (EVP_DigestSignInit(ctx, &pctx, md, NULL, pkey) != 1) {
+        EVP_MD_CTX_free(ctx);
+        EVP_PKEY_free(pkey);
+        return jose_mk_io_error("RSA sign: EVP_DigestSignInit failed");
+    }
+
+    if (use_pss) {
+        if (EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_PSS_PADDING) <= 0) {
+            EVP_MD_CTX_free(ctx);
+            EVP_PKEY_free(pkey);
+            return jose_mk_io_error("RSA sign: failed to set PSS padding");
+        }
+        /* PSS salt length = digest length (RFC 7518 default), matching verify */
+        if (EVP_PKEY_CTX_set_rsa_pss_saltlen(pctx, RSA_PSS_SALTLEN_DIGEST) <= 0) {
+            EVP_MD_CTX_free(ctx);
+            EVP_PKEY_free(pkey);
+            return jose_mk_io_error("RSA sign: failed to set PSS salt length");
+        }
+    }
+
+    /* First call: how many bytes will the signature need? */
+    size_t sig_len = 0;
+    if (EVP_DigestSign(ctx, NULL, &sig_len, data, data_len) != 1) {
+        EVP_MD_CTX_free(ctx);
+        EVP_PKEY_free(pkey);
+        return jose_mk_io_error("RSA sign: could not determine signature length");
+    }
+
+    uint8_t *sig = (uint8_t *)malloc(sig_len);
+    if (!sig) {
+        EVP_MD_CTX_free(ctx);
+        EVP_PKEY_free(pkey);
+        return jose_mk_io_error("RSA sign: out of memory");
+    }
+
+    if (EVP_DigestSign(ctx, sig, &sig_len, data, data_len) != 1) {
+        free(sig);
+        EVP_MD_CTX_free(ctx);
+        EVP_PKEY_free(pkey);
+        return jose_mk_io_error("RSA sign: EVP_DigestSign failed");
+    }
+
+    lean_obj_res out = jose_mk_byte_array(sig, sig_len);
+    free(sig);
+    EVP_MD_CTX_free(ctx);
+    EVP_PKEY_free(pkey);
+    return lean_io_result_mk_ok(out);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * PEM private key to DER
+ *
+ * @[extern "linen_jose_privkey_pem_to_der"]
+ * opaque privkeyPemToDer : @& String -> IO ByteArray
+ *
+ * Private keys arrive as PEM far more often than as DER — it is what an
+ * OAuth2 service-account key file contains, for instance — while the
+ * signing entry point above takes DER, to stay symmetric with verify.
+ * This is the bridge, and it is separate so that neither function has to
+ * guess which encoding it was handed.
+ * ──────────────────────────────────────────────────────────── */
+
+LEAN_EXPORT lean_obj_res linen_jose_privkey_pem_to_der(
+    b_lean_obj_arg pem_obj,
+    lean_obj_arg world
+) {
+    const char *pem = lean_string_cstr(pem_obj);
+
+    BIO *bio = BIO_new_mem_buf(pem, -1);
+    if (!bio) {
+        return jose_mk_io_error("PEM to DER: BIO_new_mem_buf failed");
+    }
+
+    EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
+    BIO_free(bio);
+    if (!pkey) {
+        return jose_mk_io_error("PEM to DER: failed to parse PEM private key");
+    }
+
+    uint8_t *der = NULL;
+    int der_len = i2d_PrivateKey(pkey, &der);
+    EVP_PKEY_free(pkey);
+    if (der_len <= 0 || !der) {
+        OPENSSL_free(der);
+        return jose_mk_io_error("PEM to DER: i2d_PrivateKey failed");
+    }
+
+    lean_obj_res out = jose_mk_byte_array(der, (size_t)der_len);
+    OPENSSL_free(der);
+    return lean_io_result_mk_ok(out);
 }
 
 /* ────────────────────────────────────────────────────────────

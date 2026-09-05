@@ -1,7 +1,7 @@
 /-
   Linen.Crypto.JOSE.JWS — JSON Web Signature verification
 
-  Implements JWS Compact Serialization verification (RFC 7515).
+  Implements JWS Compact Serialization verification and signing (RFC 7515).
   The compact format is: `BASE64URL(header).BASE64URL(payload).BASE64URL(signature)`
 
   ## Haskell source
@@ -21,6 +21,43 @@ def splitCompact (token : String) : Option (String × String × String) :=
   match token.splitOn "." with
   | [header, payload, signature] => some (header, payload, signature)
   | _ => none
+
+-- ── Signing ──
+
+/-- The algorithm code and PSS flag the FFI expects, for the RSA families.
+    `none` for anything that is not an RSA algorithm. -/
+def rsaCodes : JWSAlgorithm → Option (UInt8 × UInt8)
+  | .RS256 => some (0, 0) | .RS384 => some (1, 0) | .RS512 => some (2, 0)
+  | .PS256 => some (0, 1) | .PS384 => some (1, 1) | .PS512 => some (2, 1)
+  | _      => none
+
+/-- Sign `signingInput` with a DER-encoded PKCS#8 RSA private key.
+
+    Only the RSA families are supported: `HS*` needs no private key (use
+    `FFI.hmac`), and `ES*` signing is not implemented. Returns `none` for a
+    non-RSA algorithm rather than raising, so a caller choosing an algorithm
+    dynamically can branch. -/
+def signRsa (alg : JWSAlgorithm) (privkeyDer : ByteArray)
+    (signingInput : ByteArray) : IO (Option ByteArray) := do
+  match rsaCodes alg with
+  | none => return none
+  | some (algCode, pss) => return some (← FFI.rsaSign privkeyDer signingInput algCode pss)
+
+/-- A complete JWS compact serialization: `header.payload.signature`.
+
+    `headerJson` and `payloadJson` are the two JSON documents, already
+    serialised; this base64url-encodes them, signs the joined
+    `header.payload`, and appends the encoded signature. -/
+def signCompact (alg : JWSAlgorithm) (privkeyDer : ByteArray)
+    (headerJson payloadJson : String) : IO (Option String) := do
+  let h ← FFI.base64urlEncode headerJson.toUTF8
+  let p ← FFI.base64urlEncode payloadJson.toUTF8
+  let signingInput := (h ++ "." ++ p).toUTF8
+  match ← signRsa alg privkeyDer signingInput with
+  | none     => return none
+  | some sig => return some (h ++ "." ++ p ++ "." ++ (← FFI.base64urlEncode sig))
+
+-- ── Verification ──
 
 /-- Verify a JWS signature using the given key.
     Returns `true` if the signature is valid. -/

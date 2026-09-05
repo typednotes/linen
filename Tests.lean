@@ -259,6 +259,7 @@ import Tests.Linen.Crypto.JOSE.FFITest
 import Tests.Linen.Crypto.JOSE.TypesTest
 import Tests.Linen.Crypto.JOSE.JWKTest
 import Tests.Linen.Crypto.JOSE.JWSTest
+import Tests.Linen.Crypto.JOSE.JWSSignTest
 import Tests.Linen.Crypto.JOSE.JWTTest
 import Tests.Linen.Crypto.Zlib.FFITest
 import Tests.Linen.Crypto.MD5Test
