@@ -358,7 +358,34 @@ it depends on).
     `Readers.Metadata` front-matter machinery — both citing the
     `Emoji.lean`/`MIME.lean` fold-in precedent. `blaze-html` substitutes onto
     `Linen.Web.Html` as planned. `lake build Linen Tests` passes at 4334 jobs.
-
+84. [`freer-simple`](FreerSimple/dependencies.md) (done) — extensible effects
+    ("freer monad"), all 10 upstream effect/core modules: the open union
+    `Data.OpenUnion` (`Union`/`Member`, ported safe-by-construction rather than
+    over upstream's `unsafeCoerce`d `(Int, Any)` internals), the `Eff` monad
+    with `send`/`run`/`runM`/`interpret`/`interpose`/`reinterpret`/`raise`, and
+    the `Reader`/`State`/`Error`/`Writer`/`NonDet`/`Coroutine`/`Fresh`/`Trace`
+    effects. `Data.FTCQueue` is dropped (a GHC-only device against quadratic
+    left-nested `>>=`; the direct Freer encoding is behaviour- and
+    type-identical) and `Control.Monad.Freer.TH` with it (no Template Haskell in
+    Lean, as with `lens`'s `Control.Lens.TH`). The single functional omission is
+    `NonDet.msplit`, which is not structurally recursive and genuinely diverges
+    on an infinitely-branching computation — total upstream only by Haskell's
+    laziness, so porting it would need `partial` or fuel. None of the four
+    `build-depends` pulls in a new package: `natural-transformation` folds into
+    Lean's dependent function type, `transformers-base` is covered by the
+    existing `Control.Monad.IO.Unlift`, and `template-haskell` is dropped.
+    Notably, `Coroutine`'s self-referential `Status` (which holds an
+    `Eff effs (Status …)`) is what made `Eff`'s payload universe-polymorphic
+    (`Type u` in, `Type (max 1 u)` out) — done as a real construction rather
+    than by weakening the type, per AGENTS.md.
+    **Plus a `linen`-original extension:** `Control.Monad.Freer.FileSystem`
+    demonstrates a dependently-typed capability system at two strengths — a
+    `Capability` *value* indexes the effect and gates which *operations* are
+    allowed (`Prop`-class instances), while its `roots` gate which *arguments*
+    they may be called on (a `decide`-discharged obligation). So a read-only
+    capability makes `writeFile` fail to elaborate, and a sandboxed one rejects
+    `readFile p!"/etc/passwd"`. Neither is expressible with Haskell's
+    type-level rows, which name effects but carry no structure.
 ## Crates (crates.io)
 
 Same convention as above, applied to Rust crates per AGENTS.md's

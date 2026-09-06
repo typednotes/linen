@@ -15,7 +15,7 @@
   <a href="https://github.com/typednotes/linen/stargazers"><img src="https://img.shields.io/github/stars/typednotes/linen?style=flat" alt="GitHub Stars"></a>
   <a href="https://github.com/typednotes/linen/blob/main/LICENSE"><img src="https://img.shields.io/github/license/typednotes/linen" alt="License"></a>
   <a href="https://github.com/typednotes/linen"><img src="https://img.shields.io/github/last-commit/typednotes/linen" alt="Last Commit"></a>
-  <a href="https://lean-lang.org/"><img src="https://img.shields.io/badge/Lean-4.31.0-blue" alt="Lean 4"></a>
+  <a href="https://lean-lang.org/"><img src="https://img.shields.io/badge/Lean-4.33.1-blue" alt="Lean 4"></a>
 </p>
 
 <p align="center">
@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen Tests --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen Tests --include='*.lean' | wc -l -->
-  <strong>729 modules</strong> · <strong>384 compile-time theorems</strong> · <strong>9924 <code>#guard</code> checks</strong>
+  <strong>740 modules</strong> · <strong>386 compile-time theorems</strong> · <strong>10046 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -55,6 +55,16 @@ for the full per-module feature list and module table.
   missing from core (`Compose`/`Product`/`FunctorSum`, `Bifunctor`,
   `Foldable`/`Traversable`, `mtl`-style `Reader`/`State`/`Except`, STM,
   green-thread concurrency, …).
+- **`Control.Monad.Freer`** — extensible effects ported from `freer-simple`:
+  an open union over an effect row (`Data.OpenUnion`), the `Eff` monad with
+  `send`/`interpret`/`interpose`/`reinterpret`/`run`, and the
+  `Reader`/`State`/`Error`/`Writer`/`NonDet`/`Coroutine`/`Fresh`/`Trace`
+  effects — so a signature *is* an effect whitelist. Its `FileSystem` effect
+  goes past what Haskell's rows can say, indexing the effect on a `Capability`
+  **value**: a read-only capability makes `writeFile` fail to elaborate,
+  read/write/delete are separately grantable within one effect, and a sandboxed
+  capability's `roots` reject `readFile p!"/etc/passwd"` — constraining an
+  effect's *arguments*, not just which effects are named.
 - **`Control.Lens`** — a `lens`-style profunctor-optics library (plus its
   `profunctors`/`indexed-traversable` prerequisites): `Lens`/`Prism`/`Iso`/
   `Traversal`/`Fold`/`Getter`/`Setter`/`Review` and indexed variants, with
@@ -325,7 +335,7 @@ installed even to use, say, `Crypto.SigV4`.
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 729 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 740 modules).
 
 ## Build & Test
 

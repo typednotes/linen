@@ -61,6 +61,16 @@ import Linen.Control.Monad.Error.Lens
 import Linen.Control.Monad.Reader
 import Linen.Control.Monad.State
 import Linen.Control.Monad.STM
+import Linen.Control.Monad.Freer
+import Linen.Control.Monad.Freer.Reader
+import Linen.Control.Monad.Freer.State
+import Linen.Control.Monad.Freer.Error
+import Linen.Control.Monad.Freer.Writer
+import Linen.Control.Monad.Freer.NonDet
+import Linen.Control.Monad.Freer.Coroutine
+import Linen.Control.Monad.Freer.Fresh
+import Linen.Control.Monad.Freer.Trace
+import Linen.Control.Monad.Freer.FileSystem
 import Linen.Control.Concurrent.STM.TVar
 import Linen.Control.Concurrent.STM.TMVar
 import Linen.Control.Concurrent.STM.TQueue
@@ -179,6 +189,7 @@ import Linen.Data.List
 import Linen.Data.List.Lens
 import Linen.Data.List.NonEmpty
 import Linen.Data.Newtype
+import Linen.Data.OpenUnion
 import Linen.Data.Ord
 import Linen.Data.String
 import Linen.Data.Text

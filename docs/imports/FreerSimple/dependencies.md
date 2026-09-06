@@ -1,0 +1,174 @@
+# `FreerSimple` module dependencies
+
+Topological order of every module of the [`freer-simple`](https://hackage.haskell.org/package/freer-simple-1.2.1.1)
+Hackage package imported into `linen`, per [AGENTS.md](../../../AGENTS.md)'s Hackage-import convention.
+
+An edge **A → B** means *module A imports module B*, so **B must be built before A**.
+
+## Topologically sorted modules
+
+All modules below are ported (or resolved away) — kept commented out as a completed checklist.
+
+<!-- 1. `Data.OpenUnion` (merges upstream `Data.OpenUnion` + `Data.OpenUnion.Internal`) -->
+<!-- 2. `Control.Monad.Freer` (merges upstream `Control.Monad.Freer.Internal` + the `Control.Monad.Freer` re-export shim) -->
+<!-- 3. `Control.Monad.Freer.Reader` -->
+<!-- 4. `Control.Monad.Freer.State` -->
+<!-- 5. `Control.Monad.Freer.Error` -->
+<!-- 6. `Control.Monad.Freer.Writer` -->
+<!-- 7. `Control.Monad.Freer.NonDet` (the `NonDet` type itself lives in upstream's `Internal`; `msplit` not ported — see below) -->
+<!-- 8. `Control.Monad.Freer.Coroutine` -->
+<!-- 9. `Control.Monad.Freer.Fresh` -->
+<!-- 10. `Control.Monad.Freer.Trace` -->
+<!-- 11. *(`freer-simple` package root — no upstream module; covered by `linen`'s own root)* -->
+
+## Own upstream dependencies
+
+`freer-simple`'s `build-depends` are `base`, `natural-transformation`,
+`template-haskell` and `transformers-base`. Resolved per AGENTS.md's precedence
+rule (Lean stdlib > what `linen` already has from Haskell > new Hackage source):
+
+- **`base`** → Lean stdlib.
+- **`natural-transformation`** → folded inline. The package supplies only the
+  natural-transformation type `m :~> n = forall x. m x -> n x`, which Lean
+  expresses directly as the dependent function type
+  `{β : Type} → m β → n β`. No wrapper structure, no separate import entry.
+- **`template-haskell`** → **dropped.** It backs only
+  `Control.Monad.Freer.TH`'s `makeEffect`, which generates the `send`-wrapping
+  smart constructors for an effect GADT. Lean has no Template Haskell, so those
+  constructors are hand-written per effect — the same treatment `README.md`
+  already documents for `lens`'s `Control.Lens.TH` (`makeLenses`).
+- **`transformers-base`** → **out of scope.** It backs only `MonadBase`-style
+  interop instances for embedding `Eff` in an arbitrary transformer stack, which
+  the core `Eff`/`interpret`/`run` machinery does not need. Should a later module
+  want it, `linen` already has the equivalent capability via
+  `Control.Monad.IO.Unlift` (ported from `unliftio`).
+
+## Substitutions / deviations
+
+- **`Data.OpenUnion` + `Data.OpenUnion.Internal` merged into one module.**
+  Upstream splits a safe `Member`-typeclass interface (`Data.OpenUnion`) from an
+  unsafe implementation (`Data.OpenUnion.Internal`), where `Union` is an
+  `unsafeCoerce`d `(Int, Any)` pair giving O(1) dispatch under GHC. This port
+  keeps the safe interface and makes it the real implementation: `Union` is an
+  ordinary strictly-positive inductive indexed by the effect row, in the shape of
+  `List.Mem` evidence. Lean has no reason to pay for an unsafe fast path the
+  kernel cannot see through, so there is no "Internal" split to make — the same
+  reasoning `Linen/System/IO.lean` records for dropping `unsafeInlineIO` and
+  `Control.Monad.STM` for dropping GHC's STM primops.
+
+- **`Data.FTCQueue` dropped.** Upstream's `Eff` stores its continuations in a
+  catenable "fast type-aligned" queue purely so that left-nested `>>=` chains
+  avoid quadratic continuation concatenation under GHC. That is a performance
+  device, not a semantic one: this port uses the direct Freer encoding
+  (`protect a | impure (Union effs β) (β → Eff effs α)`), which is behaviour- and
+  type-identical and differs only in the amortised complexity of pathologically
+  left-nested binds. Recorded here and in the module doc-comment as a deliberate,
+  behaviour-preserving omission rather than a simplification of the port's type or
+  semantics.
+
+- **`Control.Monad.Freer.TH` dropped** — see `template-haskell` above.
+
+- **`msplit` is not ported** (the one omission from `Control.Monad.Freer.NonDet`).
+  Upstream peels off the first solution plus a computation for the rest, using a
+  queue of pending branches. Its recursion resumes from a *queued* computation
+  rather than a subterm of the one being traversed, so it is not structurally
+  recursive, and no measure is available: `sizeOf` yields nothing for the
+  continuation carried by a Freer node, and on an infinitely-branching
+  computation `msplit` genuinely diverges — upstream is total only by Haskell's
+  laziness. Porting it would need `partial` or a fuel parameter, both forbidden
+  by AGENTS.md, so it is left out rather than faked. `makeChoiceA` covers the
+  finite-search use.
+
+- **`makeChoiceA` is specialised to `List`.** Upstream is generic over
+  `Alternative f`. Lean's `Alternative` offers no way to build an arbitrary `f`
+  from two branches without also assuming monoidal structure on it, so the
+  handler is written at `List` — the instance real uses of upstream's version
+  take anyway. `Control.Applicative.asum` folds the result into another
+  `Alternative` where wanted.
+
+- **Requests that never return answer with `Empty`.** Upstream's
+  `Error e r` and `MZero :: NonDet a` are requests of *arbitrary* answer type.
+  Written literally in Lean, their constructors would bind `{α : Type}`, whose
+  type `Type` inhabits `Type 1` — forcing the effect into `Type 1`, which cannot
+  be an effect (`Type → Type`) at all. Answering with `Empty` says the same
+  thing more precisely (the continuation is unreachable) and the smart
+  constructors recover an arbitrary result type via `Empty.elim`.
+
+- **`outParam` locator classes for `Error` and `Writer`.** `throwError e`'s
+  error type appears only in its `Member (Error ε) effs` constraint, so instance
+  search stalls on `Member (Error ?ε) effs`. `HasError`/`HasWriter` carry that
+  type as an `outParam`, so resolving against the row determines it. Same device
+  as `Control.Monad.Freer.FileSystem`'s `HasFileSystem`. The `Member`-based
+  `send` remains available and is what `Reader`/`State`/`Fresh`/`Trace` use.
+
+- **No `Monoid` class for `Writer`.** Upstream's `runWriter` requires
+  `Monoid w`; neither Lean's standard library nor `linen` has one. Following the
+  two precedents already in this codebase, the general `runWriter` takes the
+  unit and append explicitly (as `Codec.Picture.Metadata` does for `foldMap`)
+  and `runWriterAppend` covers the common case via `[Append ω] [Inhabited ω]`
+  (as `Data.Foldable.foldMap` does).
+
+- **`Coroutine`'s `Status` drove the payload universe.** `Status` holds a
+  `b → Eff effs (Status …)`, so it must live in `Type 1`, which means
+  `Eff` has to accept a `Type 1` payload. That is why `Eff` is universe-
+  polymorphic (`Type u` in, `Type (max 1 u)` out) rather than pinned to
+  `Type 0`: at `u = 1` payload and computation share universe 1 and the
+  circularity closes. `Eff.bindH` is the matching heterogeneous bind, since a
+  handler answers at `Type 0` while the computation's result may sit higher.
+  This is the "self-referential type — do the proof" case AGENTS.md calls out;
+  no `partial` and no termination annotation were needed.
+
+- **`Fresh` counts in `Nat`,** not upstream's `Int`: fresh names are never
+  negative and `Nat` matches this library's convention.
+
+- **`runTracePure` added** alongside upstream's stdout-printing `runTrace`, so
+  tracing is testable without I/O (which is what lets that module's tests be
+  `#guard`s).
+
+- **Universe.** Upstream's effect row is `[* -> *]`, erased at compile time. In
+  Lean, `Type → Type` itself inhabits `Type 1`, so a constructor binding
+  `{eff : Type → Type}` forces both `Union` and `Eff` into `Type 1` while their
+  payloads stay in `Type 0`. `Monad.{u,v}` is universe-polymorphic, so
+  `Monad (Eff effs)` instantiates at `u = 0, v = 1` and `do`-notation works
+  normally. This is a genuine universe bump relative to every other transformer
+  in `Linen/Control/Monad/*`, none of which is indexed by a *list* of monads.
+
+## `Control.Monad.Freer.FileSystem` — no upstream counterpart
+
+`Linen/Control/Monad/Freer/FileSystem.lean` is **`linen`-original** and therefore
+not part of the topological checklist above (same treatment as
+`Control.Exception.Lens` relative to the `lens` import). It demonstrates what the
+ported mechanism gains from dependent types, at two strengths:
+
+1. **Permissions** — which *operations* are allowed. A `Capability` value indexes
+   the effect and each operation carries a `Prop`-valued proof that the
+   capability grants it, so a read-only capability makes `writeFile` fail to
+   elaborate at the call site.
+2. **Path scope** — which *arguments* those operations may be called on. The
+   capability's `roots` confine every operation to paths beneath them, as a proof
+   obligation discharged by `decide`, so `readFile p!"/etc/passwd"` under a
+   sandboxed capability does not elaborate either.
+
+Haskell's type-level effect rows — `freer-simple`'s included — can say *which
+effects* are available but never with which permissions, and cannot constrain an
+effect's arguments at all, short of one effect type per combination or a runtime
+check the type system knows nothing about.
+
+Two implementation notes worth recording, both discovered by construction:
+
+- **The permission obligations are instances; the scope obligation is an
+  auto-param.** An auto-param (`:= by decide`) fires before `cap` is unified from
+  the expected type and fails on a metavariable, so permissions must be
+  `Prop`-classes (instance resolution is postponed until `cap` is known). The
+  scope obligation depends on the path argument and so cannot be keyed on `cap`
+  alone; it works as an auto-param precisely because `HasFileSystem`'s `outParam`
+  has already determined `cap` by the time the tactic runs.
+- **Paths are `List String`, not `System.FilePath`.** Lean's
+  `String.startsWith`/`String.take` do not reduce under `decide` (they get stuck
+  on the slice representation), so a string-prefix scope check could not be
+  discharged at elaboration time at all; `List String` prefix comparison does
+  reduce. Component-wise containment is also the *correct* meaning of "under this
+  directory" — `/tmp/sandbox-evil` is a string-prefix extension of
+  `/tmp/sandbox` but is not inside it, and the tests pin that case. The `p!`
+  macro gives literals ordinary path syntax, splitting at macro-expansion time so
+  the result stays a literal list.

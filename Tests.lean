@@ -24,6 +24,16 @@ import Tests.Linen.Control.Monad.Error.LensTest
 import Tests.Linen.Control.Monad.ReaderTest
 import Tests.Linen.Control.Monad.StateTest
 import Tests.Linen.Control.Monad.STMTest
+import Tests.Linen.Control.Monad.FreerTest
+import Tests.Linen.Control.Monad.Freer.ReaderTest
+import Tests.Linen.Control.Monad.Freer.StateTest
+import Tests.Linen.Control.Monad.Freer.ErrorTest
+import Tests.Linen.Control.Monad.Freer.WriterTest
+import Tests.Linen.Control.Monad.Freer.NonDetTest
+import Tests.Linen.Control.Monad.Freer.CoroutineTest
+import Tests.Linen.Control.Monad.Freer.FreshTest
+import Tests.Linen.Control.Monad.Freer.TraceTest
+import Tests.Linen.Control.Monad.Freer.FileSystemTest
 import Tests.Linen.Control.Concurrent.STM.TVarTest
 import Tests.Linen.Control.Concurrent.STM.TMVarTest
 import Tests.Linen.Control.Concurrent.STM.TQueueTest
@@ -183,6 +193,7 @@ import Tests.Linen.Data.ListTest
 import Tests.Linen.Data.List.LensTest
 import Tests.Linen.Data.List.NonEmptyTest
 import Tests.Linen.Data.NewtypeTest
+import Tests.Linen.Data.OpenUnionTest
 import Tests.Linen.Data.OrdTest
 import Tests.Linen.Data.ProxyTest
 import Tests.Linen.Data.RatTest

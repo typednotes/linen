@@ -189,6 +189,67 @@ the project overview and quick start.
   (STMResult α)`, with every transaction serialized on a single global
   `Std.Mutex` (`atomically`/`retry`/`orElse`/`check`); `atomically`'s
   retry-until-commit loop is a plain `while`, not `partial def`.
+- `Data.OpenUnion` — an open union over a row of effect functors:
+  `Union effs α` holds a value of exactly one effect drawn from `effs`, and
+  `Member eff effs` (`inj`/`prj`) witnesses membership by instance search.
+  Ported safe-by-construction — upstream `freer-simple` backs `Union` with an
+  `unsafeCoerce`d `(Int, Any)` pair for GHC dispatch speed, which buys nothing
+  in Lean.
+- `Control.Monad.Freer` — the `Eff` monad over an open effect row, so a
+  signature is an effect whitelist: `Eff [Reader Config] α` provably cannot
+  touch state, the filesystem or the network. `send` lifts one operation given
+  `Member`; `interpret`/`reinterpret`/`raise` reshape the row; `run`/`runM`/
+  `interpretM` discharge it. Upstream's `Data.FTCQueue` is dropped (a GHC-only
+  guard against quadratic left-nested `>>=`; the direct Freer encoding is
+  behaviour-identical) and `Control.Monad.Freer.TH` with it (no Template
+  Haskell in Lean).
+- `Control.Monad.Freer.Reader` / `.State` — the reader and state effects
+  expressed over `Eff`, illustrating the row mechanism and composing in a
+  single computation. Not replacements for the mtl-style
+  `Control.Monad.Reader`/`State`, which remain the recommended API for
+  ordinary environment/state threading.
+- `Control.Monad.Freer.Error` — failure in the row: `throwError`/`runError`
+  (into `Except`)/`catchError`, the last built on `interpose` so recovery does
+  not remove the effect. The request answers with `Empty`, recording that a
+  throw never returns.
+- `Control.Monad.Freer.Writer` — accumulate output: `tell`, with `runWriter`
+  taking the monoid's unit and append explicitly (Lean has no `Monoid` class)
+  and `runWriterAppend` covering `[Append ω] [Inhabited ω]`.
+- `Control.Monad.Freer.NonDet` — branching search: `mzero`/`mplus`/`select`/
+  `guard`, collected by `makeChoiceA`. A choice is one request answered with a
+  `Bool` *both ways*, so the continuation runs once per branch. `msplit` is not
+  ported — it is not structurally recursive and genuinely diverges on an
+  infinite search tree.
+- `Control.Monad.Freer.Coroutine` — suspend and resume: `yield`, and `runC`
+  reporting a `Status` that is either `done` or will `continue` given a reply.
+  `Status` is self-referential *through* `Eff`, which is why `Eff`'s payload is
+  universe-polymorphic; driving a coroutine to completion is the caller's job,
+  since one may yield forever.
+- `Control.Monad.Freer.Fresh` — hand out distinct `Nat`s: `fresh`/`runFresh`.
+- `Control.Monad.Freer.Trace` — diagnostics in the row, so `Eff [Trace] α`
+  announces that a computation logs and a row without `Trace` provably does
+  not: `trace`, with `runTrace` printing to stdout and `runTracePure`
+  collecting purely.
+- `Control.Monad.Freer.FileSystem` — a capability-restricted filesystem
+  effect, `linen`-original, showing what an effect system gains from dependent
+  types, at two strengths. **Permissions:** `FileSystem cap` is indexed by a
+  `Capability` **value** (`canRead`/`canWrite`/`canDelete`) and each operation
+  carries a `Prop`-valued proof that `cap` grants it, demanded via the
+  `CanRead`/`CanWrite`/`CanDelete` classes — so `writeFile` under a read-only
+  capability fails to elaborate, and read/write/delete are separately grantable
+  *within one effect*. **Path scope:** the capability's `roots` confine every
+  operation to paths beneath them, as an obligation `cap.permits p = true`
+  discharged by `decide` at the call site — so a sandboxed capability rejects
+  `readFile p!"/etc/passwd"` too, constraining the effect's *arguments* and not
+  just its operation set. Neither is expressible with Haskell's type-level
+  rows, which name effects but carry no structure. Paths are component lists
+  (`List String`, written with the `p!` macro) both because Lean's
+  `String.startsWith` does not reduce under `decide` and because component-wise
+  containment is the correct meaning of "under this directory" — a string
+  prefix would wrongly admit `/tmp/sandbox-evil` under `/tmp/sandbox`. Runtime
+  paths go through `ScopedPath.check?`, which validates and returns the
+  evidence. The handler re-checks nothing: every proof is in the constructor,
+  so enforcement happens once, statically.
 - `Control.Concurrent.STM.TVar` — a transactional variable over `IO.Ref`:
   `newTVarIO`/`newTVar`/`readTVar`/`writeTVar`/`modifyTVar'`.
 - `Control.Concurrent.STM.TMVar` — `TVar (Option α)`: `newTMVar(IO)`/
@@ -2059,6 +2120,11 @@ termination checker can see); everything else is ordinary total recursion.
 | `Linen.Control.Concurrent.Green` | fair green-thread monad (non-blocking `await`, cancellation) |
 | `Linen.Control.Concurrent` | thread management (`forkIO`/`forkFinally`/`forkGreen`/`killThread`/`waitThread`) |
 | `Linen.Control.Monad.STM` | STM = `BaseIO (STMResult _)`, global-mutex-serialized: `atomically`/`retry`/`orElse`/`check` |
+| `Linen.Data.OpenUnion` | open union over an effect row: `Union` (`here`/`there`/`elim0`), `Member` (`inj`/`prj`) |
+| `Linen.Control.Monad.Freer` | the `Eff` monad over an effect row: `send`/`run`/`runM`/`interpret`/`interpretM`/`reinterpret`/`raise` |
+| `Linen.Control.Monad.Freer.Reader` | reader effect over `Eff`: `ask`/`asks`/`runReader`/`withReader` |
+| `Linen.Control.Monad.Freer.State` | state effect over `Eff`: `get`/`put`/`modify`/`gets`/`runState`/`evalState`/`execState` |
+| `Linen.Control.Monad.Freer.FileSystem` | capability-restricted filesystem effect: `Capability`, `CanRead`/`CanWrite`/`CanDelete` proof obligations, `readFile`/`writeFile`/`deleteFile`, `runFileSystem` |
 | `Linen.Control.Concurrent.STM.TVar` | transactional variable over `IO.Ref`: `newTVarIO`/`readTVar`/`writeTVar`/`modifyTVar'` |
 | `Linen.Control.Concurrent.STM.TMVar` | `TVar (Option α)`: `takeTMVar`/`putTMVar`/`readTMVar`/`tryTakeTMVar`/`tryPutTMVar`/`isEmptyTMVar` |
 | `Linen.Control.Concurrent.STM.TQueue` | transactional two-list FIFO: `writeTQueue`/`readTQueue`/`tryReadTQueue`/`isEmptyTQueue`/`peekTQueue` |

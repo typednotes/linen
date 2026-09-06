@@ -4,6 +4,36 @@ All notable changes to `linen` are documented here, one entry per released
 version (see `version` in `lakefile.lean`). Dates are UTC, in `YYYY-MM-DD`
 format.
 
+## [0.14.0] — 2026-09-06
+
+- Added `Linen.Control.Monad.Freer` and `Linen.Data.OpenUnion`: extensible
+  effects ported from Hackage's `freer-simple`. `Eff effs α` carries its
+  permitted effects in its type, so a signature is an effect whitelist —
+  `send`/`run`/`runM`/`interpret`/`interpretM`/`interpose`/`reinterpret`/`raise`
+  over a safe-by-construction open union (`Union`/`Member`), with no
+  `unsafeCoerce` and no `Data.FTCQueue`.
+- Added the effect modules `Linen.Control.Monad.Freer.{Reader,State,Error,
+  Writer,NonDet,Coroutine,Fresh,Trace}` — all ten of `freer-simple`'s
+  effect/core modules. `NonDet.msplit` is the one functional omission: it is
+  not structurally recursive and diverges on an infinitely-branching
+  computation, so porting it would need `partial` or fuel.
+- Added `Linen.Control.Monad.Freer.FileSystem` (`linen`-original): a
+  dependently-typed capability system over the effect row. A `Capability`
+  *value* indexes the effect and gates both which **operations** are allowed
+  (`canRead`/`canWrite`/`canDelete`, as `Prop`-class instances) and which
+  **arguments** they may be called on (`roots`, as a `decide`-discharged
+  obligation). A read-only capability makes `writeFile` fail to elaborate; a
+  sandboxed one rejects `readFile p!"/etc/passwd"`, including the
+  string-prefix sibling case `/tmp/sandbox-evil`. Paths are component lists
+  written with the `p!` macro; runtime paths go through `ScopedPath.check?`.
+- `Eff`'s payload is universe-polymorphic (`Type u` in, `Type (max 1 u)` out)
+  rather than pinned to `Type 0`, so that `Coroutine`'s self-referential
+  `Status` — which holds an `Eff effs (Status …)` — is expressible as a real
+  construction instead of a weakened type. `Eff.bindH` is the matching
+  heterogeneous bind.
+- Corrected the stale Lean badge in `README.md` (4.31.0 → 4.33.1, the
+  toolchain since 0.12.0).
+
 ## [0.13.0] — 2026-09-05
 
 - `Linen.Crypto.JOSE` now supports RSA **signing**, not just verification.
