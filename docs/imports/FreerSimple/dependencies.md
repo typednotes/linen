@@ -147,9 +147,12 @@ demonstrate what the ported mechanism gains from dependent types.
    capability grants it, so a read-only capability makes `writeFile` fail to
    elaborate at the call site.
 2. **Path scope** — which *arguments* those operations may be called on. The
-   capability's `roots` confine every operation to paths beneath them, as a proof
-   obligation discharged by `decide`, so `readFile p!"/etc/passwd"` under a
-   sandboxed capability does not elaborate either.
+   capability's `scopes` confine every operation to paths beneath a matching
+   root, as a proof obligation discharged by `decide`, so
+   `readFile p!"/etc/passwd"` under a sandboxed capability does not elaborate
+   either. Each `Scope` carries its own operation list, so the restriction is on
+   (operation, argument) *pairs*: one capability can be read-write under one
+   directory and read-only under another.
 
 Haskell's type-level effect rows — `freer-simple`'s included — can say *which
 effects* are available but never with which permissions, and cannot constrain an

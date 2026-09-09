@@ -4,6 +4,40 @@ All notable changes to `linen` are documented here, one entry per released
 version (see `version` in `lakefile.lean`). Dates are UTC, in `YYYY-MM-DD`
 format.
 
+## [Unreleased]
+
+- **`Linen.Control.Monad.Effect.FileSystem`: a permission set per path prefix.**
+  The capability's `roots : List Path` becomes `scopes : List Scope`, where each
+  `Scope` carries **its own operation list** alongside its root — the shape
+  `.HTTP`'s `Scope` already used for URLs. One capability can now say "read,
+  write and delete under `/srv/app/releases`, read and write under
+  `/srv/app/current`, read only under `/etc/app`, nothing anywhere else", which
+  a single uniform `roots` list could not express. Scopes union: `permits` holds
+  when *some* scope covers the pair, with no deny rules and no
+  most-specific-wins precedence, so adding a scope can only add access.
+  Consequent API changes:
+  - `Capability.permits` now takes the operation: `cap.permits .read path`
+    rather than `cap.permits path`. A new `Op` (`.read`/`.write`/`.delete`) and
+    `Capability.allows : Op → Bool` mirror `.PostgreSQL`'s.
+  - `ScopedPath` is indexed by the operation (`ScopedPath cap .read`), and
+    `ScopedPath.check?` takes it, so evidence for reading a path is not evidence
+    for writing it.
+  - Added `under` (a scope for a root, as in `.HTTP`), `Capability.union` with
+    `permits_union_left`/`_right` and `allows_union_left`/`_right` proving
+    neither operand loses access, `Capability.consistent` (do the global bits
+    cover every operation the scopes name?), and the `workspace` capability.
+  - Added `CanRead.of`/`CanWrite.of`/`CanDelete.of` for capabilities whose bits
+    are *computed* rather than written literally — a `union`, say. Instance
+    resolution matches the bits syntactically and will not evaluate a fold over
+    the scope list, so such a capability declares its instances once
+    (`instance : CanRead (a.union b) := .of`); the bit is still discharged by
+    `decide`, so it is evidence exactly as much as the literal case.
+  - `sandboxed` is unchanged in meaning (`scopes := [under root]`).
+- Added the `effects` example (`lake exe examples effects`): the capability
+  effects run end-to-end against real scratch files, a loopback HTTP/1.1 server
+  and a disposable PostgreSQL container started with Podman, plus the runtime
+  `check?` path and one `Eff` over a four-effect row with no `IO` in it.
+
 ## [0.15.0] — 2026-09-09
 
 - **Renamed `Linen.Control.Monad.Freer` to `Linen.Control.Monad.Effect`**, with
@@ -60,7 +94,7 @@ format.
   *value* indexes the effect and gates both which **operations** are allowed
   (`canRead`/`canWrite`/`canDelete`, as `Prop`-class instances) and which
   **arguments** they may be called on (`roots`, as a `decide`-discharged
-  obligation). A read-only capability makes `writeFile` fail to elaborate; a
+  obligation; generalised to per-prefix `scopes` in Unreleased above). A read-only capability makes `writeFile` fail to elaborate; a
   sandboxed one rejects `readFile p!"/etc/passwd"`, including the
   string-prefix sibling case `/tmp/sandbox-evil`. Paths are component lists
   written with the `p!` macro; runtime paths go through `ScopedPath.check?`.

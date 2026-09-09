@@ -64,9 +64,13 @@ for the full per-module feature list and module table.
   effect on a `Capability` **value** and so constraining an effect's
   *arguments*, not just which effects are named:
   - `FileSystem` — a read-only capability makes `writeFile` fail to elaborate,
-    read/write/delete are separately grantable within one effect, and a
-    sandboxed capability's `roots` reject `readFile p!"/etc/passwd"` (and
-    `/tmp/sandbox-evil`, which a string prefix would wrongly admit).
+    read/write/delete are separately grantable within one effect, and each
+    path `Scope` carries its own operation list, so one capability says "read,
+    write and delete under `/srv/app/releases`, read only under `/etc/app`,
+    nothing anywhere else". Roots are matched component-wise, so
+    `/tmp/sandbox-evil` is rejected where a string prefix would wrongly admit
+    it. Scopes union — no deny rules, no precedence — so `Capability.union`
+    provably takes nothing away (`permits_union_left`/`_right`).
   - `HTTP` — methods are separately grantable, and each URL scope carries its
     own method list, so one capability says "GET anywhere under
     `u!"https://api.example.com/v1"`, POST only to `/v1/events`". Hosts are
@@ -384,6 +388,8 @@ lake exe examples webapp           # Network.WebApp: Application/Middleware/AppM
 lake exe examples webappstatic     # Network.WebApp.Static: staticApp/static + defaultFileServerSettings over a real scratch directory — self-checking demo
 lake exe examples vault            # Data.Vault type-safe heterogeneous map: typed keys, adjust/delete/union — self-checking demo
 lake exe examples vector           # Data.Vector-derived Array combinators: generate/ifilter/folds/reductions/backpermute/slice — self-checking demo
+lake exe examples effects          # Control.Monad.Effect.{FileSystem,HTTP,PostgreSQL,Trace} capabilities over real files/socket/Postgres — self-checking demo
+lake exe examples effects no-db    # same, minus the Podman-started PostgreSQL section
 lake exe examples todo             # Web.Html/Web.Css typed TODO list over Network.WebApp.Server — self-checks, then keeps serving; try:  curl localhost:<port>
 lake exe examples todo check       # same self-check round trip, but exits instead of staying up (for scripting)
 ```
@@ -479,6 +485,29 @@ doesn't exit after checking itself — it self-checks against its own live
 server and then keeps that same server (with its accumulated state) running
 on the printed OS-assigned port, so you can immediately `curl` it by hand;
 `todo check` runs the identical round trip but exits instead, for scripting.
+
+The `effects` example is the capability-restricted effect modules
+(`Control.Monad.Effect.{FileSystem,HTTP,PostgreSQL,Trace}`) run against real
+resources, so that "authorised" and "actually happened" can be checked against
+each other: a capability rooted at a scratch directory reads and writes real
+files through `IO.FS` (and a second capability, same root plus the delete bit,
+removes them); a capability that may `GET` anything under `/v1` but `POST` only
+to `/v1/events` drives a hand-rolled loopback HTTP/1.1 server; and a capability
+scoped to one table of one database, as one role, runs real
+`INSERT`/`UPDATE`/`SELECT` statements against a disposable `postgres` container
+the example starts with Podman itself. A second table exists in that same
+database and is provably unreachable through the capability, and `CREATE TABLE`
+is done with `psql` because the query AST has no DDL constructor and no
+`rawSql` escape hatch — so schema changes are outside the effect by
+construction. Every rejection the demo mentions is stated in the module as a
+theorem (`webCap.permits .POST healthUrl ≠ true := by decide`) rather than a
+comment, since a program that fails to compile cannot be run. The last two
+sections cover the runtime side: `ScopedPath`/`ScopedUrl`/`ScopedQuery.check?`
+for arguments only known at run time, and one `Eff` computation over a
+four-effect row — no `IO` in it — run by a single handler that dispatches each
+request to that effect's own interpreter. `effects no-db` skips the container
+sections; without a reachable `podman` they are reported as skipped rather than
+failed.
 
 ### Running `postgrest` against a real database
 

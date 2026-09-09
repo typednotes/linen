@@ -237,11 +237,14 @@ the project overview and quick start.
   carries a `Prop`-valued proof that `cap` grants it, demanded via the
   `CanRead`/`CanWrite`/`CanDelete` classes — so `writeFile` under a read-only
   capability fails to elaborate, and read/write/delete are separately grantable
-  *within one effect*. **Path scope:** the capability's `roots` confine every
-  operation to paths beneath them, as an obligation `cap.permits p = true`
-  discharged by `decide` at the call site — so a sandboxed capability rejects
-  `readFile p!"/etc/passwd"` too, constraining the effect's *arguments* and not
-  just its operation set. Neither is expressible with Haskell's type-level
+  *within one effect*. **Path scope:** the capability's `scopes` confine every
+  operation to paths beneath a matching root, as an obligation
+  `cap.permits op p = true` discharged by `decide` at the call site — so a
+  sandboxed capability rejects `readFile p!"/etc/passwd"` too, constraining the
+  effect's *arguments* and not just its operation set. Each `Scope` carries its
+  own operation list, so a single capability can be read-write under one
+  directory and read-only under another; scopes union, and `Capability.union`
+  is proved to take nothing away (`permits_union_left`/`_right`). Neither is expressible with Haskell's type-level
   rows, which name effects but carry no structure. Paths are component lists
   (`List String`, written with the `p!` macro) both because Lean's
   `String.startsWith` does not reduce under `decide` and because component-wise

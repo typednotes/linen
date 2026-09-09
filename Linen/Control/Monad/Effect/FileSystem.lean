@@ -26,12 +26,60 @@
   1. **Permissions** — which *operations* are allowed (`canRead`/`canWrite`/
      `canDelete`), each demanded as a `Prop`-class instance.
   2. **Path scope** — which *arguments* those operations may be called on
-     (`roots`), demanded as a proof obligation discharged by `decide` at the call
-     site. This constrains the effect's argument space, not just its operation
-     set, and is the part no type-level row can express at all.
+     (`scopes`), demanded as a proof obligation discharged by `decide` at the
+     call site. This constrains the effect's argument space, not just its
+     operation set, and is the part no type-level row can express at all.
 
   So `writeFile` under a read-only capability fails to elaborate, and so does
   `readFile (p!"/etc/passwd")` under a capability rooted at `/tmp/sandbox`.
+
+  ## A permission set per prefix, unioned
+
+  The scope is not a bare list of roots: each `Scope` carries **its own operation
+  list** alongside its root, so one capability can say
+
+      read, write and delete under /tmp/work
+      read only            under /etc/config
+      nothing              anywhere else
+
+  as
+
+      { canRead := true, canWrite := true, canDelete := true
+      , scopes := [ under p!"/tmp/work"   [.read, .write, .delete]
+                  , under p!"/etc/config" [.read] ] }
+
+  That is a restriction on (operation, argument) *pairs*, not on arguments
+  alone — the same shape `Control.Monad.Effect.HTTP.Scope` uses to say "GET
+  anywhere under `/v1`, POST only to `/v1/events`". A `Scope` whose `ops` is
+  empty grants every operation the capability itself grants, so a scope only
+  names operations when it is *more* restrictive than the capability as a whole.
+
+  Scopes **union**: `permits` holds when *some* scope covers the pair. There are
+  deliberately no deny rules and no most-specific-wins precedence, so adding a
+  scope can only ever add access. That monotonicity is what makes
+  `Capability.union` sound (`permits_union_left`/`_right` below): two capabilities
+  can be combined without either losing what it had. An overlap between scopes is
+  therefore a union of their operation sets, not a conflict to resolve.
+
+  ## Why the global bits are still written out
+
+  `canRead`/`canWrite`/`canDelete` remain the capability's *global upper bound*,
+  checked separately as a `Prop`-class instance: no scope can grant an operation
+  the capability as a whole withholds. They are written as literals rather than
+  derived from `scopes`, because instance resolution matches them **syntactically**
+  — it runs at `instances` transparency and will not evaluate a `List.any` over
+  the scope list, so a computed bit leaves `CanRead cap` unsolvable. This is the
+  same arrangement `HTTP.restClient` uses.
+
+  Two consequences worth knowing:
+
+  - `Capability.consistent` checks that the bits really do cover every operation
+    the scopes name. It is not needed for soundness — a scope naming an operation
+    the bits withhold is simply dead — but the two disagreeing is almost always a
+    mistake, so assert `#guard cap.consistent` beside a capability definition.
+  - A capability whose bits are *computed*, such as a `Capability.union`, has the
+    same problem: write `instance : CanRead (a.union b) := .of` to discharge the
+    bit by `decide` once, and the operations elaborate as usual.
 
   ## Design
 
@@ -86,8 +134,8 @@
 
   A path computed at runtime cannot have its scope proved by `decide`. That is
   not a gap but the honest shape of the problem: use `ScopedPath.check?`, which
-  validates a path and *returns the evidence* on success, so the operations
-  still cannot be called on an unvalidated path.
+  validates a path *for one operation* and returns the evidence on success, so
+  the operations still cannot be called on an unvalidated path.
 
   ## Backend
 
@@ -128,15 +176,43 @@ macro:max "p!" s:str : term => do
   let elems := parts.map (fun c => Syntax.mkStrLit c) |>.toArray
   `([$elems,*])
 
+-- ── Operations ──────────────────────────────────────────────────────────────
+
+/-- The kind of thing a request does to a file. Each kind is separately
+    grantable, both globally and per scope. -/
+inductive Op
+  /-- Read a file's contents. -/
+  | read
+  /-- Create or overwrite a file. -/
+  | write
+  /-- Remove a file. -/
+  | delete
+  deriving DecidableEq, BEq, Repr
+
 -- ── Capabilities ────────────────────────────────────────────────────────────
+
+/-- One region of the filesystem a capability opens up: a directory, and the
+    operations permitted beneath it.
+
+    `ops := []` means "every operation the capability's own bits allow", so a
+    scope need only name operations when it is *more* restrictive than the
+    capability as a whole. `root := []` is the whole filesystem. -/
+structure Scope where
+  /-- Operations allowed in this scope; `[]` means every operation the
+      capability has. -/
+  ops : List Op := []
+  /-- The directory this scope covers, as components; `[]` is everywhere. -/
+  root : Path := []
+  deriving DecidableEq, Repr
 
 /-- What a computation is permitted to do to the filesystem: which operations,
     and under which directories.
 
     Permission fields default to `false`, so `{ canRead := true }` denies writing
     and deleting by construction — a capability grants only what it names.
-    `roots` defaults to `[]`, meaning *no path restriction*; a non-empty `roots`
-    confines every operation to paths under one of them.
+    `scopes` defaults to `[]`, meaning *no path restriction*; a non-empty
+    `scopes` confines every operation to a scope that covers it. The bits are the
+    global upper bound: no scope can grant what they withhold.
 
     Declare capability constants with `abbrev`, not `def`: instance resolution
     does not unfold a non-reducible `def`, so `def myCap` leaves
@@ -148,16 +224,32 @@ structure Capability where
   canWrite  : Bool := false
   /-- May remove files. -/
   canDelete : Bool := false
-  /-- Directories the capability is confined to; `[]` means unrestricted. -/
-  roots     : List Path := []
+  /-- Regions of the filesystem the capability is confined to; `[]` means
+      unrestricted. -/
+  scopes    : List Scope := []
   deriving DecidableEq, Repr
 
-/-- Does this capability allow touching `p` at all?
+/-- Does this capability's global permission set include `op`? -/
+def Capability.allows (cap : Capability) : Op → Bool
+  | .read   => cap.canRead
+  | .write  => cap.canWrite
+  | .delete => cap.canDelete
 
-    True when the capability is unrestricted (`roots = []`) or `p` lies under one
-    of its roots, component-wise. -/
-def Capability.permits (cap : Capability) (p : Path) : Bool :=
-  cap.roots.isEmpty || cap.roots.any (fun r => r.isPrefixOf p)
+/-- Does `s` cover operation `op` at `p`?
+
+    The root must be a *component-wise* prefix of the path, so
+    `/tmp/sandbox-evil` is not under `/tmp/sandbox` however the two compare as
+    strings. -/
+def Scope.covers (s : Scope) (op : Op) (p : Path) : Bool :=
+  (s.ops.isEmpty || s.ops.contains op) && s.root.isPrefixOf p
+
+/-- Does this capability allow performing `op` on `p` at all?
+
+    True when the capability is unscoped (`scopes = []`) or some scope covers the
+    pair. This is the *argument* half of the capability; the *operation* half is
+    `allows`, demanded separately as a `Prop`-class instance. -/
+def Capability.permits (cap : Capability) (op : Op) (p : Path) : Bool :=
+  cap.scopes.isEmpty || cap.scopes.any (fun s => s.covers op p)
 
 /-- `cap` grants reading. Carries the proof, so it cannot be forged. -/
 class CanRead (cap : Capability) : Prop where
@@ -174,46 +266,133 @@ class CanDelete (cap : Capability) : Prop where
   /-- Evidence that the delete bit is set. -/
   proof : cap.canDelete = true
 
-instance instCanRead   {w d : Bool} {rs : List Path} : CanRead   ⟨true, w, d, rs⟩ := ⟨rfl⟩
-instance instCanWrite  {r d : Bool} {rs : List Path} : CanWrite  ⟨r, true, d, rs⟩ := ⟨rfl⟩
-instance instCanDelete {r w : Bool} {rs : List Path} : CanDelete ⟨r, w, true, rs⟩ := ⟨rfl⟩
+instance instCanRead   {w d : Bool} {ss : List Scope} : CanRead   ⟨true, w, d, ss⟩ := ⟨rfl⟩
+instance instCanWrite  {r d : Bool} {ss : List Scope} : CanWrite  ⟨r, true, d, ss⟩ := ⟨rfl⟩
+instance instCanDelete {r w : Bool} {ss : List Scope} : CanDelete ⟨r, w, true, ss⟩ := ⟨rfl⟩
+
+/-- The permission evidence for a capability whose bits are *computed* rather
+    than written literally — a `Capability.union`, say.
+
+    The instances above match the bit syntactically, which is all instance
+    resolution can do (see the module header), so a computed capability needs its
+    instance declared once: `instance : CanRead (a.union b) := .of`. The
+    obligation is discharged by `decide`, so this is evidence exactly as much as
+    the literal case is — it just cannot be found by search. -/
+theorem CanRead.of {cap : Capability} (h : cap.canRead = true := by decide) :
+    CanRead cap := ⟨h⟩
+
+/-- `CanRead.of` for writing. -/
+theorem CanWrite.of {cap : Capability} (h : cap.canWrite = true := by decide) :
+    CanWrite cap := ⟨h⟩
+
+/-- `CanRead.of` for deletion. -/
+theorem CanDelete.of {cap : Capability} (h : cap.canDelete = true := by decide) :
+    CanDelete cap := ⟨h⟩
+
+-- ── Building capabilities ───────────────────────────────────────────────────
+
+/-- The scope covering `root` and everything beneath it, for `ops` (or for every
+    operation the capability grants, when `ops` is empty). -/
+abbrev under (root : Path) (ops : List Op := []) : Scope :=
+  { ops := ops, root := root }
+
+/-- Do the global bits cover every operation the scopes name?
+
+    Not required for soundness: the bits are the upper bound, so a scope naming
+    an operation the bits withhold is simply dead, and no request can be built
+    for it either way. But such a capability is almost always a typo, and the
+    bits cannot be derived from the scopes (see the module header), so assert
+    `#guard cap.consistent` beside a capability definition to keep the two
+    halves honest. -/
+def Capability.consistent (cap : Capability) : Bool :=
+  cap.scopes.all (fun s => s.ops.all cap.allows)
+
+/-- Combine two capabilities: everything either one allows.
+
+    An *unscoped* capability means "any path", so a union involving one is
+    unscoped too — appending the scope lists would wrongly narrow it to the other
+    capability's roots. -/
+def Capability.union (a b : Capability) : Capability :=
+  { canRead   := a.canRead   || b.canRead
+  , canWrite  := a.canWrite  || b.canWrite
+  , canDelete := a.canDelete || b.canDelete
+  , scopes    := if a.scopes.isEmpty || b.scopes.isEmpty then [] else a.scopes ++ b.scopes }
+
+/-- A union grants everything its left operand granted. -/
+theorem allows_union_left {a b : Capability} {op : Op} (h : a.allows op = true) :
+    (a.union b).allows op = true := by
+  cases op <;> simp_all [Capability.allows, Capability.union]
+
+/-- A union grants everything its right operand granted. -/
+theorem allows_union_right {a b : Capability} {op : Op} (h : b.allows op = true) :
+    (a.union b).allows op = true := by
+  cases op <;> simp_all [Capability.allows, Capability.union]
+
+/-- A union admits every (operation, path) pair its left operand admitted —
+    the monotonicity that makes combining capabilities safe. -/
+theorem permits_union_left {a b : Capability} {op : Op} {p : Path}
+    (h : a.permits op p = true) : (a.union b).permits op p = true := by
+  by_cases hb : b.scopes.isEmpty = true
+  · simp [Capability.permits, Capability.union, hb]
+  · by_cases ha : a.scopes.isEmpty = true
+    · simp [Capability.permits, Capability.union, ha]
+    · rw [Capability.union, Capability.permits, if_neg (by simp [ha, hb])]
+      simp only [Capability.permits, ha, Bool.false_or] at h
+      simp only [List.any_append, h, Bool.true_or, Bool.or_true]
+
+/-- A union admits every (operation, path) pair its right operand admitted. -/
+theorem permits_union_right {a b : Capability} {op : Op} {p : Path}
+    (h : b.permits op p = true) : (a.union b).permits op p = true := by
+  by_cases ha : a.scopes.isEmpty = true
+  · simp [Capability.permits, Capability.union, ha]
+  · by_cases hb : b.scopes.isEmpty = true
+    · simp [Capability.permits, Capability.union, hb]
+    · rw [Capability.union, Capability.permits, if_neg (by simp [ha, hb])]
+      simp only [Capability.permits, hb, Bool.false_or] at h
+      simp only [List.any_append, h, Bool.or_true]
 
 -- ── Scoped paths, for paths not known statically ────────────────────────────
 
-/-- A path together with a proof that `cap` allows touching it.
+/-- A path together with a proof that `cap` allows `op` on it.
 
     For paths known at compile time the obligation on each operation is
     discharged by `decide` and this type is not needed. It exists for paths
     computed at runtime: `check?` validates one and hands back the evidence, so
-    the operations still cannot be reached without it. -/
-structure ScopedPath (cap : Capability) where
+    the operations still cannot be reached without it.
+
+    Indexed by the operation, because a capability may permit reading a path
+    without permitting writing it — evidence for one is not evidence for the
+    other. -/
+structure ScopedPath (cap : Capability) (op : Op) where
   /-- The path. -/
   path    : Path
-  /-- Evidence that `cap` permits it. -/
-  inScope : cap.permits path = true
+  /-- Evidence that `cap` permits `op` on it. -/
+  inScope : cap.permits op path = true
 
-/-- Validate a runtime path against `cap`, returning the evidence on success. -/
-def ScopedPath.check? (cap : Capability) (p : Path) : Option (ScopedPath cap) :=
-  if h : cap.permits p = true then some ⟨p, h⟩ else none
+/-- Validate a runtime path against `cap` for one operation, returning the
+    evidence on success. -/
+def ScopedPath.check? (cap : Capability) (op : Op) (p : Path) :
+    Option (ScopedPath cap op) :=
+  if h : cap.permits op p = true then some ⟨p, h⟩ else none
 
 -- ── The effect ──────────────────────────────────────────────────────────────
 
 /-- Filesystem operations available under the capability `cap`.
 
     Each constructor takes a proof that `cap` grants the operation *and* a proof
-    that `cap` allows the path, so both the permission and the scope are part of
-    what it means for the request to exist. -/
+    that `cap` allows that operation on the path, so both the permission and the
+    scope are part of what it means for the request to exist. -/
 inductive FileSystem (cap : Capability) : Type → Type where
   /-- Read a file's contents. Requires read permission and path scope. -/
   | readFile   (hp : cap.canRead = true) (path : Path)
-      (hs : cap.permits path = true) : FileSystem cap ByteArray
+      (hs : cap.permits .read path = true) : FileSystem cap ByteArray
   /-- Write (creating or overwriting) a file. Requires write permission and
       path scope. -/
   | writeFile  (hp : cap.canWrite = true) (path : Path)
-      (hs : cap.permits path = true) (data : ByteArray) : FileSystem cap Unit
+      (hs : cap.permits .write path = true) (data : ByteArray) : FileSystem cap Unit
   /-- Remove a file. Requires delete permission and path scope. -/
   | deleteFile (hp : cap.canDelete = true) (path : Path)
-      (hs : cap.permits path = true) : FileSystem cap Unit
+      (hs : cap.permits .delete path = true) : FileSystem cap Unit
 
 /-- Locates a `FileSystem` effect in the row and recovers *which* capability it
     carries.
@@ -241,32 +420,35 @@ instance instHasFileSystemThere {cap : Capability} {eff : Type → Type}
 
 /-- Read a file's contents.
 
-    Requires `CanRead cap` and a proof that `cap` allows `path`, both resolved
-    from the capability the row carries. Under a capability without the read bit,
-    or for a path outside its roots, this call does not elaborate. -/
+    Requires `CanRead cap` and a proof that `cap` allows reading `path`, both
+    resolved from the capability the row carries. Under a capability without the
+    read bit, or for a path no read-granting scope covers, this call does not
+    elaborate. -/
 def readFile {effs : List (Type → Type)} {cap : Capability}
     [fs : HasFileSystem effs cap] [perm : CanRead cap] (path : Path)
-    (hs : cap.permits path = true := by decide) : Eff effs ByteArray :=
+    (hs : cap.permits .read path = true := by decide) : Eff effs ByteArray :=
   .impure (fs.inject (.readFile perm.proof path hs)) .protect
 
 /-- Write a file, creating or overwriting it.
 
-    Requires `CanWrite cap` and path scope. Under a read-only capability, or for
-    a path outside its roots, this call does not elaborate. -/
+    Requires `CanWrite cap` and write scope on `path`. Under a read-only
+    capability, or for a path only a read-granting scope covers, this call does
+    not elaborate. -/
 def writeFile {effs : List (Type → Type)} {cap : Capability}
     [fs : HasFileSystem effs cap] [perm : CanWrite cap] (path : Path)
-    (data : ByteArray) (hs : cap.permits path = true := by decide) :
+    (data : ByteArray) (hs : cap.permits .write path = true := by decide) :
     Eff effs Unit :=
   .impure (fs.inject (.writeFile perm.proof path hs data)) .protect
 
 /-- Remove a file.
 
-    Requires `CanDelete cap` and path scope. A capability granting read and write
-    but not delete makes this call fail to elaborate — the distinction Haskell's
-    type-level effect rows cannot draw. -/
+    Requires `CanDelete cap` and delete scope on `path`. A capability granting
+    read and write but not delete makes this call fail to elaborate — as does one
+    granting all three globally but only reading under `path`'s directory. Those
+    are the distinctions Haskell's type-level effect rows cannot draw. -/
 def deleteFile {effs : List (Type → Type)} {cap : Capability}
     [fs : HasFileSystem effs cap] [perm : CanDelete cap] (path : Path)
-    (hs : cap.permits path = true := by decide) : Eff effs Unit :=
+    (hs : cap.permits .delete path = true := by decide) : Eff effs Unit :=
   .impure (fs.inject (.deleteFile perm.proof path hs)) .protect
 
 /-- Read a file's contents and decode them as UTF-8, or `none` if the bytes are
@@ -277,13 +459,13 @@ def deleteFile {effs : List (Type → Type)} {cap : Capability}
     crash. -/
 def readFileString? {effs : List (Type → Type)} {cap : Capability}
     [HasFileSystem effs cap] [CanRead cap] (path : Path)
-    (hs : cap.permits path = true := by decide) : Eff effs (Option String) :=
+    (hs : cap.permits .read path = true := by decide) : Eff effs (Option String) :=
   String.fromUTF8? <$> readFile path hs
 
 /-- Write a string to a file as UTF-8. -/
 def writeFileString {effs : List (Type → Type)} {cap : Capability}
     [HasFileSystem effs cap] [CanWrite cap] (path : Path) (contents : String)
-    (hs : cap.permits path = true := by decide) : Eff effs Unit :=
+    (hs : cap.permits .write path = true := by decide) : Eff effs Unit :=
   writeFile path contents.toUTF8 hs
 
 -- ── Operations on runtime-validated paths ───────────────────────────────────
@@ -293,19 +475,19 @@ def writeFileString {effs : List (Type → Type)} {cap : Capability}
     The `ScopedPath` supplies the scope evidence, so no `decide` is involved and
     the path need not be statically known. -/
 def readFileAt {effs : List (Type → Type)} {cap : Capability}
-    [fs : HasFileSystem effs cap] [perm : CanRead cap] (sp : ScopedPath cap) :
+    [fs : HasFileSystem effs cap] [perm : CanRead cap] (sp : ScopedPath cap .read) :
     Eff effs ByteArray :=
   .impure (fs.inject (.readFile perm.proof sp.path sp.inScope)) .protect
 
 /-- Write a file at a path validated at runtime. -/
 def writeFileAt {effs : List (Type → Type)} {cap : Capability}
-    [fs : HasFileSystem effs cap] [perm : CanWrite cap] (sp : ScopedPath cap)
+    [fs : HasFileSystem effs cap] [perm : CanWrite cap] (sp : ScopedPath cap .write)
     (data : ByteArray) : Eff effs Unit :=
   .impure (fs.inject (.writeFile perm.proof sp.path sp.inScope data)) .protect
 
 /-- Delete a file at a path validated at runtime. -/
 def deleteFileAt {effs : List (Type → Type)} {cap : Capability}
-    [fs : HasFileSystem effs cap] [perm : CanDelete cap] (sp : ScopedPath cap) :
+    [fs : HasFileSystem effs cap] [perm : CanDelete cap] (sp : ScopedPath cap .delete) :
     Eff effs Unit :=
   .impure (fs.inject (.deleteFile perm.proof sp.path sp.inScope)) .protect
 
@@ -345,6 +527,12 @@ abbrev full : Capability :=
     The interesting shape: two capabilities can grant the same *operations* and
     still differ in which *arguments* they admit. -/
 abbrev sandboxed (root : Path) : Capability :=
-  { canRead := true, canWrite := true, roots := [root] }
+  { canRead := true, canWrite := true, scopes := [under root] }
+
+/-- Read and write under `workRoot`, read-only under `configRoot`, nothing
+    anywhere else — the two-tier shape a single `roots` list cannot express. -/
+abbrev workspace (workRoot configRoot : Path) : Capability :=
+  { canRead := true, canWrite := true
+  , scopes := [under workRoot [.read, .write], under configRoot [.read]] }
 
 end Control.Monad.Effect.FileSystem

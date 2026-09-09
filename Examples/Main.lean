@@ -28,6 +28,7 @@ import Examples.WebSockets
 import Examples.Vault
 import Examples.Vector
 import Examples.Todo
+import Examples.Effects
 
 /-- Registry of runnable examples: `name`, one-line description, entry point.
 
@@ -94,6 +95,9 @@ unsafe def examples : List (String × String × (List String → IO Unit)) :=
     ("vector",
        "Data.Vector-derived Array combinators: generate/ifilter, foldl1'/foldr1/ifoldl'/ifoldr, and/or/product/notElem, backpermute/slice — self-checking demo",
        Examples.Vector.run),
+    ("effects",
+       "Control.Monad.Effect.{FileSystem,HTTP,PostgreSQL,Trace}: capability-restricted effects over real scratch files, a loopback HTTP server and a Podman-started PostgreSQL — self-checking demo; `effects no-db` skips the container part",
+       Examples.Effects.run),
     ("todo",
        "Web.Html/Web.Css (illegal nesting is a compile-time error) rendering an in-memory TODO list over Network.WebApp.Server — self-checks then keeps serving; `todo check` self-checks and exits",
        Examples.Todo.run) ]
