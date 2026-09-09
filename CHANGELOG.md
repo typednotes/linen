@@ -4,6 +4,44 @@ All notable changes to `linen` are documented here, one entry per released
 version (see `version` in `lakefile.lean`). Dates are UTC, in `YYYY-MM-DD`
 format.
 
+## [0.15.0] — 2026-09-09
+
+- **Renamed `Linen.Control.Monad.Freer` to `Linen.Control.Monad.Effect`**, with
+  every effect module under it (`.Reader`, `.State`, `.Error`, `.Writer`,
+  `.NonDet`, `.Coroutine`, `.Fresh`, `.Trace`, `.FileSystem`) and the namespace
+  `Control.Monad.Freer` → `Control.Monad.Effect`. `Freer` named the *encoding*
+  and the Hackage package the port came from, not what the modules are for; the
+  capability effects added below have no `freer-simple` counterpart at all. The
+  `Eff` type, and every operation on it, are unchanged. References to upstream's
+  own `Control.Monad.Freer.TH` and `Control.Monad.Freer.Internal` keep their
+  Haskell names, as does `docs/imports/FreerSimple/`, since both are provenance.
+- Added `Linen.Control.Monad.Effect.HTTP` (`linen`-original): the capability
+  idiom from `.FileSystem`, applied to HTTP. A `Capability` value gates which
+  **methods** exist (`canGet`/`canPost`/…, as `Prop`-class instances) and which
+  **URLs** they may be called on (`scopes`, as a `decide`-discharged
+  obligation), with per-scope method lists — so one capability can say "GET
+  anywhere under `/v1`, POST only to `/v1/events`". `Url` splits the host into
+  DNS labels and the path into segments, so `api.example.com.evil.com` is a
+  different host rather than a string-prefix extension of one, and `/v1-admin`
+  is not under `/v1`; scheme and port are part of the scope too. Literals use
+  the `u!` macro; runtime URLs go through `ScopedUrl.check?`. The handler
+  dispatches through `Network.HTTP.Client`, with `runHTTPWith` taking the
+  transport as a parameter so tests need no network.
+- Added `Linen.Control.Monad.Effect.PostgreSQL` (`linen`-original): the same
+  idiom over a database, restricting in three parts. The connection target
+  (`host`/`port`/`database`/`user`) is **structural** — a term of
+  `Eff [PostgreSQL cap] α` names no connection at all, and `runPostgreSQL`
+  derives one from the capability alone. Statement kinds (`canSelect`/`canInsert`/
+  `canUpdate`/`canDelete`) are `Prop`-class instances, and table scope
+  (`tables`) is a `decide`-discharged obligation. Queries are an AST rather
+  than strings, for the reason paths are component lists: a `String` of SQL
+  cannot be checked by `decide`. Rendering derives from the checked value, so
+  the SQL cannot disagree with what was authorised, and every literal is bound
+  as a `$n` parameter. There is deliberately no `rawSql` escape hatch. `dryRun`
+  interprets a computation into the SQL it would send, so the tests assert real
+  statements without a live server.
+- `Network.HTTP.Types.StdMethod` now derives `DecidableEq` alongside `BEq`.
+
 ## [0.14.0] — 2026-09-06
 
 - Added `Linen.Control.Monad.Freer` and `Linen.Data.OpenUnion`: extensible

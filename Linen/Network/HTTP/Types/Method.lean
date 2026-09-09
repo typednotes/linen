@@ -8,7 +8,7 @@ namespace Network.HTTP.Types
     $$\text{StdMethod} = \text{GET} \mid \text{POST} \mid \text{HEAD} \mid \ldots$$ -/
 inductive StdMethod where
   | GET | POST | HEAD | PUT | DELETE | TRACE | CONNECT | OPTIONS | PATCH
-deriving BEq, Repr, Inhabited
+deriving BEq, DecidableEq, Repr, Inhabited
 
 instance : ToString StdMethod where
   toString

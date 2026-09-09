@@ -11,7 +11,7 @@
   `effs`, applied to `α` — the type-level analogue of a tagged union whose set of
   tags is a list of `Type → Type`. `Member eff effs` witnesses that `eff` occurs
   in `effs`, and provides the injection into, and partial projection out of, the
-  union. `Control.Monad.Freer` builds the `Eff` monad on top of this.
+  union. `Control.Monad.Effect` builds the `Eff` monad on top of this.
 
   ## Substitutions / deviations
 
@@ -56,7 +56,7 @@ inductive Union : List (Type → Type) → Type → Type 1 where
 /-- The empty row admits no effects, so `Union [] α` is uninhabited and anything
     follows from it — the `Empty.elim` of effect rows.
 
-    This is what lets `Control.Monad.Freer.Eff.run` discharge its otherwise
+    This is what lets `Control.Monad.Effect.Eff.run` discharge its otherwise
     impossible branch: a computation over the empty row cannot be performing an
     effect. -/
 def Union.elim0 {α : Type} {C : Sort u} (u : Union [] α) : C := nomatch u

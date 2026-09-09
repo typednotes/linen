@@ -1,5 +1,5 @@
 /-
-  `Control.Monad.Freer.FileSystem` — a capability-restricted filesystem effect
+  `Control.Monad.Effect.FileSystem` — a capability-restricted filesystem effect
 
   ## Not a Haskell port
 
@@ -95,11 +95,11 @@
   `streamly-core`'s buffer-size constants), so per AGENTS.md's stdlib-first
   precedence the handler calls Lean core's `IO.FS` directly.
 -/
-import Linen.Control.Monad.Freer
+import Linen.Control.Monad.Effect
 
-namespace Control.Monad.Freer.FileSystem
+namespace Control.Monad.Effect.FileSystem
 
-open Data.OpenUnion Control.Monad.Freer
+open Data.OpenUnion Control.Monad.Effect
 
 -- ── Paths ───────────────────────────────────────────────────────────────────
 
@@ -347,4 +347,4 @@ abbrev full : Capability :=
 abbrev sandboxed (root : Path) : Capability :=
   { canRead := true, canWrite := true, roots := [root] }
 
-end Control.Monad.Freer.FileSystem
+end Control.Monad.Effect.FileSystem

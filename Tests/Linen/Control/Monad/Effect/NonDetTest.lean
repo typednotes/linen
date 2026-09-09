@@ -1,14 +1,14 @@
 /-
-  Tests for `Linen.Control.Monad.Freer.NonDet`.
+  Tests for `Linen.Control.Monad.Effect.NonDet`.
 
   Covers `mzero`, `mplus`, `choose`, `select`, `guard`, `makeChoiceA` and
   `makeChoiceFirst`.
 -/
-import Linen.Control.Monad.Freer.NonDet
+import Linen.Control.Monad.Effect.NonDet
 
-open Data.OpenUnion Control.Monad.Freer Control.Monad.Freer.NonDet
+open Data.OpenUnion Control.Monad.Effect Control.Monad.Effect.NonDet
 
-namespace Tests.Control.Monad.Freer.NonDet
+namespace Tests.Control.Monad.Effect.NonDet
 
 -- A deterministic computation has exactly one result.
 #guard Eff.run (makeChoiceA (pure 1 : Eff [NonDet] Nat)) == [1]
@@ -76,4 +76,4 @@ example : Eff [NonDet] Nat := do
   guard (x > 1)
   pure x
 
-end Tests.Control.Monad.Freer.NonDet
+end Tests.Control.Monad.Effect.NonDet

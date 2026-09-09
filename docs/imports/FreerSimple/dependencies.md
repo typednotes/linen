@@ -10,15 +10,15 @@ An edge **A → B** means *module A imports module B*, so **B must be built befo
 All modules below are ported (or resolved away) — kept commented out as a completed checklist.
 
 <!-- 1. `Data.OpenUnion` (merges upstream `Data.OpenUnion` + `Data.OpenUnion.Internal`) -->
-<!-- 2. `Control.Monad.Freer` (merges upstream `Control.Monad.Freer.Internal` + the `Control.Monad.Freer` re-export shim) -->
-<!-- 3. `Control.Monad.Freer.Reader` -->
-<!-- 4. `Control.Monad.Freer.State` -->
-<!-- 5. `Control.Monad.Freer.Error` -->
-<!-- 6. `Control.Monad.Freer.Writer` -->
-<!-- 7. `Control.Monad.Freer.NonDet` (the `NonDet` type itself lives in upstream's `Internal`; `msplit` not ported — see below) -->
-<!-- 8. `Control.Monad.Freer.Coroutine` -->
-<!-- 9. `Control.Monad.Freer.Fresh` -->
-<!-- 10. `Control.Monad.Freer.Trace` -->
+<!-- 2. `Control.Monad.Effect` (merges upstream `Control.Monad.Freer.Internal` + upstream's `Control.Monad.Freer` re-export shim) -->
+<!-- 3. `Control.Monad.Effect.Reader` -->
+<!-- 4. `Control.Monad.Effect.State` -->
+<!-- 5. `Control.Monad.Effect.Error` -->
+<!-- 6. `Control.Monad.Effect.Writer` -->
+<!-- 7. `Control.Monad.Effect.NonDet` (the `NonDet` type itself lives in upstream's `Internal`; `msplit` not ported — see below) -->
+<!-- 8. `Control.Monad.Effect.Coroutine` -->
+<!-- 9. `Control.Monad.Effect.Fresh` -->
+<!-- 10. `Control.Monad.Effect.Trace` -->
 <!-- 11. *(`freer-simple` package root — no upstream module; covered by `linen`'s own root)* -->
 
 ## Own upstream dependencies
@@ -68,7 +68,7 @@ rule (Lean stdlib > what `linen` already has from Haskell > new Hackage source):
 
 - **`Control.Monad.Freer.TH` dropped** — see `template-haskell` above.
 
-- **`msplit` is not ported** (the one omission from `Control.Monad.Freer.NonDet`).
+- **`msplit` is not ported** (the one omission from `Control.Monad.Effect.NonDet`).
   Upstream peels off the first solution plus a computation for the rest, using a
   queue of pending branches. Its recursion resumes from a *queued* computation
   rather than a subterm of the one being traversed, so it is not structurally
@@ -98,7 +98,7 @@ rule (Lean stdlib > what `linen` already has from Haskell > new Hackage source):
   error type appears only in its `Member (Error ε) effs` constraint, so instance
   search stalls on `Member (Error ?ε) effs`. `HasError`/`HasWriter` carry that
   type as an `outParam`, so resolving against the row determines it. Same device
-  as `Control.Monad.Freer.FileSystem`'s `HasFileSystem`. The `Member`-based
+  as `Control.Monad.Effect.FileSystem`'s `HasFileSystem`. The `Member`-based
   `send` remains available and is what `Reader`/`State`/`Fresh`/`Trace` use.
 
 - **No `Monoid` class for `Writer`.** Upstream's `runWriter` requires
@@ -133,12 +133,14 @@ rule (Lean stdlib > what `linen` already has from Haskell > new Hackage source):
   normally. This is a genuine universe bump relative to every other transformer
   in `Linen/Control/Monad/*`, none of which is indexed by a *list* of monads.
 
-## `Control.Monad.Freer.FileSystem` — no upstream counterpart
+## The capability effects — no upstream counterpart
 
-`Linen/Control/Monad/Freer/FileSystem.lean` is **`linen`-original** and therefore
-not part of the topological checklist above (same treatment as
-`Control.Exception.Lens` relative to the `lens` import). It demonstrates what the
-ported mechanism gains from dependent types, at two strengths:
+`Linen/Control/Monad/Effect/{FileSystem,HTTP,PostgreSQL}.lean` are
+**`linen`-original** and therefore not part of the topological checklist above
+(same treatment as `Control.Exception.Lens` relative to the `lens` import). They
+demonstrate what the ported mechanism gains from dependent types.
+
+`FileSystem` came first and sets the pattern, at two strengths:
 
 1. **Permissions** — which *operations* are allowed. A `Capability` value indexes
    the effect and each operation carries a `Prop`-valued proof that the
@@ -172,3 +174,33 @@ Two implementation notes worth recording, both discovered by construction:
   `/tmp/sandbox` but is not inside it, and the tests pin that case. The `p!`
   macro gives literals ordinary path syntax, splitting at macro-expansion time so
   the result stays a literal list.
+
+
+`HTTP` and `PostgreSQL` are the same pattern at two further instances, and both
+were written to test whether it generalises. It does, with one refinement each:
+
+- **`HTTP`** puts a method list inside each URL scope, so the *argument* half of
+  the capability constrains `(method, url)` pairs rather than URLs alone — "GET
+  anywhere under `/v1`, POST only to `/v1/events`" is one capability, not two.
+  The `Url` type repeats the `Path` lesson twice over: a host is DNS labels and a
+  path is segments, because `api.example.com.evil.com` is a string-prefix
+  extension of `api.example.com` and `/v1-admin` is one of `/v1`, and neither is
+  inside the other. Scheme and port are matched exactly and are part of the
+  scope.
+- **`PostgreSQL`** adds a third, *structural* restriction below the two: the
+  database, instance and role are capability fields and the handler derives its
+  connection string from them alone, so there is no obligation to discharge
+  because no term of `Eff [PostgreSQL cap] α` could name an alternative. Its
+  queries are an AST rather than strings for exactly the reason paths are
+  component lists — a `String` of SQL is opaque to `decide` — with the added
+  benefit that the rendered SQL is derived from the checked value and so cannot
+  disagree with it. There is deliberately no `rawSql` escape hatch: it would
+  weaken every guarantee from "cannot be written" to "cannot be written without
+  lying".
+
+One correction to the note above, found while writing these two: auto-param
+failures **are** capturable by `#guard_msgs` in Lean 4.33.1, contrary to what
+`FileSystemTest.lean`'s header says. The tests still assert scope rejections as
+`theorem … ≠ true := by decide` rather than as message matches, because that is
+the stronger statement and does not rot when a compiler version rewords its
+diagnostics — but the reason given for it was wrong.

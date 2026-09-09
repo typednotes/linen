@@ -1,5 +1,5 @@
 /-
-  `Control.Monad.Freer.State` — the state effect over `Eff`
+  `Control.Monad.Effect.State` — the state effect over `Eff`
 
   ## Haskell source
 
@@ -9,17 +9,17 @@
 
   ## Relationship to `Control.Monad.State`
 
-  As with `Control.Monad.Freer.Reader`, this does **not** replace `linen`'s
+  As with `Control.Monad.Effect.Reader`, this does **not** replace `linen`'s
   mtl-style `Control.Monad.State` (`StateT`/`get`/`put`), which remains the
   recommended API for ordinary state threading. This module illustrates the
   effect-row mechanism and composes with other row effects in one `Eff`
   computation.
 -/
-import Linen.Control.Monad.Freer
+import Linen.Control.Monad.Effect
 
-namespace Control.Monad.Freer.State
+namespace Control.Monad.Effect.State
 
-open Data.OpenUnion Control.Monad.Freer
+open Data.OpenUnion Control.Monad.Effect
 
 -- ── The effect ──────────────────────────────────────────────────────────────
 
@@ -81,4 +81,4 @@ def execState {σ : Type} {effs : List (Type → Type)} {α : Type}
     (s : σ) (m : Eff (State σ :: effs) α) : Eff effs σ :=
   Prod.snd <$> runState s m
 
-end Control.Monad.Freer.State
+end Control.Monad.Effect.State

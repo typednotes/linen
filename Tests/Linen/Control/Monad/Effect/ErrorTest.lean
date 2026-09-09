@@ -1,15 +1,15 @@
 /-
-  Tests for `Linen.Control.Monad.Freer.Error`.
+  Tests for `Linen.Control.Monad.Effect.Error`.
 
   Covers `throwError`, `runError`, `catchError`, `orElseValue`, and that errors
   compose with other effects in one row.
 -/
-import Linen.Control.Monad.Freer.Error
-import Linen.Control.Monad.Freer.State
+import Linen.Control.Monad.Effect.Error
+import Linen.Control.Monad.Effect.State
 
-open Data.OpenUnion Control.Monad.Freer Control.Monad.Freer.Error
+open Data.OpenUnion Control.Monad.Effect Control.Monad.Effect.Error
 
-namespace Tests.Control.Monad.Freer.Error
+namespace Tests.Control.Monad.Effect.Error
 
 -- A computation that never throws succeeds.
 #guard (Eff.run (runError (pure 3 : Eff [Error String] Nat))) matches .ok 3
@@ -89,4 +89,4 @@ example : Eff [Error String] Nat := do
   let n ← pure 10
   if n > 5 then throwError "too large" else pure n
 
-end Tests.Control.Monad.Freer.Error
+end Tests.Control.Monad.Effect.Error

@@ -195,7 +195,7 @@ the project overview and quick start.
   Ported safe-by-construction — upstream `freer-simple` backs `Union` with an
   `unsafeCoerce`d `(Int, Any)` pair for GHC dispatch speed, which buys nothing
   in Lean.
-- `Control.Monad.Freer` — the `Eff` monad over an open effect row, so a
+- `Control.Monad.Effect` — the `Eff` monad over an open effect row, so a
   signature is an effect whitelist: `Eff [Reader Config] α` provably cannot
   touch state, the filesystem or the network. `send` lifts one operation given
   `Member`; `interpret`/`reinterpret`/`raise` reshape the row; `run`/`runM`/
@@ -203,34 +203,34 @@ the project overview and quick start.
   guard against quadratic left-nested `>>=`; the direct Freer encoding is
   behaviour-identical) and `Control.Monad.Freer.TH` with it (no Template
   Haskell in Lean).
-- `Control.Monad.Freer.Reader` / `.State` — the reader and state effects
+- `Control.Monad.Effect.Reader` / `.State` — the reader and state effects
   expressed over `Eff`, illustrating the row mechanism and composing in a
   single computation. Not replacements for the mtl-style
   `Control.Monad.Reader`/`State`, which remain the recommended API for
   ordinary environment/state threading.
-- `Control.Monad.Freer.Error` — failure in the row: `throwError`/`runError`
+- `Control.Monad.Effect.Error` — failure in the row: `throwError`/`runError`
   (into `Except`)/`catchError`, the last built on `interpose` so recovery does
   not remove the effect. The request answers with `Empty`, recording that a
   throw never returns.
-- `Control.Monad.Freer.Writer` — accumulate output: `tell`, with `runWriter`
+- `Control.Monad.Effect.Writer` — accumulate output: `tell`, with `runWriter`
   taking the monoid's unit and append explicitly (Lean has no `Monoid` class)
   and `runWriterAppend` covering `[Append ω] [Inhabited ω]`.
-- `Control.Monad.Freer.NonDet` — branching search: `mzero`/`mplus`/`select`/
+- `Control.Monad.Effect.NonDet` — branching search: `mzero`/`mplus`/`select`/
   `guard`, collected by `makeChoiceA`. A choice is one request answered with a
   `Bool` *both ways*, so the continuation runs once per branch. `msplit` is not
   ported — it is not structurally recursive and genuinely diverges on an
   infinite search tree.
-- `Control.Monad.Freer.Coroutine` — suspend and resume: `yield`, and `runC`
+- `Control.Monad.Effect.Coroutine` — suspend and resume: `yield`, and `runC`
   reporting a `Status` that is either `done` or will `continue` given a reply.
   `Status` is self-referential *through* `Eff`, which is why `Eff`'s payload is
   universe-polymorphic; driving a coroutine to completion is the caller's job,
   since one may yield forever.
-- `Control.Monad.Freer.Fresh` — hand out distinct `Nat`s: `fresh`/`runFresh`.
-- `Control.Monad.Freer.Trace` — diagnostics in the row, so `Eff [Trace] α`
+- `Control.Monad.Effect.Fresh` — hand out distinct `Nat`s: `fresh`/`runFresh`.
+- `Control.Monad.Effect.Trace` — diagnostics in the row, so `Eff [Trace] α`
   announces that a computation logs and a row without `Trace` provably does
   not: `trace`, with `runTrace` printing to stdout and `runTracePure`
   collecting purely.
-- `Control.Monad.Freer.FileSystem` — a capability-restricted filesystem
+- `Control.Monad.Effect.FileSystem` — a capability-restricted filesystem
   effect, `linen`-original, showing what an effect system gains from dependent
   types, at two strengths. **Permissions:** `FileSystem cap` is indexed by a
   `Capability` **value** (`canRead`/`canWrite`/`canDelete`) and each operation
@@ -250,6 +250,41 @@ the project overview and quick start.
   paths go through `ScopedPath.check?`, which validates and returns the
   evidence. The handler re-checks nothing: every proof is in the constructor,
   so enforcement happens once, statically.
+- `Control.Monad.Effect.HTTP` — the same capability idiom applied to an HTTP
+  client, `linen`-original. **Method permissions:** `HTTP cap` is indexed by a
+  `Capability` value whose `canGet`/`canHead`/`canPost`/`canPut`/`canPatch`/
+  `canDelete` bits are demanded as `Prop`-class instances, so `post` under a
+  read-only web capability fails to elaborate. **URL scope:** the capability's
+  `scopes` confine every request, as an obligation `cap.permits m url = true`
+  discharged by `decide`, and each scope carries its own method list — so one
+  capability expresses "GET anywhere under `/v1`, POST only to `/v1/events`",
+  which is a restriction on *(method, argument)* pairs that no type-level row
+  can reach. `Url` is structured for the reason `Path` is: a host is DNS
+  labels and a path is segments, so `api.example.com.evil.com` is a different
+  host rather than a string-prefix extension of `api.example.com`, and
+  `/v1-admin` is not under `/v1`; scheme and port are matched exactly too.
+  Literals use the `u!` macro, runtime URLs `ScopedUrl.check?`. Query strings
+  are passed separately and deliberately take no part in scoping, not being
+  part of the path hierarchy. `runHTTP` dispatches through
+  `Network.HTTP.Client`; `runHTTPWith` takes the transport as a parameter, so
+  the effect is testable without a network.
+- `Control.Monad.Effect.PostgreSQL` — the idiom over a database, restricting in
+  three parts of decreasing strength, `linen`-original. **Connection target:**
+  `host`/`port`/`database`/`user` are capability fields and `runPostgreSQL`
+  builds its connection string from them alone, so a computation cannot name
+  another database or authenticate as another role — structural, with no
+  obligation to discharge because no term could express the alternative. **Statement kinds:**
+  `canSelect`/`canInsert`/`canUpdate`/`canDelete` as `Prop`-class instances.
+  **Table scope:** `tables`, as a `decide`-discharged obligation, so a
+  reporting capability admits `orders` and refuses `users` while granting the
+  same `SELECT`. Queries are an AST rather than strings, for exactly the reason
+  paths are component lists — a `String` of SQL is opaque to `decide` — and the
+  rendered SQL is derived from the checked value, so the two cannot disagree;
+  every literal is bound as a `$n` parameter, so there is no injection surface
+  either. There is deliberately no `rawSql` escape hatch, which would weaken
+  every guarantee to "cannot be written without lying". `runPostgreSQL` goes
+  through `Database.SQL.Session`; `dryRun` interprets purely into the SQL a
+  computation would send, so tests need no live server.
 - `Control.Concurrent.STM.TVar` — a transactional variable over `IO.Ref`:
   `newTVarIO`/`newTVar`/`readTVar`/`writeTVar`/`modifyTVar'`.
 - `Control.Concurrent.STM.TMVar` — `TVar (Option α)`: `newTMVar(IO)`/
@@ -2121,10 +2156,12 @@ termination checker can see); everything else is ordinary total recursion.
 | `Linen.Control.Concurrent` | thread management (`forkIO`/`forkFinally`/`forkGreen`/`killThread`/`waitThread`) |
 | `Linen.Control.Monad.STM` | STM = `BaseIO (STMResult _)`, global-mutex-serialized: `atomically`/`retry`/`orElse`/`check` |
 | `Linen.Data.OpenUnion` | open union over an effect row: `Union` (`here`/`there`/`elim0`), `Member` (`inj`/`prj`) |
-| `Linen.Control.Monad.Freer` | the `Eff` monad over an effect row: `send`/`run`/`runM`/`interpret`/`interpretM`/`reinterpret`/`raise` |
-| `Linen.Control.Monad.Freer.Reader` | reader effect over `Eff`: `ask`/`asks`/`runReader`/`withReader` |
-| `Linen.Control.Monad.Freer.State` | state effect over `Eff`: `get`/`put`/`modify`/`gets`/`runState`/`evalState`/`execState` |
-| `Linen.Control.Monad.Freer.FileSystem` | capability-restricted filesystem effect: `Capability`, `CanRead`/`CanWrite`/`CanDelete` proof obligations, `readFile`/`writeFile`/`deleteFile`, `runFileSystem` |
+| `Linen.Control.Monad.Effect` | the `Eff` monad over an effect row: `send`/`run`/`runM`/`interpret`/`interpretM`/`reinterpret`/`raise` |
+| `Linen.Control.Monad.Effect.Reader` | reader effect over `Eff`: `ask`/`asks`/`runReader`/`withReader` |
+| `Linen.Control.Monad.Effect.State` | state effect over `Eff`: `get`/`put`/`modify`/`gets`/`runState`/`evalState`/`execState` |
+| `Linen.Control.Monad.Effect.FileSystem` | capability-restricted filesystem effect: `Capability`, `CanRead`/`CanWrite`/`CanDelete` proof obligations, `readFile`/`writeFile`/`deleteFile`, `runFileSystem` |
+| `Linen.Control.Monad.Effect.HTTP` | capability-restricted HTTP client effect: `Capability` of method bits + URL `scopes`, `CanGet`/`CanPost`/… proof obligations, `u!` URL literals, `get`/`post`/`put`/`patch`/`delete`, `runHTTP`/`runHTTPWith` |
+| `Linen.Control.Monad.Effect.PostgreSQL` | capability-restricted PostgreSQL effect: capability-pinned database/user, `CanSelect`/`CanInsert`/`CanUpdate`/`CanDelete` proof obligations, table scope, parameterised `Query` AST, `runPostgreSQL`/`dryRun` |
 | `Linen.Control.Concurrent.STM.TVar` | transactional variable over `IO.Ref`: `newTVarIO`/`readTVar`/`writeTVar`/`modifyTVar'` |
 | `Linen.Control.Concurrent.STM.TMVar` | `TVar (Option α)`: `takeTMVar`/`putTMVar`/`readTMVar`/`tryTakeTMVar`/`tryPutTMVar`/`isEmptyTMVar` |
 | `Linen.Control.Concurrent.STM.TQueue` | transactional two-list FIFO: `writeTQueue`/`readTQueue`/`tryReadTQueue`/`isEmptyTQueue`/`peekTQueue` |

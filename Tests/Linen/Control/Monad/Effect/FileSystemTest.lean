@@ -1,5 +1,5 @@
 /-
-  Tests for `Linen.Control.Monad.Freer.FileSystem`.
+  Tests for `Linen.Control.Monad.Effect.FileSystem`.
 
   Covers both halves of the capability system:
 
@@ -15,11 +15,11 @@
 
   Plus a real round-trip through `IO.FS` under a capability.
 -/
-import Linen.Control.Monad.Freer.FileSystem
+import Linen.Control.Monad.Effect.FileSystem
 
-open Data.OpenUnion Control.Monad.Freer Control.Monad.Freer.FileSystem
+open Data.OpenUnion Control.Monad.Effect Control.Monad.Effect.FileSystem
 
-namespace Tests.Control.Monad.Freer.FileSystem
+namespace Tests.Control.Monad.Effect.FileSystem
 
 -- ── The `p!` path macro ─────────────────────────────────────────────────────
 
@@ -185,4 +185,4 @@ def roundTrip (path : Path) (hs : full.permits path = true := by decide) :
   -- `deleteFile` really ran, so the scratch file is gone afterwards.
   pure (contents, ← (dir / "linen-freer-fs-test.tmp").pathExists)
 
-end Tests.Control.Monad.Freer.FileSystem
+end Tests.Control.Monad.Effect.FileSystem

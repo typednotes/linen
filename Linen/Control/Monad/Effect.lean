@@ -1,5 +1,5 @@
 /-
-  `Control.Monad.Freer` — the `Eff` monad over an open row of effects
+  `Control.Monad.Effect` — the `Eff` monad over an open row of effects
 
   ## Haskell source
 
@@ -39,7 +39,7 @@
   - **Universe.** `Type → Type` inhabits `Type 1`, so `Eff`'s result universe is
     at least 1. The payload is universe-polymorphic (`Type u` in,
     `Type (max 1 u)` out) rather than pinned to `Type 0`, because
-    `Control.Monad.Freer.Coroutine`'s `Status` type holds an
+    `Control.Monad.Effect.Coroutine`'s `Status` type holds an
     `Eff effs (Status …)` and so must itself live in `Type 1`; with a `Type 0`-only
     payload that is not expressible. Since the result universe is `max 1 u`, a
     `Type 1` payload still yields a `Type 1` computation, which is what breaks
@@ -49,7 +49,7 @@
 -/
 import Linen.Data.OpenUnion
 
-namespace Control.Monad.Freer
+namespace Control.Monad.Effect
 
 open Data.OpenUnion
 
@@ -196,4 +196,4 @@ def raise {eff : Type → Type} {effs : List (Type → Type)} {α : Type u} :
   | .protect a  => .protect a
   | .impure u k => .impure (.there u) (fun b => raise (k b))
 
-end Control.Monad.Freer
+end Control.Monad.Effect

@@ -1,13 +1,13 @@
 /-
-  Tests for `Linen.Control.Monad.Freer.Reader`.
+  Tests for `Linen.Control.Monad.Effect.Reader`.
 
   Covers the reader effect over `Eff`: `ask`, `asks`, `runReader`, `withReader`.
 -/
-import Linen.Control.Monad.Freer.Reader
+import Linen.Control.Monad.Effect.Reader
 
-open Data.OpenUnion Control.Monad.Freer Control.Monad.Freer.Reader
+open Data.OpenUnion Control.Monad.Effect Control.Monad.Effect.Reader
 
-namespace Tests.Control.Monad.Freer.Reader
+namespace Tests.Control.Monad.Effect.Reader
 
 -- `ask` returns the environment as-is.
 #guard Eff.run (runReader 5 (ask : Eff [Reader Nat] Nat)) == 5
@@ -40,4 +40,4 @@ example : Eff [Reader Config] Nat := do
   let limit ← ask
   pure (limit * 2)
 
-end Tests.Control.Monad.Freer.Reader
+end Tests.Control.Monad.Effect.Reader

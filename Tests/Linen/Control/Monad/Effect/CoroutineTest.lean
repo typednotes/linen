@@ -1,16 +1,16 @@
 /-
-  Tests for `Linen.Control.Monad.Freer.Coroutine`.
+  Tests for `Linen.Control.Monad.Effect.Coroutine`.
 
   Covers `yield`, `yield'`, `runC`, `interposeC`, `replyC` and the `Status`
   accessors — including a step-bounded driver, since running a coroutine to
   completion is not total in general.
 -/
-import Linen.Control.Monad.Freer.Coroutine
-import Linen.Control.Monad.Freer.State
+import Linen.Control.Monad.Effect.Coroutine
+import Linen.Control.Monad.Effect.State
 
-open Data.OpenUnion Control.Monad.Freer Control.Monad.Freer.Coroutine
+open Data.OpenUnion Control.Monad.Effect Control.Monad.Effect.Coroutine
 
-namespace Tests.Control.Monad.Freer.Coroutine
+namespace Tests.Control.Monad.Effect.Coroutine
 
 -- ── A bounded driver ────────────────────────────────────────────────────────
 
@@ -125,4 +125,4 @@ def driveFor {a b r : Type} :
       State.put ((Status.yielded? st).getD 99)
       State.get))) == (1, 1)
 
-end Tests.Control.Monad.Freer.Coroutine
+end Tests.Control.Monad.Effect.Coroutine

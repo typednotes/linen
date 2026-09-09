@@ -1,15 +1,15 @@
 /-
-  Tests for `Linen.Control.Monad.Freer.Writer`.
+  Tests for `Linen.Control.Monad.Effect.Writer`.
 
   Covers `tell`, `runWriter` (explicit monoid), `runWriterAppend`, `execWriter`
   and `evalWriter`.
 -/
-import Linen.Control.Monad.Freer.Writer
-import Linen.Control.Monad.Freer.State
+import Linen.Control.Monad.Effect.Writer
+import Linen.Control.Monad.Effect.State
 
-open Data.OpenUnion Control.Monad.Freer Control.Monad.Freer.Writer
+open Data.OpenUnion Control.Monad.Effect Control.Monad.Effect.Writer
 
-namespace Tests.Control.Monad.Freer.Writer
+namespace Tests.Control.Monad.Effect.Writer
 
 -- Nothing told: the accumulator stays at the unit.
 #guard Eff.run (runWriter ([] : List Nat) (· ++ ·)
@@ -71,4 +71,4 @@ example : Eff [Writer (List String)] Unit := do
   tell ["starting"]
   tell ["done"]
 
-end Tests.Control.Monad.Freer.Writer
+end Tests.Control.Monad.Effect.Writer

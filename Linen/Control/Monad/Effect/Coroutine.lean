@@ -1,5 +1,5 @@
 /-
-  `Control.Monad.Freer.Coroutine` — the coroutine (yield) effect over `Eff`
+  `Control.Monad.Effect.Coroutine` — the coroutine (yield) effect over `Eff`
 
   ## Haskell source
 
@@ -22,7 +22,7 @@
   What it also needs is room in the universe hierarchy: `Status` must live in
   `Type 1`, since it holds an `Eff`-valued function, and so `Eff effs Status`
   must accept a `Type 1` payload. That is exactly why
-  `Control.Monad.Freer.Eff` is universe-polymorphic with result universe
+  `Control.Monad.Effect.Eff` is universe-polymorphic with result universe
   `max 1 u` rather than pinned to `Type 0` — at `u = 1` the payload and the
   computation share universe `1`, and the circularity closes. Nothing here needs
   `partial` or a termination annotation.
@@ -36,11 +36,11 @@
     it (see `Tests/…/CoroutineTest.lean`'s step-bounded driver, which recurses on
     a `Nat` budget).
 -/
-import Linen.Control.Monad.Freer
+import Linen.Control.Monad.Effect
 
-namespace Control.Monad.Freer.Coroutine
+namespace Control.Monad.Effect.Coroutine
 
-open Data.OpenUnion Control.Monad.Freer
+open Data.OpenUnion Control.Monad.Effect
 
 -- ── The effect ──────────────────────────────────────────────────────────────
 
@@ -122,4 +122,4 @@ def Status.yielded? {effs : List (Type → Type)} {a b r : Type} :
   | .done _       => none
   | .continue v _ => some v
 
-end Control.Monad.Freer.Coroutine
+end Control.Monad.Effect.Coroutine

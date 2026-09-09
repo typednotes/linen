@@ -1,5 +1,5 @@
 /-
-  `Control.Monad.Freer.Trace` — the tracing effect over `Eff`
+  `Control.Monad.Effect.Trace` — the tracing effect over `Eff`
 
   ## Haskell source
 
@@ -16,11 +16,11 @@
   here so tracing can be tested without performing I/O, which is what lets this
   module's own tests be `#guard`s.
 -/
-import Linen.Control.Monad.Freer
+import Linen.Control.Monad.Effect
 
-namespace Control.Monad.Freer.Trace
+namespace Control.Monad.Effect.Trace
 
-open Data.OpenUnion Control.Monad.Freer
+open Data.OpenUnion Control.Monad.Effect
 
 -- ── The effect ──────────────────────────────────────────────────────────────
 
@@ -66,4 +66,4 @@ def ignoreTrace {effs : List (Type → Type)} {α : Type}
     (m : Eff (Trace :: effs) α) : Eff effs α :=
   Prod.fst <$> runTracePure m
 
-end Control.Monad.Freer.Trace
+end Control.Monad.Effect.Trace

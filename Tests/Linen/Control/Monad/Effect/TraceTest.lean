@@ -1,15 +1,15 @@
 /-
-  Tests for `Linen.Control.Monad.Freer.Trace`.
+  Tests for `Linen.Control.Monad.Effect.Trace`.
 
   Covers `trace`, `runTracePure`, `ignoreTrace` and the `IO`-printing
   `runTrace`.
 -/
-import Linen.Control.Monad.Freer.Trace
-import Linen.Control.Monad.Freer.State
+import Linen.Control.Monad.Effect.Trace
+import Linen.Control.Monad.Effect.State
 
-open Data.OpenUnion Control.Monad.Freer Control.Monad.Freer.Trace
+open Data.OpenUnion Control.Monad.Effect Control.Monad.Effect.Trace
 
-namespace Tests.Control.Monad.Freer.Trace
+namespace Tests.Control.Monad.Effect.Trace
 
 -- Nothing traced: no messages.
 #guard Eff.run (runTracePure (pure 1 : Eff [Trace] Nat)) == (1, [])
@@ -82,4 +82,4 @@ info: (2, ["one", "two"])
     trace "two"
     pure 2 : Eff [Trace] Nat))).2)
 
-end Tests.Control.Monad.Freer.Trace
+end Tests.Control.Monad.Effect.Trace

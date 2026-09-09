@@ -41,3 +41,11 @@ jobs:
       # one `lake build`), and duplicating the version/URL logic here would
       # just be a second place to keep in sync with lakefile.lean.
       - uses: leanprover/lean-action@v1
+      # `Tests` is not a default target, so `lean-action`'s `lake build` does
+      # not reach it. Build it explicitly on both matrix legs: AGENTS.md
+      # requires the full test suite to run on macOS and Linux whenever an FFI
+      # target is in the build graph, and every `#guard`/`#guard_msgs` check in
+      # the suite runs at elaboration time — so building `Tests` *is* running
+      # the tests.
+      - name: Build the test suite (runs every #guard check)
+        run: lake build Tests

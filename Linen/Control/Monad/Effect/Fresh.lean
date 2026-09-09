@@ -1,5 +1,5 @@
 /-
-  `Control.Monad.Freer.Fresh` — the fresh-name effect over `Eff`
+  `Control.Monad.Effect.Fresh` — the fresh-name effect over `Eff`
 
   ## Haskell source
 
@@ -15,11 +15,11 @@
   - **`Int` → `Nat`.** Upstream's counter is `Int`; fresh names are never
     negative, and `Nat` matches this library's general convention.
 -/
-import Linen.Control.Monad.Freer
+import Linen.Control.Monad.Effect
 
-namespace Control.Monad.Freer.Fresh
+namespace Control.Monad.Effect.Fresh
 
-open Data.OpenUnion Control.Monad.Freer
+open Data.OpenUnion Control.Monad.Effect
 
 -- ── The effect ──────────────────────────────────────────────────────────────
 
@@ -55,4 +55,4 @@ def runFresh0 {effs : List (Type → Type)} {α : Type}
     (m : Eff (Fresh :: effs) α) : Eff effs α :=
   runFresh 0 m
 
-end Control.Monad.Freer.Fresh
+end Control.Monad.Effect.Fresh

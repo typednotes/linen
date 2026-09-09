@@ -1,5 +1,5 @@
 /-
-  `Control.Monad.Freer.NonDet` — the nondeterminism effect over `Eff`
+  `Control.Monad.Effect.NonDet` — the nondeterminism effect over `Eff`
 
   ## Haskell source
 
@@ -40,11 +40,11 @@
     need `partial` or a fuel parameter, both of which AGENTS.md forbids, so it is
     left out rather than faked. `makeChoiceA` covers the finite-search use.
 -/
-import Linen.Control.Monad.Freer
+import Linen.Control.Monad.Effect
 
-namespace Control.Monad.Freer.NonDet
+namespace Control.Monad.Effect.NonDet
 
-open Data.OpenUnion Control.Monad.Freer
+open Data.OpenUnion Control.Monad.Effect
 
 -- ── The effect ──────────────────────────────────────────────────────────────
 
@@ -112,4 +112,4 @@ def makeChoiceFirst {effs : List (Type → Type)} {α : Type}
     (m : Eff (NonDet :: effs) α) : Eff effs (Option α) :=
   List.head? <$> makeChoiceA m
 
-end Control.Monad.Freer.NonDet
+end Control.Monad.Effect.NonDet

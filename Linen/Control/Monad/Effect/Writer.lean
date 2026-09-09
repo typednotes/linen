@@ -1,5 +1,5 @@
 /-
-  `Control.Monad.Freer.Writer` — the writer effect over `Eff`
+  `Control.Monad.Effect.Writer` — the writer effect over `Eff`
 
   ## Haskell source
 
@@ -18,11 +18,11 @@
     `Data.Foldable.foldMap` does). Nothing is lost: `runWriter empty append` is
     exactly upstream's `runWriter` at the monoid `(empty, append)`.
 -/
-import Linen.Control.Monad.Freer
+import Linen.Control.Monad.Effect
 
-namespace Control.Monad.Freer.Writer
+namespace Control.Monad.Effect.Writer
 
-open Data.OpenUnion Control.Monad.Freer
+open Data.OpenUnion Control.Monad.Effect
 
 -- ── The effect ──────────────────────────────────────────────────────────────
 
@@ -99,4 +99,4 @@ def evalWriter {ω : Type} {effs : List (Type → Type)} {α : Type}
     Eff effs α :=
   Prod.fst <$> runWriter empty append m
 
-end Control.Monad.Freer.Writer
+end Control.Monad.Effect.Writer

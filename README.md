@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen Tests --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen Tests --include='*.lean' | wc -l -->
-  <strong>740 modules</strong> · <strong>386 compile-time theorems</strong> · <strong>10046 <code>#guard</code> checks</strong>
+  <strong>742 modules</strong> · <strong>403 compile-time theorems</strong> · <strong>10142 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -55,16 +55,30 @@ for the full per-module feature list and module table.
   missing from core (`Compose`/`Product`/`FunctorSum`, `Bifunctor`,
   `Foldable`/`Traversable`, `mtl`-style `Reader`/`State`/`Except`, STM,
   green-thread concurrency, …).
-- **`Control.Monad.Freer`** — extensible effects ported from `freer-simple`:
+- **`Control.Monad.Effect`** — extensible effects ported from `freer-simple`:
   an open union over an effect row (`Data.OpenUnion`), the `Eff` monad with
   `send`/`interpret`/`interpose`/`reinterpret`/`run`, and the
   `Reader`/`State`/`Error`/`Writer`/`NonDet`/`Coroutine`/`Fresh`/`Trace`
-  effects — so a signature *is* an effect whitelist. Its `FileSystem` effect
-  goes past what Haskell's rows can say, indexing the effect on a `Capability`
-  **value**: a read-only capability makes `writeFile` fail to elaborate,
-  read/write/delete are separately grantable within one effect, and a sandboxed
-  capability's `roots` reject `readFile p!"/etc/passwd"` — constraining an
-  effect's *arguments*, not just which effects are named.
+  effects — so a signature *is* an effect whitelist. Its `FileSystem`, `HTTP`
+  and `PostgreSQL` effects go past what Haskell's rows can say, indexing the
+  effect on a `Capability` **value** and so constraining an effect's
+  *arguments*, not just which effects are named:
+  - `FileSystem` — a read-only capability makes `writeFile` fail to elaborate,
+    read/write/delete are separately grantable within one effect, and a
+    sandboxed capability's `roots` reject `readFile p!"/etc/passwd"` (and
+    `/tmp/sandbox-evil`, which a string prefix would wrongly admit).
+  - `HTTP` — methods are separately grantable, and each URL scope carries its
+    own method list, so one capability says "GET anywhere under
+    `u!"https://api.example.com/v1"`, POST only to `/v1/events`". Hosts are
+    compared as DNS labels and paths component-wise, so
+    `api.example.com.evil.com`, a scheme downgrade, a changed port and
+    `/v1-admin` are all rejected.
+  - `PostgreSQL` — the database, instance and role are capability fields the
+    handler builds its connection from, so no computation can reach another;
+    statement kinds and tables are separately grantable. Queries are a
+    parameterised AST rather than strings, because a `String` of SQL cannot be
+    checked by `decide` — and so the SQL sent cannot disagree with the SQL
+    authorised.
 - **`Control.Lens`** — a `lens`-style profunctor-optics library (plus its
   `profunctors`/`indexed-traversable` prerequisites): `Lens`/`Prism`/`Iso`/
   `Traversal`/`Fold`/`Getter`/`Setter`/`Review` and indexed variants, with
@@ -335,7 +349,7 @@ installed even to use, say, `Crypto.SigV4`.
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 740 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 742 modules).
 
 ## Build & Test
 

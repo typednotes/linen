@@ -1,5 +1,5 @@
 /-
-  `Control.Monad.Freer.Error` — the error effect over `Eff`
+  `Control.Monad.Effect.Error` — the error effect over `Eff`
 
   ## Haskell source
 
@@ -33,13 +33,13 @@
     `Member (Error ε) effs` constraint, so instance search stalls on
     `Member (Error ?ε) effs` before `ε` is known. `HasError` carries `ε` as an
     `outParam`, so resolving it against the row *determines* `ε` — the same
-    device `Control.Monad.Freer.FileSystem` uses for its capability.
+    device `Control.Monad.Effect.FileSystem` uses for its capability.
 -/
-import Linen.Control.Monad.Freer
+import Linen.Control.Monad.Effect
 
-namespace Control.Monad.Freer.Error
+namespace Control.Monad.Effect.Error
 
-open Data.OpenUnion Control.Monad.Freer
+open Data.OpenUnion Control.Monad.Effect
 
 -- ── The effect ──────────────────────────────────────────────────────────────
 
@@ -112,4 +112,4 @@ def orElseValue {ε : Type} {effs : List (Type → Type)} {α : Type}
     (m : Eff effs α) (fallback : α) : Eff effs α :=
   catchError m (fun _ => .protect fallback)
 
-end Control.Monad.Freer.Error
+end Control.Monad.Effect.Error

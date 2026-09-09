@@ -378,14 +378,25 @@ it depends on).
     `Eff effs (Status …)`) is what made `Eff`'s payload universe-polymorphic
     (`Type u` in, `Type (max 1 u)` out) — done as a real construction rather
     than by weakening the type, per AGENTS.md.
-    **Plus a `linen`-original extension:** `Control.Monad.Freer.FileSystem`
-    demonstrates a dependently-typed capability system at two strengths — a
-    `Capability` *value* indexes the effect and gates which *operations* are
-    allowed (`Prop`-class instances), while its `roots` gate which *arguments*
-    they may be called on (a `decide`-discharged obligation). So a read-only
-    capability makes `writeFile` fail to elaborate, and a sandboxed one rejects
-    `readFile p!"/etc/passwd"`. Neither is expressible with Haskell's
-    type-level rows, which name effects but carry no structure.
+    The namespace is `Control.Monad.Effect`, not `Control.Monad.Freer`:
+    `Freer` names the encoding and the source package, and the capability
+    modules below have no upstream counterpart at all. References to upstream's
+    own `Control.Monad.Freer.TH`/`.Internal` keep their Haskell names.
+    **Plus three `linen`-original extensions:**
+    `Control.Monad.Effect.{FileSystem,HTTP,PostgreSQL}` demonstrate a
+    dependently-typed capability system at two strengths — a `Capability`
+    *value* indexes the effect and gates which *operations* are allowed
+    (`Prop`-class instances), while a scope field gates which *arguments* they
+    may be called on (a `decide`-discharged obligation). So a read-only
+    capability makes `writeFile` fail to elaborate and a sandboxed one rejects
+    `readFile p!"/etc/passwd"`; an origin-scoped web capability rejects
+    `get u!"https://evil.test/"` and, with per-scope method lists, a POST to a
+    read-only path; a reporting database capability admits `SELECT` on `orders`
+    and refuses `users`, while its database and role are fixed structurally by
+    the handler. `PostgreSQL` also carries the AST-not-strings lesson: SQL as a
+    `String` is opaque to `decide`, so queries are structured and the SQL sent
+    is derived from the SQL authorised. None of this is expressible with
+    Haskell's type-level rows, which name effects but carry no structure.
 ## Crates (crates.io)
 
 Same convention as above, applied to Rust crates per AGENTS.md's

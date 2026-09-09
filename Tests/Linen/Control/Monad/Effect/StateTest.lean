@@ -1,16 +1,16 @@
 /-
-  Tests for `Linen.Control.Monad.Freer.State`.
+  Tests for `Linen.Control.Monad.Effect.State`.
 
   Covers the state effect over `Eff`: `get`, `put`, `modify`, `gets`,
   `runState`, `evalState`, `execState` — and running the state effect together
   with the reader effect in a single row, which is the point of an effect row.
 -/
-import Linen.Control.Monad.Freer.State
-import Linen.Control.Monad.Freer.Reader
+import Linen.Control.Monad.Effect.State
+import Linen.Control.Monad.Effect.Reader
 
-open Data.OpenUnion Control.Monad.Freer Control.Monad.Freer.State
+open Data.OpenUnion Control.Monad.Effect Control.Monad.Effect.State
 
-namespace Tests.Control.Monad.Freer.State
+namespace Tests.Control.Monad.Effect.State
 
 -- `get` returns the current state, leaving it unchanged.
 #guard Eff.run (runState 5 (get : Eff [State Nat] Nat)) == (5, 5)
@@ -76,4 +76,4 @@ example : Eff [Reader.Reader Nat, State Nat] Unit := do
   let step ← Reader.ask
   modify (fun n : Nat => n + step)
 
-end Tests.Control.Monad.Freer.State
+end Tests.Control.Monad.Effect.State

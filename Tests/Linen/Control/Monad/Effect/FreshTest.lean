@@ -1,14 +1,14 @@
 /-
-  Tests for `Linen.Control.Monad.Freer.Fresh`.
+  Tests for `Linen.Control.Monad.Effect.Fresh`.
 
   Covers `fresh`, `runFresh` and `runFresh0`.
 -/
-import Linen.Control.Monad.Freer.Fresh
-import Linen.Control.Monad.Freer.State
+import Linen.Control.Monad.Effect.Fresh
+import Linen.Control.Monad.Effect.State
 
-open Data.OpenUnion Control.Monad.Freer Control.Monad.Freer.Fresh
+open Data.OpenUnion Control.Monad.Effect Control.Monad.Effect.Fresh
 
-namespace Tests.Control.Monad.Freer.Fresh
+namespace Tests.Control.Monad.Effect.Fresh
 
 -- The first request from 0 is 0.
 #guard Eff.run (runFresh0 (fresh : Eff [Fresh] Nat)) == 0
@@ -52,4 +52,4 @@ example : Eff [Fresh] (Nat × Nat) := do
   let b ← fresh
   pure (a, b)
 
-end Tests.Control.Monad.Freer.Fresh
+end Tests.Control.Monad.Effect.Fresh

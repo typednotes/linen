@@ -1,14 +1,14 @@
 /-
-  Tests for `Linen.Control.Monad.Freer`.
+  Tests for `Linen.Control.Monad.Effect`.
 
   Covers the `Eff` monad over an open effect row: `pure`/`bind`/`do`-notation,
   `send`, `run`, `runM`, `interpret`, `interpretM`, `reinterpret` and `raise`.
 -/
-import Linen.Control.Monad.Freer
+import Linen.Control.Monad.Effect
 
-open Data.OpenUnion Control.Monad.Freer
+open Data.OpenUnion Control.Monad.Effect
 
-namespace Tests.Control.Monad.Freer
+namespace Tests.Control.Monad.Effect
 
 -- ── The empty row: pure computations ────────────────────────────────────────
 
@@ -105,4 +105,4 @@ example : Eff [Const, Emit] Nat := do
   emit "fine"
   pure a
 
-end Tests.Control.Monad.Freer
+end Tests.Control.Monad.Effect

@@ -1,5 +1,5 @@
 /-
-  `Control.Monad.Freer.Reader` — the reader effect over `Eff`
+  `Control.Monad.Effect.Reader` — the reader effect over `Eff`
 
   ## Haskell source
 
@@ -17,11 +17,11 @@
   is that the row bounds what a computation may do; use
   `Control.Monad.Reader` when the point is just to thread an environment.
 -/
-import Linen.Control.Monad.Freer
+import Linen.Control.Monad.Effect
 
-namespace Control.Monad.Freer.Reader
+namespace Control.Monad.Effect.Reader
 
-open Data.OpenUnion Control.Monad.Freer
+open Data.OpenUnion Control.Monad.Effect
 
 -- ── The effect ──────────────────────────────────────────────────────────────
 
@@ -63,4 +63,4 @@ def withReader {ρ : Type} {effs : List (Type → Type)} {α : Type}
     (f : ρ → ρ) (env : ρ) : Eff (Reader ρ :: effs) α → Eff effs α :=
   runReader (f env)
 
-end Control.Monad.Freer.Reader
+end Control.Monad.Effect.Reader
