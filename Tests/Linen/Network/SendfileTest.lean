@@ -47,11 +47,16 @@ def withConnection (addr : SockAddr) (action : Socket .connected → IO Unit) : 
   let addr ← getSockName server
   let serverTask ← IO.asTask (prio := .dedicated) (drainOnce server)
   withConnection addr (fun conn => sendFileSimple conn path.toString)
-  let _ ← close server
+  -- Join the draining task *before* closing the listening socket. A TCP
+  -- `connect` completes out of the listen backlog without anyone calling
+  -- `accept`, and this payload fits in the send buffer, so the foreground can
+  -- otherwise run all the way to `close server` while the task has not yet
+  -- reached `Blocking.accept` — which then fails with `EBADF`.
   let received ←
     match serverTask.get with
     | .ok bytes => pure bytes
     | .error e => throw e
+  let _ ← close server
   IO.FS.removeFile path
   unless received == "hello, sendfile!".toUTF8 do
     throw (IO.userError s!"sendFileSimple: expected the whole file, got {received.size} bytes")
@@ -66,11 +71,12 @@ def withConnection (addr : SockAddr) (action : Socket .connected → IO Unit) : 
   let serverTask ← IO.asTask (prio := .dedicated) (drainOnce server)
   withConnection addr (fun conn =>
     sendFile conn path.toString (some ⟨4, 6⟩))
-  let _ ← close server
+  -- Same ordering requirement as above: join before closing the listener.
   let received ←
     match serverTask.get with
     | .ok bytes => pure bytes
     | .error e => throw e
+  let _ ← close server
   IO.FS.removeFile path
   unless received == "456789".toUTF8 do
     throw (IO.userError s!"sendFile with FilePart: expected '456789', got {String.fromUTF8! received}")
