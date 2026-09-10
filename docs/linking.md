@@ -421,9 +421,21 @@ void ExtensionHelper::LoadAllExtensions(DuckDB &db) {
 }
 ```
 
-Extensions are intended to be linked in separately via
-`DUCKDB_EXTENSION_<NAME>_LINKED` macros together with sources the bundle does
-not include. Compiling it and running SQL against the result:
+The amalgamation carries a *hook* rather than the code. It defines
+`DUCKDB_EXTENSION_CORE_FUNCTIONS_LINKED false` and, when that is switched on,
+`#include`s `core_functions_extension.hpp` — a header the bundle does not
+contain — above an upstream comment reading "TODO: rewrite package_build.py to
+allow also loading out-of-tree extensions in non-cmake builds". So the
+amalgamation route cannot supply extensions as shipped.
+
+DuckDB's Rust binding shows the same boundary from the other side: its
+`autocomplete`, `icu`, `tpch` and `tpcds` features each statically link an
+extension and all imply `bundled-cmake`, which is git-checkout-only, whereas
+the plain `bundled` (amalgamation, via `cc`) feature does not offer them.
+Extensions therefore require DuckDB's CMake build and a full source tree, not
+an amalgamation.
+
+Compiling the released amalgamation and running SQL against the result:
 
 | works | fails |
 | --- | --- |
@@ -441,9 +453,6 @@ extension, which ordinary distributions carry. The error suggests
 `INSTALL core_functions; LOAD core_functions;`, which requires network access
 and an extension repository.
 
-This applies to the *released* amalgamation. Bindings that generate their own
-bundled source (§6.1) may include extensions.
-
 **A single 25 MB C++ translation unit is expensive.** Measured with
 `clang++ -std=c++17 -O2 -fPIC -c duckdb.cpp` on Apple silicon:
 
@@ -459,9 +468,20 @@ Vendoring would also add ~28 MB of C++ to the repository. The current approach
 downloads ~40 MB. SQLite's 9.6 MB amalgamation is C and compiles in seconds;
 the difference is C++ template instantiation, not file size.
 
-Compiling DuckDB from source would permit building it `-stdlib=libc++` to match
-Lean's runtime, removing the cause of §3 rather than isolating it. The
-measurements above are what rule that out, not the approach itself.
+Note also that the figures above are for the *core-only* amalgamation. A build
+including the extensions is necessarily larger, so its cost is at least this
+**(inference)**, and 8.0 GB already approaches or exceeds a `macos-latest`
+runner.
+
+**The remaining route is DuckDB's full source tree built with CMake**, which is
+what its Rust binding uses for extensions. That is the only complete
+from-source option. It would parallelise across cores, unlike the single
+translation unit, but it means committing DuckDB's source tree, running its
+CMake build in CI, and maintaining that build. What it would buy is real:
+source in git, no build-time download, and — since the compiler would be ours —
+the option of `-stdlib=libc++` to match Lean's runtime, which removes the cause
+of §3 rather than isolating it. The current approach was chosen against that
+trade, not in ignorance of it.
 
 ## 7. Adding an FFI dependency
 
