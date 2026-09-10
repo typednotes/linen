@@ -472,19 +472,25 @@ extern_lib linenffi pkg := do
   let sqlite3ShimObj ← sqlite3_shim.o.fetch
   let mut objs :=
     #[networkObj, postgresObj, joseObj, tlsObj, zlibObj, keychainObj, sqlite3Obj, sqlite3ShimObj]
+  let staticLibFile := pkg.staticLibDir / nameToStaticLib "linenffi"
   if duckdbUsesSealedLib then
-    -- Force the sealed library to be built before anything links against it —
-    -- both `Linen` and `Tests` declare `needs := #[linenffi]`, so depending on
-    -- it here orders it ahead of every module `:dynlib` link.
-    --
     -- `duckdb.o` must NOT also go into this static archive: it is already
     -- inside the sealed library, and a static copy would win at link time,
     -- pulling in the dynamic `libduckdb.so` again and reinstating the very
     -- abort the sealing removes.
-    let _ ← duckdbSealedLib.fetch
+    --
+    -- The sealed library is sequenced *before* this archive's own job with
+    -- `bindM`, not merely fetched alongside it. Everything that links against
+    -- `linenffi` passes `-lduckdb_sealed` (via `nativeLinkArgs`), starting
+    -- with `linenffi`'s own `:shared` facet — and a bare
+    -- `let _ ← duckdbSealedLib.fetch` only *schedules* that build rather than
+    -- waiting for it, which lost the race and failed the `:shared` link with
+    -- `ld.lld: error: unable to find library -lduckdb_sealed`.
+    let sealedJob ← duckdbSealedLib.fetch
+    sealedJob.bindM fun _ => buildStaticLib staticLibFile objs
   else
     objs := objs.push (← duckdb.o.fetch)
-  buildStaticLib (pkg.staticLibDir / nameToStaticLib "linenffi") objs
+    buildStaticLib staticLibFile objs
 
 @[default_target]
 lean_lib Linen where
