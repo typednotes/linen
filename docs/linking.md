@@ -734,8 +734,33 @@ It is justified on three others, the first of which is decisive:
    That is upstream's own stub, the same one §4.2 rejected writing by hand. The
    amalgamation is meant for a minimal embed, with extensions linked in
    separately via `DUCKDB_EXTENSION_<NAME>_LINKED` macros and extension sources
-   that the bundle does not include. Vendoring it would therefore cost exactly
-   the SQL function library §4.2 refused to give up.
+   that the bundle does not include.
+
+   **"Core-only is surely enough for a database client" is the obvious
+   objection, and it is wrong.** Measured by compiling the amalgamation and
+   running SQL against it:
+
+   | works | fails |
+   | --- | --- |
+   | CREATE / INSERT / SELECT / WHERE | **`sum`**, **`avg`** |
+   | JOIN, GROUP BY, ORDER, LIMIT | **`abs`**, **`round`** |
+   | window functions, CTEs, subqueries | `sin`, `sqrt`, `pow` |
+   | `count(*)`, `count(v)`, `min`, `max` | `date_trunc`, `date_part` |
+   | LIKE, `upper`, `substr`, `length` | `list_value`, `list_transform` |
+   | `regexp_matches`, `strftime` | `stddev`, `median`, `string_agg` |
+   | CSV reading | `read_parquet`, JSON type |
+
+   `SELECT sum(x)` fails. DuckDB's *core* is the engine — parser, optimizer,
+   execution, storage — and it deliberately pushes even elementary scalar and
+   aggregate functions into `core_functions` to keep the core small, expecting
+   ordinary distributions to ship that extension (both the `.so` and the
+   `static-libs` bundle do). Core-only is therefore not a lean client but an
+   engine with its function library removed.
+
+   DuckDB's error suggests `INSTALL core_functions; LOAD core_functions;`,
+   which needs network access and an extension repository — in the test above
+   the autoload attempt failed with exactly that error — so it is no remedy for
+   an embedded, offline build.
 2. **A single 25MB C++ translation unit does not fit a CI runner.** Measured
    locally (`clang++ -std=c++17 -O2 -fPIC -c duckdb.cpp`, Apple M-series):
 
