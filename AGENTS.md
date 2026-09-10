@@ -46,8 +46,23 @@ Guidance for working in the **linen** Lean library.
   few-file amalgamation exists (e.g. SQLite's `sqlite3.c`/`sqlite3.h`) — this
   avoids a platform dev-package dependency entirely and pins the exact
   version in git; (2) downloading a pinned prebuilt release archive as a
-  build/CI step when no such amalgamation exists (e.g. DuckDB) — do not check
-  prebuilt per-platform binaries into git.
+  build/CI step when no *usable* amalgamation exists — do not check prebuilt
+  per-platform binaries into git.
+- **"Usable" is the operative word, and DuckDB is the cautionary example.**
+  DuckDB *does* ship an amalgamation (`libduckdb-src.zip`: `duckdb.cpp` at
+  25.6MB plus three headers), so the test is not merely whether one exists.
+  Its `ExtensionHelper::LoadAllExtensions` is a literal `// nop` and it
+  contains no extension code at all, so vendoring it would silently drop the
+  `core_functions` SQL library; it is also a single C++ translation unit, so
+  no `-j` can parallelise it, and it would add ~28MB to git permanently.
+  DuckDB therefore stays in tier 2 — but for those reasons, not because no
+  amalgamation exists. Before choosing tier 1, check that the amalgamation is
+  *feature-complete* (diff its symbols against the project's own shared
+  library) and that compiling it is affordable.
+- **Equally, check that a prebuilt archive is complete.** DuckDB publishes
+  both `libduckdb-linux-<arch>.zip` and `static-libs-linux-<arch>.zip`; the
+  `libduckdb_static.a` in the former is core-only and *not* equivalent to the
+  `libduckdb.so` beside it. See `docs/linking.md` §4.2.
 
 ## Releasing
 

@@ -710,10 +710,49 @@ operative question is closer to *"is there a small amalgamation, and do version
 skew or compile flags matter?"* than *"is it absent from apt?"*. The decision
 was taken explicitly rather than derived from the rule.
 
-DuckDB fails reason 2 and therefore lands in tier 2: no comparable
-amalgamation in its release assets, an enormous build, and prebuilt binaries
-published per platform — so it is pinned and downloaded rather than vendored,
-and `.lake/` is not committed.
+### Why DuckDB is not vendored, despite shipping an amalgamation
+
+A natural follow-up: DuckDB publishes a C API and a source bundle, so why not
+vendor it the way SQLite is vendored? It does in fact ship an amalgamation —
+`libduckdb-src.zip`, four files, `duckdb.cpp` at 25.6MB plus `duckdb.hpp`,
+`duckdb.h` and `duckdb_extension.h`. So the claim that DuckDB has "no
+amalgamation" is simply false, and tier 2 is *not* justified on that basis.
+
+It is justified on three others, the first of which is decisive:
+
+1. **The amalgamation is core-only by construction.** It contains zero
+   extension code — no `CoreFunctionsExtension`, `DateTruncFun`,
+   `ListValueFun`, `ParquetExtension` or `JSONExtension` — and defines the
+   loader as, verbatim:
+
+   ```cpp
+   void ExtensionHelper::LoadAllExtensions(DuckDB &db) {
+       // nop
+   }
+   ```
+
+   That is upstream's own stub, the same one §4.2 rejected writing by hand. The
+   amalgamation is meant for a minimal embed, with extensions linked in
+   separately via `DUCKDB_EXTENSION_<NAME>_LINKED` macros and extension sources
+   that the bundle does not include. Vendoring it would therefore cost exactly
+   the SQL function library §4.2 refused to give up.
+2. **A single 25MB C++ translation unit cannot be parallelised.** SQLite's
+   9.6MB amalgamation is C and compiles in seconds; this is C++ with heavy
+   template instantiation in *one* `.cpp`, so no `-j` helps, and it is a
+   per-cold-build cost on both CI legs — against a ~40MB download today.
+3. **It would add ~28MB of C++ to git permanently**, roughly tripling `ffi/`.
+   Every clone pays it forever.
+
+There is a real upside being given up, and it is worth naming: compiling DuckDB
+ourselves would let us build it `-stdlib=libc++` to match Lean's own runtime,
+which removes the §3 bug **at its root** instead of sealing around it — option
+1 of the three "ways not to mix" in §5, and what `leanprover/soplex-ffi` does.
+That is architecturally cleaner than sealing. But it does not survive point 1:
+we would have a correctly-unwinding DuckDB missing much of its SQL surface,
+which is a worse trade than sealing a complete one.
+
+So the conclusion (pinned prebuilt, `.lake/` not committed) is right, but for
+the reason above rather than the one originally recorded.
 
 ### Two things this table makes visible
 
