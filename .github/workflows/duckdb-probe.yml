@@ -1,0 +1,180 @@
+name: DuckDB Linux probe (temporary diagnostic)
+
+# TEMPORARY. Delete once the Linux DuckDB aborts are diagnosed.
+#
+# Nine `Tests/Linen/Database/DuckDB/**` modules abort on ubuntu-latest with
+# `terminate called after throwing an instance of 'duckdb::…Exception'` and
+# SIGABRT (Lean exit 134), on paths that return a `DuckDBError` state on macOS.
+# Inspecting the pinned Linux `libduckdb.so` shows the C API *does* compile in a
+# `catch (std::exception &)` (its `.cold` part calls `__cxa_begin_catch` and
+# `duckdb::ErrorData::ErrorData(std::exception const&)`), and
+# `duckdb::Exception` derives from `std::runtime_error`, so the handler ought to
+# match. Something about the *process* is stopping it.
+#
+# This splits that question in two, because the answer decides where the fix
+# goes:
+#
+#   job `bare-c`  — the same calls from a plain C program linked against the
+#                   same pinned archive, with no Lean anywhere in the process.
+#                   Aborts  ⇒ the Linux prebuilt itself is the problem.
+#                   Clean   ⇒ the problem is Lean-in-the-process (e.g. two C++
+#                             runtimes once `lean` and libduckdb are both
+#                             loaded), not DuckDB.
+#
+#   job `in-lean` — one of the real failing test modules, with the C++ runtime
+#                   topology of the `lean` process dumped alongside it.
+
+on:
+  push:
+    branches:
+      - 'fix/linux-ci-test-failures'
+  workflow_dispatch:
+
+jobs:
+  bare-c:
+    name: DuckDB error paths from plain C (no Lean)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Fetch the same pinned DuckDB archive lakefile.lean pins
+        run: |
+          set -euo pipefail
+          VERSION="$(grep -oE 'def duckdbVersion : String := "[^"]+"' lakefile.lean | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+          echo "Pinned DuckDB version: $VERSION"
+          mkdir -p duckdb-probe && cd duckdb-probe
+          curl -sSLO "https://github.com/duckdb/duckdb/releases/download/v${VERSION}/libduckdb-linux-amd64.zip"
+          unzip -oq libduckdb-linux-amd64.zip
+          ls -la
+
+      - name: What C++ runtime does libduckdb.so pull in?
+        run: |
+          cd duckdb-probe
+          echo "--- DT_NEEDED ---"; readelf -d libduckdb.so | grep NEEDED
+          echo "--- ldd ---";       ldd libduckdb.so || true
+
+      - name: Build and run the probe
+        run: |
+          set -euo pipefail
+          cd duckdb-probe
+          cat > probe.c <<'PROBE'
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <stdbool.h>
+          #include "duckdb.h"
+
+          /* Each of these mirrors one of the failing tests' error paths. A
+             correct C API returns DuckDBError; the CI failures suggest an
+             uncaught C++ exception instead. Printing before and after each call
+             tells us exactly which one dies. */
+          int main(void) {
+              printf("duckdb_library_version = %s\n", duckdb_library_version());
+              fflush(stdout);
+
+              duckdb_database db = NULL;
+              duckdb_connection conn = NULL;
+              if (duckdb_open(NULL, &db) != DuckDBSuccess) { printf("open failed\n"); return 1; }
+              if (duckdb_connect(db, &conn) != DuckDBSuccess) { printf("connect failed\n"); return 1; }
+              printf("opened + connected OK\n"); fflush(stdout);
+
+              /* 1. AppenderTest: appender over a table that does not exist.
+                    Expected on macOS: DuckDBError. CI: duckdb::CatalogException. */
+              printf("[1] duckdb_appender_create on a missing table ... "); fflush(stdout);
+              duckdb_appender app = NULL;
+              duckdb_state rc = duckdb_appender_create(conn, NULL, "no_such_table", &app);
+              printf("returned %d (%s)\n", (int)rc, rc == DuckDBSuccess ? "success" : "error");
+              fflush(stdout);
+
+              /* 2. QueryExecutionTest: syntactically invalid SQL.
+                    CI: duckdb::Exception / ParameterNotResolvedException. */
+              printf("[2] duckdb_query with invalid SQL ... "); fflush(stdout);
+              duckdb_result res;
+              rc = duckdb_query(conn, "SELECT * FROM definitely_not_a_table", &res);
+              printf("returned %d (%s)\n", (int)rc, rc == DuckDBSuccess ? "success" : "error");
+              if (rc != DuckDBSuccess) printf("    error = %s\n", duckdb_result_error(&res));
+              duckdb_destroy_result(&res);
+              fflush(stdout);
+
+              /* 3. PreparedStatementsTest: prepare that cannot resolve. */
+              printf("[3] duckdb_prepare with invalid SQL ... "); fflush(stdout);
+              duckdb_prepared_statement stmt = NULL;
+              rc = duckdb_prepare(conn, "SELECT $1 + $2 FROM nope", &stmt);
+              printf("returned %d (%s)\n", (int)rc, rc == DuckDBSuccess ? "success" : "error");
+              if (stmt) duckdb_destroy_prepare(&stmt);
+              fflush(stdout);
+
+              /* 4. FileSystemTest: open a path under a missing directory.
+                    CI: duckdb::IOException. */
+              printf("[4] duckdb_file_system_open on a missing directory ... "); fflush(stdout);
+              duckdb_client_context ctx = NULL;
+              duckdb_connection_get_client_context(conn, &ctx);
+              if (ctx) {
+                  duckdb_file_system fs = duckdb_client_context_get_file_system(ctx);
+                  if (fs) {
+                      duckdb_file_open_options opts = duckdb_create_file_open_options();
+                      duckdb_file_open_options_set_flag(opts, DUCKDB_FILE_FLAG_READ, true);
+                      duckdb_file_handle h = NULL;
+                      rc = duckdb_file_system_open(fs, "/no/such/directory/linen-probe", opts, &h);
+                      printf("returned %d (%s)\n", (int)rc, rc == DuckDBSuccess ? "success" : "error");
+                      if (h) duckdb_destroy_file_handle(&h);
+                      duckdb_destroy_file_open_options(&opts);
+                      duckdb_destroy_file_system(&fs);
+                  } else { printf("no file system\n"); }
+                  duckdb_destroy_client_context(&ctx);
+              } else { printf("no client context\n"); }
+              fflush(stdout);
+
+              duckdb_disconnect(&conn);
+              duckdb_close(&db);
+              printf("ALL PROBES SURVIVED — the C API caught every error\n");
+              return 0;
+          }
+          PROBE
+
+          # Compiled as C, exactly like ffi/duckdb_shim.c, and linked the way
+          # lakefile.lean links it.
+          cc -std=c11 -Wall -I. probe.c -o probe -L. -lduckdb -Wl,-rpath,"$PWD"
+          echo "--- probe's own DT_NEEDED ---"; readelf -d probe | grep NEEDED
+
+          set +e
+          ./probe
+          status=$?
+          set -e
+          echo "probe exited with status $status"
+          if [ "$status" -ne 0 ]; then
+            echo "::warning::bare C probe did NOT survive (status $status) — the Linux prebuilt aborts on its own, with no Lean in the process"
+          fi
+          exit 0
+
+  in-lean:
+    name: One failing module, plus the lean process C++ topology
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-native-deps
+      - uses: leanprover/lean-action@v1
+
+      - name: C++ runtime topology of the toolchain
+        run: |
+          set -euo pipefail
+          PREFIX="$(lean --print-prefix)"
+          echo "prefix = $PREFIX"
+          echo "--- libstdc++/libgcc shipped inside the toolchain? ---"
+          find "$PREFIX" -name 'libstdc++*' -o -name 'libgcc*' -o -name 'libc++*' | head -20 || true
+          echo "--- does the lean binary link libstdc++ dynamically? ---"
+          readelf -d "$PREFIX/bin/lean" | grep NEEDED || true
+          echo "--- ldd lean ---"
+          ldd "$PREFIX/bin/lean" || true
+          echo "--- statically linked C++ runtime symbols defined in lean? ---"
+          nm -D --defined-only "$PREFIX/bin/lean" 2>/dev/null | grep -cE '__cxa_throw|__cxa_begin_catch|_ZSt9terminatev' || echo "0 (none defined in the executable)"
+
+      - name: Build just the one failing module, keeping the abort visible
+        run: |
+          set +e
+          lake build Tests.Linen.Database.DuckDB.FFI.AppenderTest 2>&1 | tail -40
+          echo "lake exited with ${PIPESTATUS[0]}"
+
+          echo "--- which libduckdb did the build resolve, and what does it need? ---"
+          find .lake/duckdb -maxdepth 1 -name 'libduckdb*' -exec ls -la {} \;
+          readelf -d .lake/duckdb/libduckdb.so 2>/dev/null | grep NEEDED || true
+          exit 0
