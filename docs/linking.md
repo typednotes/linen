@@ -427,6 +427,47 @@ construction. They stay visible despite Lean compiling with
 `__attribute__((visibility("default")))` unless `_LIBUNWIND_HIDE_SYMBOLS` is
 set.
 
+### "Would it work if Lean were built with clang?"
+
+It already is — that is the *cause*, not the cure. Lean's Linux toolchain
+bundles LLVM and statically links LLVM's libc++/libc++abi/libunwind.
+
+The useful version of the question is whether an **all-clang** stack would
+work, and the answer is yes. The number ten is itself the evidence: because
+static archives only yield members something references, and
+`UnwindLevel1-gcc-ext.o` was never pulled in, **nothing in Lean's LLVM runtime
+ever asks for those four symbols.** libc++abi needs exactly the ten Lean
+exports. libstdc++ needs eleven, and the extra four are precisely the GCC
+extensions in the object file nobody pulled in.
+
+So each world is internally consistent and the split exists only at the
+boundary between them:
+
+| Lean's runtime  | Dependency's runtime    | Outcome                              |
+| --------------- | ----------------------- | ------------------------------------ |
+| LLVM (libc++abi) | LLVM (libc++abi)       | **works** — only the ten are needed  |
+| LLVM (libc++abi) | **GCC (libstdc++)**    | **breaks** — four more, other unwinder |
+| GCC (libstdc++) | GCC (libstdc++)         | works — a single unwinder            |
+
+The rule is therefore not "use clang" but **"do not mix"**. Three ways not to
+mix, and why only one was available here:
+
+1. **Build the dependency with clang/libc++.** Real and effective —
+   `leanprover/soplex-ffi` compiles its C++ bridge `-stdlib=libc++` for exactly
+   this reason. It requires that *you* compile the C++. Unavailable for DuckDB,
+   which ships prebuilt binaries built with GCC.
+2. **Have Lean link libstdc++ dynamically.** Would also work; Lean's
+   `CMakeLists.txt` even *defaults* `LEAN_CXX_STDLIB` to `-lstdc++`. The static
+   libc++ is a deliberate override in the release script, bought for
+   portability to older distributions. Not a consumer's call.
+3. **Hide the leak upstream** — `LIBUNWIND_HIDE_SYMBOLS=ON`, the one-flag fix
+   of §5.
+
+This is the fundamental reason **sealing is the right tool for a *prebuilt*
+dependency**: it is indifferent to which compiler anyone used. A prebuilt
+binary is whatever its packager chose and cannot be retroactively changed, so
+the only remaining move is to make it self-contained.
+
 ### It is an upstream bug, and no issue exists for it
 
 `leanprover/lean-llvm`'s build workflow already contains, under the comment
