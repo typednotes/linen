@@ -736,10 +736,24 @@ It is justified on three others, the first of which is decisive:
    separately via `DUCKDB_EXTENSION_<NAME>_LINKED` macros and extension sources
    that the bundle does not include. Vendoring it would therefore cost exactly
    the SQL function library §4.2 refused to give up.
-2. **A single 25MB C++ translation unit cannot be parallelised.** SQLite's
-   9.6MB amalgamation is C and compiles in seconds; this is C++ with heavy
-   template instantiation in *one* `.cpp`, so no `-j` helps, and it is a
-   per-cold-build cost on both CI legs — against a ~40MB download today.
+2. **A single 25MB C++ translation unit does not fit a CI runner.** Measured
+   locally (`clang++ -std=c++17 -O2 -fPIC -c duckdb.cpp`, Apple M-series):
+
+   | | |
+   | --- | --- |
+   | wall time | **2 min 46 s** |
+   | peak RSS | **8.0 GB** |
+   | object | 41.5 MB |
+
+   Being one translation unit, that cost can be divided neither across cores
+   nor across memory: `-j` cannot help and neither can splitting the work. 8GB
+   is the figure that matters. GitHub's `ubuntu-latest` has ~16GB, so Linux
+   would be tight but survive; the arm64 `macos-latest` runners have roughly
+   half that, so this would likely **fail outright there** — and the wall time
+   above is from fast local hardware, so a runner would be slower still.
+   Against that, today's approach downloads ~40MB. (SQLite's 9.6MB
+   amalgamation is C, compiles in seconds, and is untroubled by any of this —
+   the difference is C++ template instantiation, not file size.)
 3. **It would add ~28MB of C++ to git permanently**, roughly tripling `ffi/`.
    Every clone pays it forever.
 
