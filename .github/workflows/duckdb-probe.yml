@@ -1,31 +1,26 @@
-name: DuckDB Linux probe (temporary diagnostic)
+name: Linux CI probe (temporary diagnostic)
 
-# TEMPORARY. Delete once the Linux DuckDB aborts are fixed.
+# TEMPORARY. Delete before merging.
 #
-# Round 1 settled *where* the bug is. On one ubuntu-latest runner, against the
-# same pinned v1.5.4 `libduckdb.so`:
+# Round 1: DuckDB's C API is fine. On one runner, against the same pinned
+# v1.5.4 libduckdb.so, plain C returned DuckDBError on all four error paths
+# while the same call inside `lean` aborted with duckdb::CatalogException.
 #
-#   - plain C, no Lean in the process : all four error paths returned
-#                                       DuckDBError. "ALL PROBES SURVIVED".
-#   - the same call inside `lean`      : terminate called after throwing an
-#                                       instance of 'duckdb::CatalogException'
+# Round 2: confirmed the mechanism and the fix.
+#   - `libleanshared.so` exports 10 `_Unwind_*`; the system libstdc++ imports
+#     11. Exactly four fall through to libgcc_s.so.1 —
+#     `_Unwind_GetIPInfo`, `_Unwind_GetDataRelBase`, `_Unwind_GetTextRelBase`,
+#     `_Unwind_Resume_or_Rethrow` — so libstdc++'s unwinding is split across
+#     two unwinders and the personality routine reads a foreign context.
+#   - `LD_PRELOAD=libgcc_s.so.1` fixed all nine DuckDB modules, and Lean's own
+#     exception handling still passed under it. The full suite then failed on
+#     exactly one module: Tests.Linen.System.KeychainTest.
 #
-# So DuckDB's C API catches correctly (its `catch (...)` is right there in
-# `duckdb_appender_create_ext`), and the abort is caused by Lean being in the
-# process. The suspected mechanism is a split unwinder: Lean's Linux toolchain
-# statically links LLVM's libunwind into `libleanshared.so` and exports only
-# *part* of the `_Unwind_*` ABI at default visibility. Because `libleanshared.so`
-# is a DT_NEEDED of `bin/lean`, it precedes `libstdc++.so.6`/`libgcc_s.so.1` in
-# the global lookup scope, so libstdc++'s unwind imports split across two
-# different unwinders and the personality routine reads a foreign-layout
-# context — no landing pad matches and `std::terminate` runs.
-#
-# Round 2 (this file) checks that story directly and tests the cheapest fix:
-#   1. dump the symbols, to confirm the split rather than infer it
-#   2. control      — build a failing module as-is (expected: abort)
-#   3. candidate fix — same module with LD_PRELOAD=libgcc_s.so.1, which
-#                      precedes the executable's DT_NEEDED and so makes all
-#                      `_Unwind_*` resolve to the one complete unwinder
+# Round 3 (this file): get Keychain's actual error, which round 2 truncated
+# with `tail -30`. Leading hypothesis: `gnome-keyring-daemon --unlock` creates
+# and unlocks the `login` keyring but leaves the `default` *alias* unset, and
+# `ffi/keychain.c` stores into `SECRET_COLLECTION_DEFAULT`, which resolves that
+# alias. `ReadAlias("default")` returns "/" if so.
 
 on:
   push:
@@ -34,76 +29,69 @@ on:
   workflow_dispatch:
 
 jobs:
-  unwinder:
-    name: Confirm the split unwinder, then test LD_PRELOAD
+  keychain:
+    name: Keychain on Linux — full error and collection state
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-native-deps
       - uses: leanprover/lean-action@v1
 
-      - name: Which unwinder does each library define and need?
-        run: |
-          set -uo pipefail
-          PREFIX="$(lean --print-prefix)"
-          LEANSHARED="$PREFIX/lib/lean/libleanshared.so"
-          [ -f "$LEANSHARED" ] || LEANSHARED="$(find "$PREFIX" -name 'libleanshared.so' | head -1)"
-          echo "libleanshared = $LEANSHARED"
-
-          echo "=== _Unwind_* DEFINED (exported) by libleanshared.so ==="
-          nm -D --defined-only "$LEANSHARED" 2>/dev/null | grep -oE '_Unwind_[A-Za-z_]+' | sort -u
-
-          echo "=== C++ ABI symbols exported by libleanshared.so (should be none) ==="
-          nm -D --defined-only "$LEANSHARED" 2>/dev/null | grep -oE '__cxa_throw|__cxa_begin_catch|__gxx_personality_v0' | sort -u || echo "(none — correctly hidden)"
-
-          SYSCXX=/usr/lib/x86_64-linux-gnu/libstdc++.so.6
-          echo "=== _Unwind_* NEEDED (undefined) by the system libstdc++ ==="
-          nm -D --undefined-only "$SYSCXX" 2>/dev/null | grep -oE '_Unwind_[A-Za-z_]+' | sort -u
-
-          echo "=== the split: needed by libstdc++ but NOT exported by libleanshared ==="
-          comm -23 \
-            <(nm -D --undefined-only "$SYSCXX" 2>/dev/null | grep -oE '_Unwind_[A-Za-z_]+' | sort -u) \
-            <(nm -D --defined-only "$LEANSHARED" 2>/dev/null | grep -oE '_Unwind_[A-Za-z_]+' | sort -u)
-          echo "(anything listed above falls through to libgcc_s.so.1 while the rest bind to Lean's LLVM libunwind)"
-          exit 0
-
-      - name: CONTROL — build a failing module as-is
+      - name: What does the Secret Service actually expose?
         run: |
           set +e
-          lake build Tests.Linen.Database.DuckDB.FFI.AppenderTest 2>&1 | tail -12
-          echo "CONTROL exit: ${PIPESTATUS[0]}"
+          echo "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-<unset>}"
+          echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-<unset>}"
+
+          echo "=== is org.freedesktop.secrets owned? ==="
+          dbus-send --session --print-reply --dest=org.freedesktop.DBus \
+            /org/freedesktop/DBus org.freedesktop.DBus.GetNameOwner \
+            string:org.freedesktop.secrets
+
+          echo "=== ReadAlias(\"default\") — \"/\" means NO default collection ==="
+          dbus-send --session --print-reply --dest=org.freedesktop.secrets \
+            /org/freedesktop/secrets org.freedesktop.Secret.Service.ReadAlias \
+            string:default
+
+          echo "=== existing collections ==="
+          dbus-send --session --print-reply --dest=org.freedesktop.secrets \
+            /org/freedesktop/secrets org.freedesktop.DBus.Properties.Get \
+            string:org.freedesktop.Secret.Service string:Collections
+
+          echo "=== keyring files on disk ==="
+          ls -la "$HOME/.local/share/keyrings/" 2>/dev/null || echo "(no keyrings dir)"
           exit 0
 
-      - name: Does LD_PRELOAD of the complete unwinder fix it?
-        run: |
-          set +e
-          GCC_S=/usr/lib/x86_64-linux-gnu/libgcc_s.so.1
-          ls -la "$GCC_S"
-
-          # Order matters: preloaded objects are searched before the
-          # executable's DT_NEEDED, so this beats libleanshared.so.
-          export LD_PRELOAD="$GCC_S"
-
-          for m in \
-            Tests.Linen.Database.DuckDB.FFI.AppenderTest \
-            Tests.Linen.Database.DuckDB.FFI.QueryExecutionTest \
-            Tests.Linen.Database.DuckDB.FFI.FileSystemTest \
-            Tests.Linen.Database.DuckDB.Simple.ToFieldTest
-          do
-            echo "──────── $m ────────"
-            lake build "$m" 2>&1 | tail -8
-            echo "exit: ${PIPESTATUS[0]}"
-          done
-
-          echo "=== and does Lean's own exception handling still work under the preload? ==="
-          lake build Tests.Linen.Control.ExceptionTest 2>&1 | tail -5
-          echo "exit: ${PIPESTATUS[0]}"
-          exit 0
-
-      - name: Whole suite under the preload
+      - name: Keychain test, full error output
         run: |
           set +e
           export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libgcc_s.so.1
-          lake build Tests 2>&1 | tail -30
-          echo "FULL SUITE exit: ${PIPESTATUS[0]}"
+          lake build Tests.Linen.System.KeychainTest 2>&1 | grep -vE '^(✔|ℹ|⚠)' | tail -40
+          echo "KEYCHAIN exit: ${PIPESTATUS[0]}"
+          exit 0
+
+      - name: Does an explicit default alias fix it?
+        run: |
+          set +e
+          export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libgcc_s.so.1
+
+          # `secret-tool store` goes through libsecret's own default-collection
+          # handling and will create the collection if it is missing, which also
+          # establishes the alias. If Keychain passes afterwards, the fix is to
+          # do this (or the equivalent) in setup-native-deps.
+          sudo apt-get install -y libsecret-tools >/dev/null 2>&1
+          echo "probe-secret" | secret-tool store --label="linen probe" probe linen
+          echo "secret-tool store exit: $?"
+
+          echo "=== ReadAlias(\"default\") again ==="
+          dbus-send --session --print-reply --dest=org.freedesktop.secrets \
+            /org/freedesktop/secrets org.freedesktop.Secret.Service.ReadAlias \
+            string:default
+
+          echo "=== rebuild KeychainTest ==="
+          # Force re-elaboration: a cached failure is not re-run, and a cached
+          # success would hide a regression.
+          rm -f .lake/build/lib/lean/Tests/Linen/System/KeychainTest.olean
+          lake build Tests.Linen.System.KeychainTest 2>&1 | grep -vE '^(✔|ℹ|⚠)' | tail -30
+          echo "KEYCHAIN-AFTER-ALIAS exit: ${PIPESTATUS[0]}"
           exit 0
