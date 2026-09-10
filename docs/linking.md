@@ -367,6 +367,51 @@ unilaterally.
 `libfoo_static.a` in one archive does not necessarily ship the *same library*
 twice. Diff the symbol tables before building a design on the static one.
 
+### 4.3 "Doesn't sealing stop me getting DuckDB updates?"
+
+A fair worry about static linking in general, but here it changes nothing,
+because **`linen` never used the system's DuckDB in the first place.**
+
+| | Before sealing | After sealing |
+| --- | --- | --- |
+| Version | `duckdbVersion := "1.5.4"`, pinned in `lakefile.lean` | unchanged |
+| Provenance | downloaded into `.lake/duckdb` | unchanged |
+| How it is found | `-L .lake/duckdb -lduckdb -Wl,-rpath,<abs .lake/duckdb>` | linked in |
+| System `libduckdb.so` used | **no** | no |
+
+The `-rpath` pointed at the project-local pinned copy, so an `apt upgrade` of a
+system DuckDB was never picked up either way. That is deliberate: AGENTS.md
+prescribes a pinned prebuilt archive precisely so a build does not depend on
+what happens to be installed. Sealing changes the *linkage*, not the *pinning*.
+Updating is one line — bump `duckdbVersion` and rebuild.
+
+What sealing does genuinely cost:
+
+- **You can no longer swap the library file.** With a dynamic pinned `.so` you
+  could drop a newer ABI-compatible `libduckdb.so` into `.lake/duckdb/` and
+  pick it up without relinking. That is gone; a rebuild is required. It was
+  never a supported workflow, but it was possible.
+- **`DUCKDB_PREFIX` is a worse escape hatch on Linux.** Point it at a
+  distro or Homebrew install and you get only the shared library — no
+  `libduckdb_static.a`, no `libcore_functions_extension.a` — so the build warns
+  loudly and falls back to dynamic linking. That build works on happy paths and
+  **aborts on DuckDB error paths**, i.e. the original bug. Not a regression,
+  but it means `DUCKDB_PREFIX` on Linux is "works, latently broken" rather than
+  a real option.
+- **Security updates become this project's obligation.** A DuckDB CVE will not
+  be fixed by upgrading a system package; it needs a `duckdbVersion` bump and a
+  `linen` release. Pinning already implied this — sealing does not change it —
+  but it is the real price of a hermetic dependency and should be named rather
+  than discovered.
+
+The general tradeoff, beyond DuckDB: a hermetic dependency buys reproducible
+builds that do not vary with the host, at the cost of taking responsibility for
+updates. For a library consumed **as source** — as `linen` is,
+`require linen from git … @ "vx.y.z"` — that is usually the right default,
+because the alternative makes every consumer's build depend on what they happen
+to have installed. Here it is not even a choice: on Linux the dynamic path is
+broken under Lean.
+
 ### The failure mode to remember
 
 If the sealed library cannot be built — `DUCKDB_PREFIX` pointing at an install
