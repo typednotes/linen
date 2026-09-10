@@ -135,10 +135,11 @@ rule (Lean stdlib > what `linen` already has from Haskell > new Hackage source):
 
 ## The capability effects — no upstream counterpart
 
-`Linen/Control/Monad/Effect/{FileSystem,HTTP,PostgreSQL}.lean` are
-**`linen`-original** and therefore not part of the topological checklist above
-(same treatment as `Control.Exception.Lens` relative to the `lens` import). They
-demonstrate what the ported mechanism gains from dependent types.
+`Linen/Control/Monad/Effect/{FileSystem,HTTP,PostgreSQL,ObjectStore,Queue,
+SecretStore}.lean` are **`linen`-original** and therefore not part of the
+topological checklist above (same treatment as `Control.Exception.Lens` relative
+to the `lens` import). They demonstrate what the ported mechanism gains from
+dependent types.
 
 `FileSystem` came first and sets the pattern, at two strengths:
 
@@ -207,3 +208,45 @@ failures **are** capturable by `#guard_msgs` in Lean 4.33.1, contrary to what
 `theorem … ≠ true := by decide` rather than as message matches, because that is
 the stronger statement and does not rot when a compiler version rewords its
 diagnostics — but the reason given for it was wrong.
+
+
+### The three cloud effects
+
+`ObjectStore`, `Queue` and `SecretStore` came last, alongside `Linen.Cloud.*`.
+They are the pattern's fourth, fifth and sixth instances, and the first written
+against a **remote** backend rather than a local one. Three things they add:
+
+- **The handler takes the backend as a parameter**, as `HTTP.runHTTPWith` does
+  with its transport — so the *same* `Eff [ObjectStore cap] α` runs against S3,
+  against Google Cloud Storage, or against an in-memory double. That is what
+  makes a provider-agnostic program a real claim rather than a slogan, and it is
+  what lets the tests exercise the effects end to end with no network and no
+  credentials.
+- **`Queue` reaches for the structural restriction rather than a permission.**
+  SQS is one queue with receipt handles; Pub/Sub is a topic to publish to plus a
+  *subscription* to pull from. Rather than a portable queue type with an optional
+  receive target failing at runtime, the backend record splits into `Producer`
+  and `Consumer`, so a Pub/Sub `Consumer` cannot be constructed without naming a
+  subscription — the same move `PostgreSQL` makes with its connection target,
+  where there is no obligation to discharge because no term could name an
+  alternative.
+- **`SecretStore` splits reading a value from reading metadata**, as separate
+  operations with separate permission bits. `Cloud.SecretStore`'s backend record keeps
+  `getValue` apart from `describe` at runtime, it being the only inbound
+  plaintext path in the interface; making the split a `Prop`-class turns that
+  convention into a compile-time fact, so a capability granting `describe`
+  makes `getValue` fail to elaborate. This is the clearest demonstration in the
+  set of a distinction a type-level effect row cannot draw at all: both
+  operations have the same effect type and differ only in a *value* indexing it.
+
+One divergence from `FileSystem` worth recording, because it looks like a bug
+and is not. `ObjectStore`'s key macro `k!` does **not** filter empty segments,
+while `FileSystem`'s `p!` does. An S3 key is an opaque byte string in which
+`a//b`, `a/` and `/a` are three distinct keys, so filtering would make them
+unaddressable; `String.splitOn "/"` and `"/".intercalate` are exact inverses on
+every string, so `List String` stays a faithful representation without needing a
+well-formedness field. The `ObjectStore` scope prefix is correspondingly
+*stricter* than S3's own `prefix=` parameter, which is a byte prefix and so
+matches `logs-2026/a` for `prefix=logs`; the component-wise check does not, and
+the handler compensates by sending a delimiter-terminated prefix on the wire, so
+what is enumerated cannot exceed what was authorised.

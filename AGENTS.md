@@ -57,9 +57,22 @@ accurate.
 
 ## Importing external code
 
-When importing external code into the library — designated by a **local path**
-or a **GitHub link** (e.g. a Haskell package, a Rust crate, another Lean
-project, or a single module):
+**`typednotes` is not external.** Libraries in the `typednotes` GitHub
+organisation (`typednotes/infra`, `typednotes/typednotes-compiler`, …) are
+first-party siblings of this one, not third-party dependencies. Moving code from
+one of them into `linen` is a **move**, not an import: it gets no
+`docs/imports/` entry, no dependency list and no precedence check. Move it when
+it belongs here — the test is whether more than one sibling needs it, or whether
+it is a building block rather than an application concern — then **edit the
+sibling in the same change** to delete its copy and use `linen`'s. Two live
+copies of the same code is the outcome to avoid, and leaving the sibling
+untouched is what produces one. Note that the sibling may already depend on
+`linen`, in which case the dependency direction is fixed and `linen` must not
+import it back.
+
+Everything below concerns genuinely **external** code — designated by a **local
+path** or a **GitHub link** outside the `typednotes` organisation (e.g. a
+Haskell package, a Rust crate, another Lean project, or a single module):
 
 - **Before porting anything, check whether it already exists — or already has
   a suitable source — in this order of precedence: Lean standard library >

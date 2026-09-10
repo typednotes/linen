@@ -6,6 +6,78 @@ format.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-09-10
+
+- **`Linen.Cloud`: object stores, queues and secret managers, the same way on
+  AWS, GCP and Scaleway.** Three portable interfaces — `ObjectStore`, `Queue`,
+  `SecretStore` — each a record of closures with one implementation per cloud,
+  following the sibling `typednotes/infra`'s `Backend` shape so that provider
+  dispatch is a total function. Underneath: the three-source credential chain
+  (CLI config files, OS keychain, environment), RFC 7523 token minting for GCP,
+  locality-to-region tables, request signing, the four wire dialects, a
+  classified error taxonomy and bounded pagination. `Crypto.SigV4` finally has
+  a consumer.
+
+  The reuse is the point: Scaleway's Object Storage speaks the S3 API and its
+  Queues speak the SQS API, so `ObjectStore.S3` and `Queue.Sqs` each serve
+  **two** clouds and differ in nothing but the host. Where GCP does not fit,
+  the types say so — `S3.endpoint?` and `Sqs.endpoint?` answer `none` for it
+  rather than returning a host that fails in DNS, and `Cloud.Queue` splits into
+  a `Producer` and a `Consumer` because Pub/Sub is a topic-and-subscription
+  system rather than a queue. A Pub/Sub `Consumer` cannot be constructed
+  without naming a subscription.
+
+- **Every service has a local backend.** `ObjectStore.inMemory`,
+  `Queue.inMemory` and `SecretStore.inMemory` behave like the real thing in the
+  ways that catch bugs — lexicographic key order, genuine pagination, message
+  invisibility until acknowledged, delivery counts that rise, `notFound` for a
+  missing secret — and `Transport.stub` replaces the network for any real
+  backend. The whole namespace is therefore tested with no credentials, no
+  containers and no new FFI.
+
+- **`Secret.Value` cannot be leaked by accident.** It wraps `ByteArray`,
+  renders as `<redacted>`, and has **no `ToJSON` instance and no `BEq`** — so a
+  secret cannot be serialised into a log line or compared in
+  constant-unknown time. `expose` is the single named audit point.
+
+- **`Linen.Control.Monad.Effect.{ObjectStore,Queue,SecretStore}`: the same
+  three services, capability-restricted.** The `Effect.FileSystem` pattern at
+  its fourth, fifth and sixth instances, and the first over a *remote* backend.
+  A capability confines a program to named buckets and key prefixes, or lets a
+  worker read one queue and write another without draining either.
+
+  `SecretStore` is the flagship: a capability granting `describe` and not
+  `getValue` makes `getValue` **fail to elaborate**. Both operations have the
+  same effect type and differ only in a value indexing it, so no type-level
+  effect row can draw the distinction — which is the clearest demonstration
+  yet of what the ported `freer-simple` mechanism gains from dependent types.
+  Each handler takes the backend as a parameter, so one program runs against a
+  real cloud or an in-memory double, and each has a pure `dryRun` interpreter.
+
+  Two documented divergences from `Effect.FileSystem`: `scopes := []` grants
+  **nothing** here rather than meaning "unrestricted" (a cloud credential's
+  blast radius is the whole account, which is not a default anyone wants), and
+  `ObjectStore`'s `k!` macro does not filter empty segments the way `p!` does,
+  because `a//b`, `a/` and `/a` are three different S3 keys.
+
+- **`Cloud.Error` reads five error dialects, not four.** Added OAuth2's RFC
+  6749 shape (`{"error": "invalid_grant", "error_description": …}`), where
+  `error` is a *string* — the same field name Google's API errors make an
+  object, so the value's type decides which. Without it every token-endpoint
+  rejection rendered with an empty code.
+
+- **`Cloud.Transport` sends the path single-encoded even when the signature
+  double-encodes it**, which is AWS's actual rule for every service except S3.
+  Because `Call.path` is held unencoded, both encodings are derived from one
+  value and cannot disagree — so a key containing a space or a `#` signs and
+  sends correctly with no work at the call site.
+
+- **`AGENTS.md`: `typednotes` is not external.** Moving code from a sibling in
+  the `typednotes` organisation into `linen` is a *move*, not an import: no
+  `docs/imports/` entry, no dependency list, no precedence check — and the
+  sibling is edited in the same change to delete its copy. Two live copies of
+  the same code is the outcome to avoid.
+
 - **`Linen.Control.Monad.Effect.FileSystem`: a permission set per path prefix.**
   The capability's `roots : List Path` becomes `scopes : List Scope`, where each
   `Scope` carries **its own operation list** alongside its root — the shape

@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen Tests --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen Tests --include='*.lean' | wc -l -->
-  <strong>742 modules</strong> · <strong>403 compile-time theorems</strong> · <strong>10142 <code>#guard</code> checks</strong>
+  <strong>770 modules</strong> · <strong>468 compile-time theorems</strong> · <strong>10882 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -259,6 +259,29 @@ for the full per-module feature list and module table.
   generation; and PNG/JPEG/GIF/BMP/TGA/TIFF/HDR and PNM/PGM/PPM file I/O via
   `Codec.Picture`/`Graphics.Netpbm`.
 
+- **`Cloud`** — one way to use cloud services across **AWS, GCP and
+  Scaleway**: object stores, message queues and secret managers behind three
+  portable interfaces, each a record of closures with one implementation per
+  cloud. Scaleway's Object Storage and Queues speak the S3 and SQS APIs, so a
+  single client serves two clouds and differs only in the endpoint; Cloud
+  Storage gets its own JSON client, and Pub/Sub — a topic-and-subscription
+  system rather than a queue — splits into a `Producer` and a `Consumer` so
+  nothing has to pretend otherwise. Underneath: the three-source credential
+  chain (CLI config files, OS keychain, environment), RFC 7523 token minting
+  for GCP, locality-to-region tables, request signing over `Crypto.SigV4`, the
+  four wire dialects, a classified error taxonomy, and pagination that reports
+  whether it finished. Every interface has an **in-memory backend** and the
+  transport is swappable, so all of it is tested with no credentials and no
+  network.
+- **`Control.Monad.Effect.{ObjectStore,Queue,SecretStore}`** — the same three
+  services as capability-restricted effects, on the `Effect.FileSystem`
+  pattern. A capability is a value indexing the effect, so it can confine a
+  program to one bucket's key prefix, let a worker read one queue and write
+  another without draining either, or grant a health check the right to see
+  that a secret *exists* while making `getValue` **fail to elaborate**. The
+  handler takes the backend as a parameter, so one program runs against S3,
+  against Cloud Storage, or against an in-memory double.
+
 ## Quick Start
 
 Add to your `lakefile.toml`:
@@ -353,7 +376,7 @@ installed even to use, say, `Crypto.SigV4`.
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 742 modules).
+See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 770 modules).
 
 ## Build & Test
 

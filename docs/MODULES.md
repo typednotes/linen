@@ -1965,6 +1965,96 @@ parsers and direct-string renderers in `Readers/HTML`, `Writers/HTML`,
 (structural over the remaining input, but not a decreasing subterm Lean's
 termination checker can see); everything else is ordinary total recursion.
 
+### `Cloud` — object stores, queues and secrets across AWS, GCP and Scaleway
+
+Three portable service interfaces, each a **record of closures** with one
+implementation per cloud — the shape that makes provider dispatch a total
+function and a local backend free.
+
+| interface     | AWS             | GCP           | Scaleway        |
+|---------------|-----------------|---------------|-----------------|
+| `ObjectStore` | S3              | Cloud Storage | Object Storage  |
+| `Queue`       | SQS             | Pub/Sub       | Queues (SQS)    |
+| `SecretStore` | Secrets Manager | Secret Manager| Secret Manager  |
+
+- **The reuse that keeps this small.** Scaleway's Object Storage speaks the S3
+  API and its Queues speak the SQS API, so `ObjectStore.S3` and `Queue.Sqs`
+  each serve **two** clouds and differ in nothing but the host in
+  `Cloud.Endpoint`. The same code reaches MinIO or LocalStack through
+  `Endpoint.raw`.
+- **Where GCP does not fit, the types say so.** `S3.endpoint?` answers `none`
+  for GCP because Cloud Storage's S3-compatible API needs HMAC
+  interoperability keys rather than the bearer token every GCP credential here
+  carries; `Sqs.endpoint?` answers `none` because Pub/Sub is not a queue. Both
+  are `Option`s rather than hosts that fail in DNS.
+- **The queue seam, without lying.** Pub/Sub is a topic to publish to plus a
+  subscription to pull from, so `Cloud.Queue` splits into a `Producer` and a
+  `Consumer`. A Pub/Sub `Consumer` cannot be constructed without naming a
+  subscription — the structural restriction `Effect.PostgreSQL` uses for its
+  connection target, rather than a runtime `unsupported`.
+- **Secrets that do not leak.** `Secret.Value` wraps `ByteArray`, renders as
+  `<redacted>`, and has **no `ToJSON` instance and no `BEq`** — so a secret
+  cannot be serialised into a log line or compared in constant-unknown time,
+  and `expose` is the single named audit point.
+- **Credentials.** The three-source chain — CLI config files
+  (`~/.aws/credentials`, `~/.config/scw/config.yaml`, `gcloud`), the OS
+  keychain, then the environment — with a redacting `Repr`, "set but empty
+  means unset" (a CI runner binds an undefined secret to `""`), and a
+  not-found message naming every place it looked. Plus RFC 7523 JWT-bearer
+  token minting for GCP over `Crypto.JOSE`.
+- **Placement.** `Locality` names a place and each cloud maps it to its own
+  region code or to nothing; `Region p` is indexed by its cloud, so an AWS
+  region cannot reach Scaleway. All three clouds overlap in exactly two places
+  — Paris and Milan — which is the number to know before promising a
+  multi-cloud deployment.
+- **Errors as values.** Every operation answers `Except Error`; a failure
+  carries the provider's own code and a `Class` derived from it
+  (`notFound`/`denied`/`conflict`/`throttled`/…), so "read it if it is there"
+  is ordinary control flow. All five error dialects are read — S3's XML, AWS
+  JSON's `__type`, Scaleway's `type`, Google's nested `error`, and OAuth2's
+  RFC 6749 shape.
+- **Pagination that reports whether it finished.** `paginate maxPages` recurses
+  structurally on a caller-chosen bound and returns a `Listing` whose
+  `complete` says whether the provider ended the listing or the budget ran
+  out. No total function can promise a complete listing over a peer that may
+  return a cursor forever, so completeness is reported rather than assumed.
+- **Working without an account.** `ObjectStore.inMemory`, `Queue.inMemory` and
+  `SecretStore.inMemory` behave like the real thing where it catches bugs:
+  lexicographic key order, genuine pagination, message invisibility until
+  acknowledged, delivery counts that rise, `notFound` for a missing secret. And
+  `Transport.stub` replaces the network for any real backend, so the provider
+  clients are exercised against recorded payloads. The whole namespace is
+  tested with no credentials and no containers.
+- **`Cloud.Binding`** resolves a logical resource name to a cloud, region and
+  physical identifier from an environment convention or a JSON manifest,
+  naming every source it tried on failure.
+
+### `Control.Monad.Effect.{ObjectStore,Queue,SecretStore}` — the same services, capability-restricted
+
+The `Effect.FileSystem` pattern at its fourth, fifth and sixth instances, and
+the first over a *remote* backend. A capability is a value indexing the effect,
+so the restriction reaches the operations' **arguments** and not just the effect
+row.
+
+- **`ObjectStore`** confines a program to named buckets and key prefixes.
+  `tiered "analytics" k!"reports" k!"logs"` grants read-write under one prefix
+  and read-only under another, and a `put` to the read-only tier does not
+  elaborate. Its `k!` macro deliberately does *not* filter empty segments,
+  unlike `p!`: `a//b`, `a/` and `/a` are three different S3 keys.
+- **`Queue`** separates publishing from consuming and both from purging.
+  `pipeline "inbox" "outbox"` reads one queue and writes the other, and cannot
+  do the reverse.
+- **`SecretStore`** is the flagship: `describeOnly` grants metadata over every
+  secret while making `getValue` **fail to elaborate**. Both operations have
+  the same effect type and differ only in a value indexing it, so no
+  type-level effect row can draw the distinction at all.
+
+Each handler takes the backend as a parameter — the `runHTTPWith` seam — so one
+program runs against a real cloud or an in-memory double, and each has a pure
+`dryRun` interpreter so tests assert the exact request sequence with no `IO`.
+Notably, a dry run of a secret-reading program is safe to print: the log names
+the secrets, never their values.
+
 ## Module Table
 
 | Module | Description |
@@ -2705,3 +2795,31 @@ termination checker can see); everything else is ordinary total recursion.
 | `Linen.Text.Pandoc.Readers.Markdown` | `pandoc`'s `Text.Pandoc.Readers.Markdown` (+ `Readers.Metadata`): Markdown→AST, pandoc's flagship reader, folding in a bounded YAML-subset front-matter parser over `Std.Internal.Parsec` |
 | `Linen.Text.Pandoc.Writers.Markdown` | `pandoc`'s `Text.Pandoc.Writers.Markdown`: AST→Markdown, pandoc's flagship writer |
 | `Linen.Text.Pandoc` | the top-level facade: `getReader`/`getWriter` format-name registries and a `convert` helper dispatching over the in-scope Markdown/HTML/Native formats |
+| `Linen.Cloud` | Aggregator for the cloud-services namespace: object stores, queues and secrets across AWS, GCP and Scaleway |
+| `Linen.Cloud.Provider` | The three supported clouds; `Locality` places mapped to each cloud's region codes; `Region p` indexed by its cloud; the `Feature` support matrix |
+| `Linen.Cloud.Error` | Classified cloud failures (`notFound`/`denied`/`conflict`/`throttled`/…) carrying the provider's own code; readers for all five error dialects |
+| `Linen.Cloud.Credentials` | The three-source credential chain with a redacting `Repr`, "set but empty means unset", and a not-found message naming every source |
+| `Linen.Cloud.Credentials.Keychain` | The OS credential store as a credential source, split out so the keychain FFI stays opt-in |
+| `Linen.Cloud.Credentials.Gcp` | GCP service-account key files and the RFC 7523 JWT-bearer flow that mints an access token |
+| `Linen.Cloud.Endpoint` | Per-service hosts and signing scopes; the S3/SQS-compatibility trick that lets one client serve AWS and Scaleway |
+| `Linen.Cloud.Page` | Cursors, pages, and `paginate` — a bounded read that reports whether the listing finished |
+| `Linen.Cloud.Auth` | The three authentication schemes: SigV4 over `Crypto.SigV4`, GCP bearer tokens, Scaleway's `X-Auth-Token` |
+| `Linen.Cloud.Transport` | The single egress point: a swappable `Transport`, signing that agrees with the wire, retries, and failure as a value |
+| `Linen.Cloud.Protocol.S3` | The REST-XML dialect: path-style addressing, `Content-MD5`, `ListObjectsV2` continuation |
+| `Linen.Cloud.Protocol.AwsJson` | The `X-Amz-Target` dialect, with SQS pinned to AWS-JSON 1.0 and Secrets Manager to 1.1 |
+| `Linen.Cloud.Protocol.GoogleRest` | Bearer-token REST for Cloud Storage, Pub/Sub and Secret Manager; paths sent verbatim so `:verb` survives |
+| `Linen.Cloud.Protocol.ScalewayRest` | Scaleway's own API: one global host, region in the path, and the list-and-find its UUID addressing forces |
+| `Linen.Cloud.ObjectStore` | The portable object-store interface, its derived operations, and an in-memory backend with real pagination |
+| `Linen.Cloud.ObjectStore.S3` | The S3 object data plane, serving AWS **and** Scaleway from one implementation |
+| `Linen.Cloud.ObjectStore.Gcs` | Cloud Storage over the JSON API, including the `%2F`-encoded single-segment object name |
+| `Linen.Cloud.Queue` | `Producer`/`Consumer`/`Queue`, opaque receipts, and an in-memory backend with message invisibility and redelivery counts |
+| `Linen.Cloud.Queue.Sqs` | The SQS data plane for AWS and Scaleway: batch operations throughout, with partial failure handled |
+| `Linen.Cloud.Queue.PubSub` | Pub/Sub publish and pull, with the topic/subscription split the portable interface is shaped around |
+| `Linen.Cloud.Secret` | `Secret.Value` (non-rendering, non-serialisable, non-comparable), metadata kept separate, and an in-memory backend |
+| `Linen.Cloud.Secret.SecretsManager` | AWS Secrets Manager, including the mandatory `ClientRequestToken` and both `SecretString` and `SecretBinary` |
+| `Linen.Cloud.Secret.ScalewaySecretManager` | Scaleway Secret Manager, with memoised name-to-UUID resolution |
+| `Linen.Cloud.Secret.GcpSecretManager` | Google Secret Manager: `versions/latest:access` and the nested base64 payload |
+| `Linen.Cloud.Binding` | Resolving a logical resource name to a cloud, region and physical identifier, from environment or manifest |
+| `Linen.Control.Monad.Effect.ObjectStore` | Capability-restricted object store: buckets and key prefixes checked at elaboration |
+| `Linen.Control.Monad.Effect.Queue` | Capability-restricted queue: publish, consume and purge granted separately, per queue |
+| `Linen.Control.Monad.Effect.SecretStore` | Capability-restricted secret store: reading a value is a distinct permission from reading metadata |
