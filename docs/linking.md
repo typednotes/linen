@@ -485,15 +485,59 @@ including the extensions is necessarily larger, so its cost is at least this
 **(inference)**, and 8.0 GB already approaches or exceeds a `macos-latest`
 runner.
 
-**The remaining route is DuckDB's full source tree built with CMake**, which is
-what its Rust binding uses for extensions. That is the only complete
-from-source option. It would parallelise across cores, unlike the single
-translation unit, but it means committing DuckDB's source tree, running its
-CMake build in CI, and maintaining that build. What it would buy is real:
-source in git, no build-time download, and — since the compiler would be ours —
-the option of `-stdlib=libc++` to match Lean's runtime, which removes the cause
-of §3 rather than isolating it. The current approach was chosen against that
-trade, not in ignorance of it.
+**Building a fuller amalgamation ourselves is not a way out.**
+`scripts/amalgamation.py` excludes extensions deliberately: its
+`compile_directories` covers `src/`, third-party and `extension/loader` only,
+and it skips every `*_extension.hpp` include from `extension_helper.cpp` along
+with `generated_extension_loader.hpp` and `generated_extension_headers.hpp` —
+which is why `LoadAllExtensions` comes out as `// nop`. The `--extended` flag
+only exports more headers for out-of-tree extension authors. Including
+extensions would mean patching that script, reimplementing the CMake step that
+generates `generated_extension_headers.hpp`, and re-doing both on every
+upgrade — and the script has no split option, so the result is a *larger*
+single translation unit, i.e. worse on the constraint that actually binds.
+
+### The from-source alternative, measured
+
+DuckDB's full source tree built with CMake is the only complete from-source
+route, and it is the option its Rust binding uses for extensions. Measured on
+the same machine at `--parallel 4` (to model a 4-vCPU runner), configured
+`-DBUILD_SHELL=0 -DBUILD_UNITTESTS=0 -DBUILD_EXTENSIONS="json;parquet;icu"`:
+
+| step | time |
+| --- | --- |
+| shallow clone of `v1.5.4` | 11 s |
+| CMake configure | 17 s |
+| compile (490 objects) | **245 s** |
+| total | **262 s** |
+
+The result passes the §6.3 SQL matrix in full — `sum`, `avg`, `date_trunc`,
+`list_value`, `stddev`, `median`, `string_agg` and the rest all work — and
+builds `libcore_functions_extension.a` alongside json, parquet and icu.
+Unlike the single translation unit, this parallelises across cores.
+
+So this route is not prohibitively slow. Its costs are elsewhere:
+
+- **~120 MB vendored**, after pruning `data/` (122 MB), `test/` (47 MB) and
+  `benchmark/` (6 MB) from the 294 MB tree — `src/` 24 MB, `extension/` 60 MB,
+  `third_party/` 33 MB. Roughly 12x the vendored SQLite, in every clone.
+- **Owning a DuckDB build**: the CMake invocation, its extension selection, and
+  re-verification on every upgrade.
+- **Build time on every cold CI build, on both platforms.** The figure above is
+  from fast local cores; a runner would be slower **(inference)**.
+
+What it would buy is real: full functionality, no build-time download, and —
+since the compiler would be ours — `-stdlib=libc++` to match Lean's runtime,
+removing the cause of §3 rather than isolating it and allowing §4.1's sealing
+machinery and §4.5's check to be deleted.
+
+A variant worth noting: *downloading* the pinned source tree instead of
+committing it keeps the compiler control, and therefore the removal of §3,
+without the ~120 MB in git.
+
+The prebuilt approach in §4.1–§4.3 was chosen against this trade. It is
+recorded here with figures so the choice can be revisited on evidence rather
+than re-litigated from estimates.
 
 ## 7. Adding an FFI dependency
 
