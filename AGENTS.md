@@ -64,6 +64,40 @@ case" is good enough.
   build/CI step when no such amalgamation exists (e.g. DuckDB) — do not check
   prebuilt per-platform binaries into git.
 
+## Releasing
+
+A release is cut by pushing a version tag; `.github/workflows/release.yml` does
+the rest. The order matters, because three things have to agree:
+
+1. Bump `version` in `lakefile.lean`.
+2. Add a `## [x.y.z] - YYYY-MM-DD` section to `CHANGELOG.md`, moving anything
+   under `[Unreleased]` into it.
+3. Run `ci/check-release.sh vx.y.z` **before** tagging. It checks the tag
+   against the lakefile and the CHANGELOG and prints the notes that would be
+   published, so a mismatch is caught locally rather than in a workflow.
+4. Commit, `git tag -a vx.y.z`, and push the tag.
+
+The workflow then re-runs the full suite on macOS **and** Linux — a release is
+never gated on whatever CI happened to run for the branch — and publishes a
+GitHub release whose notes are the CHANGELOG section. A tag with a prerelease
+suffix (`v0.17.0-rc1`) publishes as a prerelease, so it does not become
+"latest".
+
+Two things worth knowing:
+
+- **GitHub runs the workflow file from the tagged commit**, not from `main`. A
+  tag cut before a change to `release.yml` will not see that change, and a tag
+  cut before the workflow existed will not trigger it at all.
+- **No build artifacts are attached, deliberately.** `linen` is consumed as
+  source (`require linen from git … @ "vx.y.z"`), so the tag is the artifact.
+  `.olean` files are specific to one toolchain and platform, and publishing
+  them would invite a dependency that silently stops matching the consumer's
+  compiler.
+
+The native dependency list lives in one place,
+`.github/actions/setup-native-deps/action.yml`, used by both workflows — a
+second copy is the kind of duplication that goes stale without anyone noticing.
+
 ## Keeping the main page current
 
 `README.md` is the project's front page: the logo, badges, the feature list,

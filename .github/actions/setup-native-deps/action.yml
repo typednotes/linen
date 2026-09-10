@@ -1,0 +1,39 @@
+name: Set up native FFI dependencies
+description: >-
+  Installs the system libraries `lakefile.lean` resolves through `pkg-config`,
+  on either Linux or macOS. Extracted from the CI workflow so that the release
+  workflow cannot drift from it — this repository already guards duplicated
+  build logic elsewhere, and two copies of a dependency list is exactly the
+  kind of duplication that goes stale silently.
+
+runs:
+  using: composite
+  steps:
+    # The libraries the lakefile probes for:
+    #  - libpq     (ffi/postgres.c) for Database.PostgreSQL
+    #  - OpenSSL   (ffi/jose.c)     for Crypto.JOSE, and so for Crypto.SigV4
+    #                               and Cloud.Credentials.Gcp above it
+    #  - libsecret (ffi/keychain.c) for System.Keychain, and so for
+    #                               Cloud.Credentials.Keychain (Linux only;
+    #                               macOS uses the Security and CoreFoundation
+    #                               frameworks instead)
+    - name: Install native FFI dependencies (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install -y libpq-dev libssl-dev libsecret-1-dev pkg-config
+
+    - name: Install native FFI dependencies (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        brew install libpq openssl pkg-config
+        # libpq/openssl are keg-only on Homebrew, so pkg-config needs an
+        # explicit PKG_CONFIG_PATH to find their .pc files.
+        echo "PKG_CONFIG_PATH=$(brew --prefix libpq)/lib/pkgconfig:$(brew --prefix openssl)/lib/pkgconfig" >> "$GITHUB_ENV"
+
+    # DuckDB (ffi/duckdb_shim.c) needs no step here. lakefile.lean's own
+    # `ensureDuckdbUnpacked` (curl + unzip, both preinstalled on the GitHub
+    # runners) runs on demand during `lake build`, on both platforms, exactly
+    # as it does on a contributor's machine — and short-circuits when a
+    # `duckdb.h` is already unpacked under `.lake/duckdb/`. Duplicating its
+    # version and URL here would only be a second place to keep in sync.

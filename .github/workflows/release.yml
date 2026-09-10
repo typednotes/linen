@@ -1,0 +1,145 @@
+name: Release
+
+# Fires when a version tag is pushed:
+#
+#   git tag -a v0.17.0 -m "..." && git push origin v0.17.0
+#
+# Note that GitHub runs the workflow file **as it exists in the tagged
+# commit**, not as it exists on `main`. So a tag created before this file
+# existed will not trigger it, and a fix to this file only takes effect for
+# tags cut after the fix is committed.
+on:
+  push:
+    tags:
+      - 'v*'
+  # For re-running a release whose publish step failed after the tests
+  # already passed — the tests run again, since a green result that nobody
+  # re-checked is not evidence.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag to release (e.g. v0.17.0)'
+        required: true
+        type: string
+
+# One release at a time per tag, and never cancel one part way: a half-created
+# release is worse than a slow one.
+concurrency:
+  group: release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ── Cheap checks first ────────────────────────────────────────────────────
+  #
+  # A version mismatch or a missing CHANGELOG section should fail in seconds,
+  # not after two platforms have each built the whole library.
+  verify:
+    name: Verify tag and notes
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+      version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Check the tag against lakefile.lean and CHANGELOG.md
+        id: check
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          # A prerelease suffix (v0.17.0-rc1) is published as a prerelease, so
+          # it does not become the repository's "latest".
+          if [[ "$TAG" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          # Same script a contributor runs before tagging, so a failure here
+          # is reproducible locally rather than only in CI.
+          ./ci/check-release.sh "$TAG" > release-notes.md
+
+      - name: Upload the release notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+          retention-days: 7
+
+  # ── The gate ──────────────────────────────────────────────────────────────
+  #
+  # AGENTS.md requires the full suite to pass on macOS **and** Linux whenever
+  # an FFI target is in the build graph, which is always here. So a release is
+  # gated on both, not on whatever CI happened to run for the branch.
+  test:
+    name: Test (${{ matrix.os }})
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: ./.github/actions/setup-native-deps
+      - uses: leanprover/lean-action@v1
+      # Every `#guard` and `#guard_msgs` check runs at elaboration time, so
+      # building `Tests` *is* running the tests.
+      - name: Build the test suite (runs every #guard check)
+        run: lake build Tests
+
+  # ── Publish ───────────────────────────────────────────────────────────────
+  publish:
+    name: Publish the release
+    needs: [verify, test]
+    runs-on: ubuntu-latest
+    permissions:
+      # The only write this workflow needs.
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Download the release notes
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+
+      - name: Create or update the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.verify.outputs.tag }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          FLAGS=()
+          if [[ "$PRERELEASE" == "true" ]]; then
+            FLAGS+=(--prerelease)
+          fi
+          # No build artifacts are attached, deliberately. `linen` is consumed
+          # as source — `require linen from git "…" @ "v0.17.0"` — so the tag
+          # itself is the artifact. `.olean` files are tied to one Lean
+          # toolchain and one platform, and publishing them would invite
+          # someone to depend on a binary that silently stops matching their
+          # compiler.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists; updating its notes."
+            gh release edit "$TAG" \
+              --title "linen $VERSION" \
+              --notes-file release-notes.md \
+              "${FLAGS[@]}"
+          else
+            gh release create "$TAG" \
+              --title "linen $VERSION" \
+              --notes-file release-notes.md \
+              --verify-tag \
+              "${FLAGS[@]}"
+          fi
+          echo "Published: $(gh release view "$TAG" --json url --jq .url)"
