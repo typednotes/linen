@@ -50,24 +50,47 @@ runs:
         eval "$(dbus-launch --sh-syntax)"
         echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
 
-        # An empty password creates and unlocks the default collection, which
-        # is what `ffi/keychain.c` stores into (`SECRET_COLLECTION_DEFAULT`).
-        # `--components=secrets` is the part that claims
-        # `org.freedesktop.secrets` on the bus.
-        echo -n "" | gnome-keyring-daemon --unlock --components=secrets
+        mkdir -p "$HOME/.local/share/keyrings"
+
+        # Two steps, and the order matters. `--unlock` alone is NOT enough: it
+        # unlocks an *existing* login keyring and never creates one, so on a
+        # fresh runner it leaves `~/.local/share/keyrings` empty and no
+        # collection aliased `default`. `ffi/keychain.c` stores into
+        # `SECRET_COLLECTION_DEFAULT`, which libsecret resolves to that alias,
+        # and the store then fails with `Object does not exist at path
+        # ".../collection/login"`. Measured on a runner: after `--unlock`,
+        # `ReadAlias("default")` is "/"; after the pair below it is
+        # "/org/freedesktop/secrets/collection/login".
+        #
+        # `--login` reads the login password from stdin (empty here) and
+        # creates the login keyring if absent; `--start --components=secrets`
+        # then claims `org.freedesktop.secrets` on the bus.
+        eval "$(printf '\n' | gnome-keyring-daemon --daemonize --login)"
+        eval "$(gnome-keyring-daemon --start --components=secrets)"
 
         # Fail here, loudly, rather than a hundred build jobs later inside an
         # opaque `#eval` failure.
+        #
+        # The check is on the `default` *alias*, not just on the bus name: the
+        # name being owned is not sufficient, and asserting only that is what
+        # let the first version of this step pass while `System.Keychain` still
+        # failed on every call. `ReadAlias` returns the object path "/" when no
+        # collection is aliased `default`.
         for _ in $(seq 1 30); do
-          if dbus-send --session --print-reply --dest=org.freedesktop.DBus \
-               /org/freedesktop/DBus org.freedesktop.DBus.GetNameOwner \
-               string:org.freedesktop.secrets >/dev/null 2>&1; then
-            echo "org.freedesktop.secrets is available on the session bus"
-            exit 0
-          fi
+          alias_path="$(dbus-send --session --print-reply --dest=org.freedesktop.secrets \
+            /org/freedesktop/secrets org.freedesktop.Secret.Service.ReadAlias \
+            string:default 2>/dev/null | grep -o 'object path "[^"]*"')"
+          case "$alias_path" in
+            *'/org/freedesktop/secrets/collection/'*)
+              echo "Secret Service ready; default collection = $alias_path"
+              exit 0
+              ;;
+          esac
           sleep 1
         done
-        echo "org.freedesktop.secrets never appeared on the session bus" >&2
+        echo "No collection is aliased 'default' on the session bus." >&2
+        echo "ReadAlias(default) returned: ${alias_path:-<no reply>}" >&2
+        echo "System.Keychain stores into SECRET_COLLECTION_DEFAULT and cannot work without one." >&2
         exit 1
 
     - name: Install native FFI dependencies (macOS)
