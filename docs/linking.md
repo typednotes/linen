@@ -464,9 +464,21 @@ and an extension repository.
 
 Being one translation unit, this parallelises across neither cores nor memory.
 GitHub's `ubuntu-latest` provides ~16 GB and `macos-latest` roughly half.
-Vendoring would also add ~28 MB of C++ to the repository. The current approach
-downloads ~40 MB. SQLite's 9.6 MB amalgamation is C and compiles in seconds;
-the difference is C++ template instantiation, not file size.
+Vendoring would also add ~28 MB of C++ to the repository, against ~40 MB
+downloaded by the current approach.
+
+Against the vendored SQLite amalgamation, compiled with the same flags the
+lakefile uses (`-O2 -fPIC -DSQLITE_THREADSAFE=1`) on the same machine:
+
+| | source | wall time | peak RSS | object |
+| --- | --- | --- | --- | --- |
+| SQLite (C) | 9.0 MB | **7.2 s** | **0.4 GB** | 1.4 MB |
+| DuckDB amalgamation (C++) | 25.6 MB | **166 s** | **8.0 GB** | 41.5 MB |
+| ratio | 2.8x | 23x | 20x | 30x |
+
+2.8x the source but 23x the time and 20x the memory: the cost is C++ template
+instantiation, not file size. This is why vendoring works for one and not the
+other, and it is the measurement to repeat before vendoring anything else.
 
 Note also that the figures above are for the *core-only* amalgamation. A build
 including the extensions is necessarily larger, so its cost is at least this
