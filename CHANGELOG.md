@@ -6,6 +6,70 @@ format.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-09-11
+
+- **The test suite now actually runs in CI, on both platforms.** `Tests` is not
+  a default Lake target, so `lean-action`'s `lake build` never reached it: every
+  green run before this had been green because nothing was tested. Building it
+  explicitly surfaced eleven pre-existing Linux failures across five unrelated
+  causes. None were regressions; macOS passed throughout, which is why they went
+  unnoticed. The matrix also gains `fail-fast: false`, because a flaky failure on
+  one platform had been cancelling the other leg and discarding the result the
+  run existed to produce.
+
+- **`System.Keychain` on Linux round-trips arbitrary bytes.** The libsecret
+  backend used `secret_password_store_sync`/`secret_password_lookup_sync`, which
+  carry a secret as a NUL-terminated string: a secret containing a NUL byte was
+  silently truncated at it, and its length recovered with `strlen`.
+  `setSecret`/`getSecret` promise the bytes back verbatim, as the macOS and
+  Windows branches always delivered. The branch now uses the length-explicit
+  `secret_value_new` with `secret_service_{store,lookup}_sync`. If you stored
+  binary secrets on Linux with an earlier version, the stored values were
+  truncated when written and cannot be recovered by this fix.
+
+- **DuckDB is linked as a sealed shared library on Linux.** Lean's
+  `libleanshared.so` exports 10 of the 11 `_Unwind_*` symbols the system
+  `libstdc++` imports and precedes it in the global lookup scope, so a
+  dynamically linked libduckdb unwound through two incompatible unwinders and
+  aborted the process on **every** DuckDB error path — `terminate called after
+  throwing an instance of 'duckdb::…Exception'`, with DuckDB's own `catch (...)`
+  in the frame being unwound. DuckDB, its C++ runtime and its unwinder are now
+  linked into one shared object with those symbols localized, so nothing can
+  interpose them. Reported upstream as leanprover/lean4#15112. macOS is
+  unchanged and needs none of this: Mach-O's two-level namespace makes its dylib
+  immune.
+
+  **New Linux build requirement:** producing that library needs `g++` and a
+  static `libstdc++.a`/`libgcc.a` (Ubuntu: `g++`, which pulls in
+  `libstdc++-*-dev`). If they are absent the build prints a `[linen] WARNING`
+  naming the missing piece and falls back to dynamic linking — which builds and
+  works on success paths but aborts on DuckDB errors. `ci/check-sealed-duckdb.sh`
+  asserts the sealed library's properties on the linked artifact, since a symbol
+  table is not observable from a `#guard`.
+
+  On Linux the pinned DuckDB archive is now `static-libs-linux-<arch>.zip`
+  rather than `libduckdb-linux-<arch>.zip`: the `libduckdb_static.a` in the
+  latter is a core-only build and not equivalent to the `libduckdb.so` beside it
+  in the same zip, missing the whole `core_functions` extension — `sum`, `avg`,
+  `abs` and `round` among others.
+
+- **Two tests fixed rather than papered over.** `Network.SendfileTest` closed
+  the listening socket before joining the task that accepts on it; a TCP
+  `connect` completes out of the listen backlog without anyone calling `accept`,
+  so the foreground could reach `close` first and the task then failed with
+  `EBADF`. `System.TimeManagerTest` tickled a handle every 15ms against a 50ms
+  deadline, so a single overrunning `IO.sleep` expired the handle and the test
+  blamed `tickle`; it now uses a 10x per-gap margin and measures the gaps rather
+  than assuming them, reporting an inconclusive run instead of failing one.
+
+- **New: [docs/linking.md](docs/linking.md).** Static versus dynamic linking,
+  position-independent code, how C++ exceptions interact with dynamic symbol
+  resolution, the sealing design and the alternatives weighed against it,
+  per-release measurements of Lean's unwinder exports, and an inventory of every
+  FFI dependency — which are vendored, which are pinned, which come from the
+  host, and which are C versus C++. Worth reading before adding a native
+  dependency, especially a C++ one.
+
 ## [0.16.0] - 2026-09-10
 
 - **`Linen.Cloud`: object stores, queues and secret managers, the same way on
