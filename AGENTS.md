@@ -2,23 +2,6 @@
 
 Guidance for working in the **linen** Lean library.
 
-## No half-implemented features
-
-If a feature (a safety check, a data model that is meant to cover several
-cases, an API meant to apply uniformly across a set of kinds/types, ...) is
-only wired up for some of the cases it should logically cover, that is not
-"done for now" — it is a trap for whoever assumes it applies uniformly. A
-2026-09-10 incident in the sibling `infra` project: an ownership/tagging
-system was wired up for two kinds out of many, with every other kind silently
-falling back to weaker, ledger-only behaviour; the gap was invisible until it
-caused a real, destructive incident. Either implement a feature completely
-for every case it claims to cover in the same change, or say loudly in the
-code, the docs, and to the user exactly which cases it does **not** cover
-yet — never let partial coverage look complete. When only part of a feature
-can be done, stop and get explicit agreement from the user on the partial
-scope before shipping it, rather than deciding unilaterally that "the common
-case" is good enough.
-
 ## Project layout
 
 - Library sources live under `Linen/`, mirroring their module path
@@ -43,6 +26,8 @@ case" is good enough.
 - Prefer small, illustrative `#guard` examples that document intended behaviour.
   For `Prop`-valued definitions that cannot be decided by `#guard`, use
   `example ... := rfl` (or an explicit proof) to illustrate the law.
+
+- Every code involving FFI, must be thoroughly tested.
 
 ### FFI and native-library dependencies
 
@@ -202,3 +187,24 @@ instead, before porting anything fresh from the crate itself.
 - Document definitions with doc-comments; mathematical statements may use LaTeX
   (`$...$` / `$$...$$`) as in the existing modules.
 - Group code into clearly labelled sections with `── … ──` comment banners.
+
+## Prove or test everything
+
+
+
+## No half-implemented features
+
+If a feature (a safety check, a data model that is meant to cover several
+cases, an API meant to apply uniformly across a set of kinds/types, ...) is
+only wired up for some of the cases it should logically cover, that is not
+"done for now" — it is a trap for whoever assumes it applies uniformly. A
+2026-09-10 incident in the sibling `infra` project: an ownership/tagging
+system was wired up for two kinds out of many, with every other kind silently
+falling back to weaker, ledger-only behaviour; the gap was invisible until it
+caused a real, destructive incident. Either implement a feature completely
+for every case it claims to cover in the same change, or say loudly in the
+code, the docs, and to the user exactly which cases it does **not** cover
+yet — never let partial coverage look complete. When only part of a feature
+can be done, stop and get explicit agreement from the user on the partial
+scope before shipping it, rather than deciding unilaterally that "the common
+case" is good enough.
