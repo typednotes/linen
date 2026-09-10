@@ -529,9 +529,17 @@ target duckdbSealedLib pkg : Dynlib := do
   let objJob ← duckdb.o.fetch
   -- `duckdbSealedLinkArgs` already carries the `--start-group`ed archives and
   -- the matching `--exclude-libs`; see `duckdbSealedArchives`.
+  --
+  -- These go in `traceArgs`, NOT `weakArgs`: Lake includes `traceArgs` in the
+  -- build's input trace and deliberately excludes `weakArgs`. With the archive
+  -- list in `weakArgs`, changing *which* archives get sealed did not invalidate
+  -- the cached library, so CI (whose `.lake` is restored from cache) silently
+  -- relinked nothing and kept a sealed library built from the earlier,
+  -- core-only archive — which then failed at load with `undefined symbol:
+  -- duckdb::ExtensionHelper::LoadAllExtensions`. The archive set is a real
+  -- input to this artifact and has to be traced like one.
   buildSharedLib "duckdb_sealed" soFile #[objJob] #[]
-    (weakArgs := duckdbSealedLinkArgs ++ #["-lm", "-ldl", "-lpthread"])
-    (traceArgs := #["-fPIC"])
+    (traceArgs := duckdbSealedLinkArgs ++ #["-fPIC", "-lm", "-ldl", "-lpthread"])
     (linker := "leanc")
 
 /-- Bundle the FFI object(s) into a static lib that Lake links automatically. -/

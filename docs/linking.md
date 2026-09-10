@@ -427,46 +427,45 @@ construction. They stay visible despite Lean compiling with
 `__attribute__((visibility("default")))` unless `_LIBUNWIND_HIDE_SYMBOLS` is
 set.
 
-### "Would it work if Lean were built with clang?"
+### Would a GCC-built Lean have this problem?
 
-It already is — that is the *cause*, not the cure. Lean's Linux toolchain
-bundles LLVM and statically links LLVM's libc++/libc++abi/libunwind.
+Almost certainly not — and the reason is sharper than "use the same compiler".
 
-The useful version of the question is whether an **all-clang** stack would
-work, and the answer is yes. The number ten is itself the evidence: because
-static archives only yield members something references, and
-`UnwindLevel1-gcc-ext.o` was never pulled in, **nothing in Lean's LLVM runtime
-ever asks for those four symbols.** libc++abi needs exactly the ten Lean
-exports. libstdc++ needs eleven, and the extra four are precisely the GCC
-extensions in the object file nobody pulled in.
+The bug is **not** that Lean links its C++ runtime statically. It is that
+**LLVM's libunwind partitions the `_Unwind_*` ABI across two object files.** A
+static link pulls in only the half libc++abi actually references
+(`UnwindLevel1.o`, ten symbols) and leaves the GCC extensions
+(`UnwindLevel1-gcc-ext.o`, four symbols) behind. Exporting a *partial* set is
+what makes mixing possible at all: seven of libstdc++'s requests get answered
+by LLVM's unwinder and four by libgcc's.
 
-So each world is internally consistent and the split exists only at the
-boundary between them:
+libgcc's unwinder is not partitioned that way. All eleven symbols libstdc++
+imports come from libgcc_s/libgcc_eh together. A GCC-built Lean would therefore
+present **one complete implementation**, everything would resolve to it, and
+there would be nothing to mix. That holds either way round:
 
-| Lean's runtime  | Dependency's runtime    | Outcome                              |
-| --------------- | ----------------------- | ------------------------------------ |
-| LLVM (libc++abi) | LLVM (libc++abi)       | **works** — only the ten are needed  |
-| LLVM (libc++abi) | **GCC (libstdc++)**    | **breaks** — four more, other unwinder |
-| GCC (libstdc++) | GCC (libstdc++)         | works — a single unwinder            |
+- **Dynamic libstdc++** — which is what Lean's own CMake *defaults* to
+  (`set(LEAN_CXX_STDLIB "-lstdc++" CACHE STRING ...)`) — means Lean and DuckDB
+  simply share one `libstdc++.so.6` and one `libgcc_s.so.1`.
+- **Static libstdc++** would embed libgcc_eh; exported or hidden, the set is
+  complete, so libstdc++'s calls still land on a single implementation.
 
-The rule is therefore not "use clang" but **"do not mix"**. Three ways not to
-mix, and why only one was available here:
+Which yields a genuinely useful corollary: the static libc++ comes from
+`script/prepare-llvm-linux.sh`, a deliberate override bought for portability to
+older distributions. **A Lean built from source on Linux with default CMake
+settings would very likely not exhibit this bug at all** — it is a property of
+the *official release binaries*, not of Lean the language. (Inferred from the
+flags; not tested, and not something a consumer of released toolchains can act
+on, since elan installs the release builds.)
 
-1. **Build the dependency with clang/libc++.** Real and effective —
-   `leanprover/soplex-ffi` compiles its C++ bridge `-stdlib=libc++` for exactly
-   this reason. It requires that *you* compile the C++. Unavailable for DuckDB,
-   which ships prebuilt binaries built with GCC.
-2. **Have Lean link libstdc++ dynamically.** Would also work; Lean's
-   `CMakeLists.txt` even *defaults* `LEAN_CXX_STDLIB` to `-lstdc++`. The static
-   libc++ is a deliberate override in the release script, bought for
-   portability to older distributions. Not a consumer's call.
-3. **Hide the leak upstream** — `LIBUNWIND_HIDE_SYMBOLS=ON`, the one-flag fix
-   of §5.
-
-This is the fundamental reason **sealing is the right tool for a *prebuilt*
-dependency**: it is indifferent to which compiler anyone used. A prebuilt
-binary is whatever its packager chose and cannot be retroactively changed, so
-the only remaining move is to make it self-contained.
+The general rule, then, is **"do not present a partial ABI, and do not mix
+implementations"** — and for a *prebuilt* dependency neither is under your
+control. DuckDB ships GCC-built binaries; we do not compile them, so
+`leanprover/soplex-ffi`'s trick of building its own bridge `-stdlib=libc++` to
+match Lean is unavailable to us. That is the fundamental argument for sealing:
+it is indifferent to what anyone was built with. A prebuilt binary is whatever
+its packager chose and cannot be retroactively changed, so the only remaining
+move is to make it self-contained.
 
 ### It is an upstream bug, and no issue exists for it
 

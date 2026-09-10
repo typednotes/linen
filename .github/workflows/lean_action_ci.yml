@@ -32,3 +32,9 @@ jobs:
       # the tests.
       - name: Build the test suite (runs every #guard check)
         run: lake build Tests
+
+      # A symbol table is not observable from a `#guard`, and getting this
+      # wrong aborts the process on every DuckDB error path rather than failing
+      # the build. Shared with the release workflow so the two cannot drift.
+      - name: Verify the sealed DuckDB library is self-contained
+        run: ./ci/check-sealed-duckdb.sh

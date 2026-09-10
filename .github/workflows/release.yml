@@ -93,6 +93,11 @@ jobs:
       - name: Build the test suite (runs every #guard check)
         run: lake build Tests
 
+      # Same check as the CI workflow, via the same script — a release must not
+      # ship a Linux build whose DuckDB aborts on its first error path.
+      - name: Verify the sealed DuckDB library is self-contained
+        run: ./ci/check-sealed-duckdb.sh
+
   # ── Publish ───────────────────────────────────────────────────────────────
   publish:
     name: Publish the release
