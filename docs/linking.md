@@ -793,6 +793,45 @@ which is a worse trade than sealing a complete one.
 So the conclusion (pinned prebuilt, `.lake/` not committed) is right, but for
 the reason above rather than the one originally recorded.
 
+### Embedded versus client-server, and why it decides everything above
+
+Worth stating explicitly, because it is the assumption behind the natural
+objection *"why would `sum` fail — doesn't that happen on the server?"*
+
+`linen` binds both architectures, and they behave completely differently:
+
+| Shim | Architecture | Where `sum` executes | Library size |
+| --- | --- | --- | --- |
+| `postgres.c` → libpq | client-server | a remote `postgres` process | **0.3 MB** |
+| `sqlite3_shim.c` → SQLite | **embedded** | your own process | 9.6 MB of source |
+| `duckdb_shim.c` → DuckDB | **embedded** | your own process | **67 MB** |
+
+libpq is 0.3MB because it contains **no query engine at all**. It serializes
+SQL onto a socket; a separate server process — possibly on another machine —
+parses and executes it against *its* catalog. Hence its connection string is a
+network address: `host=localhost port=5432 dbname=mydb user=myuser`. A minimal
+libpq is perfectly fine, because `sum` lives on the server.
+
+DuckDB has **no server**. It is embedded, in-process — "SQLite for analytics" —
+which is why `openDatabase` takes `path : Option String`: a file, or `none` for
+in-memory. No host, no port, no credentials, because there is nothing to
+connect to. `duckdb_query` parses, plans, optimizes and executes *inside your
+process*, so every SQL function must be a C++ function compiled into the
+library you linked. If `sum` is not in the binary, nothing can execute it.
+
+Three consequences run through this whole document:
+
+- **The 200x size gap is the tell.** A 0.3MB "database library" is a protocol
+  client; a 67MB one is a database.
+- **Only the embedded engines are expensive or risky dependencies.** libpq,
+  OpenSSL and zlib are small, stable C libraries. The embedded engines carry
+  real implementations, which is why one is vendored as 9.6MB of source and the
+  other needs the whole apparatus of §4.
+- **It is why DuckDB, and only DuckDB, hit §3.** An in-process C++ engine runs
+  *its* exception handling inside *your* process, against whatever C++ runtime
+  and unwinder that process already has. A client-server database does its
+  throwing on the other side of a socket, where your linker cannot reach it.
+
 ### Two things this table makes visible
 
 **DuckDB is the only C++ dependency, which is why it is the only one that hit
