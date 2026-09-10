@@ -21,10 +21,18 @@
  *               convenience API.
  *   - Windows : Win32 Credential Manager (`wincred.h`).
  *
- * NOTE: only the macOS branch can be compiled and tested in this
- * environment. The Linux and Windows branches are written against the real
- * libsecret / wincred APIs but are unverified — see the module's Lean-side
- * doc-comment (`Linen/System/Keychain.lean`) for the same caveat.
+ * NOTE: the macOS and Linux branches are both compiled and tested in CI (the
+ * Linux leg runs against a real `gnome-keyring` Secret Service — see
+ * `.github/actions/setup-native-deps`). The Windows branch is written
+ * against the real wincred API but is **unverified**: CI runs no Windows
+ * leg. See the module's Lean-side doc-comment (`Linen/System/Keychain.lean`)
+ * for the same caveat.
+ *
+ * The Linux branch deliberately uses the length-explicit
+ * `secret_value_new`/`secret_service_{store,lookup}_sync` API rather than the
+ * `secret_password_*` convenience wrappers: the latter carry the secret as a
+ * NUL-terminated string and so cannot round-trip a secret containing a NUL
+ * byte, which `setSecret`/`getSecret` promise to do on every platform.
  */
 
 #include <lean/lean.h>
@@ -164,20 +172,45 @@ LEAN_EXPORT lean_obj_res linen_keychain_set(
     return lean_io_result_mk_ok(lean_box(0));
 
 #elif defined(__linux__)
-    /* `secret_password_store_sync` takes a NUL-terminated string, so the
-       secret must not contain an embedded NUL byte — a documented
-       limitation of this convenience API (unlike the macOS/Windows
-       backends, which store the raw bytes verbatim). */
-    char *password = malloc(secret_len + 1);
-    if (!password) return mk_io_error("keychain: out of memory");
-    memcpy(password, secret, secret_len);
-    password[secret_len] = '\0';
+    /* The `secret_password_*` convenience API carries the secret as a
+       NUL-terminated string, so it silently truncates at the first NUL byte.
+       `setSecret` promises the raw bytes back verbatim — as the macOS and
+       Windows branches deliver — so go through the length-explicit
+       `SecretValue`/`secret_service_*` API instead, which carries an explicit
+       byte count and is therefore NUL-clean. */
+    SecretValue *value = secret_value_new(
+        (const gchar *)secret, (gssize)secret_len, "application/octet-stream");
+    if (!value) return mk_io_error("keychain: out of memory");
+
+    GHashTable *attrs = secret_attributes_build(
+        &linen_keychain_schema, "service", service, "account", account, NULL);
+    if (!attrs) {
+        secret_value_unref(value);
+        return mk_io_error("keychain: failed to build Secret Service attributes");
+    }
+
+    /* The label is only what a keyring UI displays; lookups match on the
+       (service, account) attributes above. */
+    size_t label_size = strlen(service) + strlen(account) + 4;
+    char *label = malloc(label_size);
+    if (!label) {
+        g_hash_table_unref(attrs);
+        secret_value_unref(value);
+        return mk_io_error("keychain: out of memory");
+    }
+    snprintf(label, label_size, "%s (%s)", service, account);
 
     GError *error = NULL;
-    gboolean ok = secret_password_store_sync(
-        &linen_keychain_schema, SECRET_COLLECTION_DEFAULT, service, password,
-        NULL, &error, "service", service, "account", account, NULL);
-    free(password);
+    /* An item whose attributes already match is updated rather than
+       duplicated, which is the same replace-on-store behaviour the macOS
+       branch gets from its `SecItemAdd`/`SecItemUpdate` fallback above. */
+    gboolean ok = secret_service_store_sync(
+        NULL, &linen_keychain_schema, attrs, SECRET_COLLECTION_DEFAULT,
+        label, value, NULL, &error);
+
+    free(label);
+    g_hash_table_unref(attrs);
+    secret_value_unref(value);
 
     if (!ok) {
         char buf[256];
@@ -261,25 +294,33 @@ LEAN_EXPORT lean_obj_res linen_keychain_get(
     return lean_io_result_mk_ok(arr);
 
 #elif defined(__linux__)
+    GHashTable *attrs = secret_attributes_build(
+        &linen_keychain_schema, "service", service, "account", account, NULL);
+    if (!attrs) return mk_io_error("keychain: failed to build Secret Service attributes");
+
     GError *error = NULL;
-    gchar *password = secret_password_lookup_sync(
-        &linen_keychain_schema, NULL, &error, "service", service, "account", account, NULL);
+    SecretValue *value = secret_service_lookup_sync(
+        NULL, &linen_keychain_schema, attrs, NULL, &error);
+    g_hash_table_unref(attrs);
 
     if (error) {
         char buf[256];
         snprintf(buf, sizeof(buf), "keychain: failed to retrieve secret: %s", error->message);
         g_error_free(error);
-        if (password) secret_password_free(password);
+        if (value) secret_value_unref(value);
         return mk_io_error(buf);
     }
-    if (!password) {
+    if (!value) {
         return mk_io_error("keychain: no matching entry found");
     }
 
-    size_t len = strlen(password);
-    lean_obj_res arr = lean_alloc_sarray(1, len, len);
-    memcpy(lean_sarray_cptr(arr), password, len);
-    secret_password_free(password);
+    /* `secret_value_get` reports the stored length explicitly, so a secret
+       containing NUL bytes comes back whole rather than truncated. */
+    gsize len = 0;
+    const gchar *bytes = secret_value_get(value, &len);
+    lean_obj_res arr = lean_alloc_sarray(1, (size_t)len, (size_t)len);
+    if (len > 0 && bytes != NULL) memcpy(lean_sarray_cptr(arr), bytes, (size_t)len);
+    secret_value_unref(value);
     return lean_io_result_mk_ok(arr);
 
 #elif defined(_WIN32)

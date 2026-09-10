@@ -13,8 +13,12 @@
   credential, and each test deletes what it created — even on failure, via
   `IO.FS.withFile`-style `try/finally` — leaving the Keychain untouched.
 
-  Only exercised on macOS in this repository's CI/dev environment; the
-  Linux/Windows backends behind the same `@[extern]` symbols are unverified.
+  Exercised on **macOS and Linux** in CI: the Linux leg brings up a
+  `gnome-keyring` Secret Service on a session D-Bus (see
+  `.github/actions/setup-native-deps`), since libsecret is only a client of
+  that service and a headless runner provides none. The Windows backend
+  behind the same `@[extern]` symbols remains **unverified** — CI runs no
+  Windows leg.
 -/
 import Linen.System.Keychain
 

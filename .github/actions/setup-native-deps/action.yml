@@ -17,10 +17,81 @@ runs:
     #                               Cloud.Credentials.Keychain (Linux only;
     #                               macOS uses the Security and CoreFoundation
     #                               frameworks instead)
+    #
+    # `gnome-keyring` and `dbus-x11` are not lakefile dependencies but test
+    # ones: libsecret is only a *client* of the D-Bus Secret Service, so
+    # `Tests/Linen/System/KeychainTest.lean` needs an actual keyring daemon
+    # to talk to. A headless runner has none, and without one every
+    # `System.Keychain` call fails with "org.freedesktop.secrets was not
+    # provided by any .service files".
     - name: Install native FFI dependencies (Linux)
       if: runner.os == 'Linux'
       shell: bash
-      run: sudo apt-get update && sudo apt-get install -y libpq-dev libssl-dev libsecret-1-dev pkg-config
+      run: sudo apt-get update && sudo apt-get install -y libpq-dev libssl-dev libsecret-1-dev pkg-config gnome-keyring dbus-x11
+
+    # Bring up the Secret Service the Keychain tests exercise. This has to be
+    # a separate step from the build: the session bus and the daemon must
+    # outlive it, which they do because the bus address is exported through
+    # `$GITHUB_ENV` for every later step in the job.
+    - name: Start a D-Bus session and unlock a keyring (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # gnome-keyring stores its sockets under XDG_RUNTIME_DIR, which is not
+        # set on a GitHub runner.
+        if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
+          XDG_RUNTIME_DIR="$(mktemp -d)"
+          export XDG_RUNTIME_DIR
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
+        fi
+
+        eval "$(dbus-launch --sh-syntax)"
+        echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+
+        mkdir -p "$HOME/.local/share/keyrings"
+
+        # Two steps, and the order matters. `--unlock` alone is NOT enough: it
+        # unlocks an *existing* login keyring and never creates one, so on a
+        # fresh runner it leaves `~/.local/share/keyrings` empty and no
+        # collection aliased `default`. `ffi/keychain.c` stores into
+        # `SECRET_COLLECTION_DEFAULT`, which libsecret resolves to that alias,
+        # and the store then fails with `Object does not exist at path
+        # ".../collection/login"`. Measured on a runner: after `--unlock`,
+        # `ReadAlias("default")` is "/"; after the pair below it is
+        # "/org/freedesktop/secrets/collection/login".
+        #
+        # `--login` reads the login password from stdin (empty here) and
+        # creates the login keyring if absent; `--start --components=secrets`
+        # then claims `org.freedesktop.secrets` on the bus.
+        eval "$(printf '\n' | gnome-keyring-daemon --daemonize --login)"
+        eval "$(gnome-keyring-daemon --start --components=secrets)"
+
+        # Fail here, loudly, rather than a hundred build jobs later inside an
+        # opaque `#eval` failure.
+        #
+        # The check is on the `default` *alias*, not just on the bus name: the
+        # name being owned is not sufficient, and asserting only that is what
+        # let the first version of this step pass while `System.Keychain` still
+        # failed on every call. `ReadAlias` returns the object path "/" when no
+        # collection is aliased `default`.
+        for _ in $(seq 1 30); do
+          alias_path="$(dbus-send --session --print-reply --dest=org.freedesktop.secrets \
+            /org/freedesktop/secrets org.freedesktop.Secret.Service.ReadAlias \
+            string:default 2>/dev/null | grep -o 'object path "[^"]*"')"
+          case "$alias_path" in
+            *'/org/freedesktop/secrets/collection/'*)
+              echo "Secret Service ready; default collection = $alias_path"
+              exit 0
+              ;;
+          esac
+          sleep 1
+        done
+        echo "No collection is aliased 'default' on the session bus." >&2
+        echo "ReadAlias(default) returned: ${alias_path:-<no reply>}" >&2
+        echo "System.Keychain stores into SECRET_COLLECTION_DEFAULT and cannot work without one." >&2
+        exit 1
 
     - name: Install native FFI dependencies (macOS)
       if: runner.os == 'macOS'

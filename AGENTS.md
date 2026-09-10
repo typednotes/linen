@@ -2,23 +2,6 @@
 
 Guidance for working in the **linen** Lean library.
 
-## No half-implemented features
-
-If a feature (a safety check, a data model that is meant to cover several
-cases, an API meant to apply uniformly across a set of kinds/types, ...) is
-only wired up for some of the cases it should logically cover, that is not
-"done for now" — it is a trap for whoever assumes it applies uniformly. A
-2026-09-10 incident in the sibling `infra` project: an ownership/tagging
-system was wired up for two kinds out of many, with every other kind silently
-falling back to weaker, ledger-only behaviour; the gap was invisible until it
-caused a real, destructive incident. Either implement a feature completely
-for every case it claims to cover in the same change, or say loudly in the
-code, the docs, and to the user exactly which cases it does **not** cover
-yet — never let partial coverage look complete. When only part of a feature
-can be done, stop and get explicit agreement from the user on the partial
-scope before shipping it, rather than deciding unilaterally that "the common
-case" is good enough.
-
 ## Project layout
 
 - Library sources live under `Linen/`, mirroring their module path
@@ -44,6 +27,8 @@ case" is good enough.
   For `Prop`-valued definitions that cannot be decided by `#guard`, use
   `example ... := rfl` (or an explicit proof) to illustrate the law.
 
+- Every code involving FFI, must be thoroughly tested.
+
 ### FFI and native-library dependencies
 
 - **Any module that links against a native C library (FFI) must build and
@@ -61,8 +46,23 @@ case" is good enough.
   few-file amalgamation exists (e.g. SQLite's `sqlite3.c`/`sqlite3.h`) — this
   avoids a platform dev-package dependency entirely and pins the exact
   version in git; (2) downloading a pinned prebuilt release archive as a
-  build/CI step when no such amalgamation exists (e.g. DuckDB) — do not check
-  prebuilt per-platform binaries into git.
+  build/CI step when no *usable* amalgamation exists — do not check prebuilt
+  per-platform binaries into git.
+- **"Usable" is the operative word, and DuckDB is the cautionary example.**
+  DuckDB *does* ship an amalgamation (`libduckdb-src.zip`: `duckdb.cpp` at
+  25.6MB plus three headers), so the test is not merely whether one exists.
+  Its `ExtensionHelper::LoadAllExtensions` is a literal `// nop` and it
+  contains no extension code at all, so vendoring it would silently drop the
+  `core_functions` SQL library; it is also a single C++ translation unit, so
+  no `-j` can parallelise it, and it would add ~28MB to git permanently.
+  DuckDB therefore stays in tier 2 — but for those reasons, not because no
+  amalgamation exists. Before choosing tier 1, check that the amalgamation is
+  *feature-complete* (diff its symbols against the project's own shared
+  library) and that compiling it is affordable.
+- **Equally, check that a prebuilt archive is complete.** DuckDB publishes
+  both `libduckdb-linux-<arch>.zip` and `static-libs-linux-<arch>.zip`; the
+  `libduckdb_static.a` in the former is core-only and *not* equivalent to the
+  `libduckdb.so` beside it. See `docs/linking.md` §4.2.
 
 ## Releasing
 
@@ -202,3 +202,24 @@ instead, before porting anything fresh from the crate itself.
 - Document definitions with doc-comments; mathematical statements may use LaTeX
   (`$...$` / `$$...$$`) as in the existing modules.
 - Group code into clearly labelled sections with `── … ──` comment banners.
+
+## Prove or test everything
+
+
+
+## No half-implemented features
+
+If a feature (a safety check, a data model that is meant to cover several
+cases, an API meant to apply uniformly across a set of kinds/types, ...) is
+only wired up for some of the cases it should logically cover, that is not
+"done for now" — it is a trap for whoever assumes it applies uniformly. A
+2026-09-10 incident in the sibling `infra` project: an ownership/tagging
+system was wired up for two kinds out of many, with every other kind silently
+falling back to weaker, ledger-only behaviour; the gap was invisible until it
+caused a real, destructive incident. Either implement a feature completely
+for every case it claims to cover in the same change, or say loudly in the
+code, the docs, and to the user exactly which cases it does **not** cover
+yet — never let partial coverage look complete. When only part of a feature
+can be done, stop and get explicit agreement from the user on the partial
+scope before shipping it, rather than deciding unilaterally that "the common
+case" is good enough.

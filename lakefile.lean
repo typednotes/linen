@@ -101,7 +101,35 @@ def duckdbCacheDir : FilePath := ".lake" / "duckdb"
 
 /-- The pinned release's platform- (and, on Linux, architecture-) specific
     asset name. Only macOS/Linux are resolved, matching the two legs of the
-    CI matrix / AGENTS.md's FFI macOS+Linux testing requirement. -/
+    CI matrix / AGENTS.md's FFI macOS+Linux testing requirement.
+
+    **The two platforms deliberately take different assets.**
+
+    macOS takes `libduckdb-osx-universal.zip`, whose `libduckdb.dylib` is
+    linked dynamically — two-level namespace makes it immune to the unwinder
+    problem described at `duckdbLinkArgs` below.
+
+    Linux takes **`static-libs-linux-*.zip`**, not `libduckdb-linux-*.zip`,
+    because Linux links DuckDB statically and *sealed*. This is not the
+    obvious choice and is worth stating plainly: `libduckdb-linux-amd64.zip`
+    also contains a `libduckdb_static.a`, but that archive is **not
+    feature-equivalent to the `libduckdb.so` beside it**. It is a core-only
+    build — it leaves `duckdb::ExtensionHelper::LoadAllExtensions` undefined
+    and contains none of the `core_functions` extension
+    (`CoreFunctionsExtension`/`DateTruncFun`/`ListValueFun`: 0 symbols there
+    versus 10/16/4 in the shared library), so sealing it would hand Linux
+    users a DuckDB missing much of the SQL function library. Bumping the
+    DuckDB version does not help: v1.5.5 ships the identical gap in that
+    asset.
+
+    `static-libs-linux-*.zip` is the complete static build — `libduckdb_static.a`
+    plus `libcore_functions_extension.a`,
+    `libduckdb_generated_extension_loader.a` (which is what defines
+    `LoadAllExtensions`), the parquet/json/icu/autocomplete/tpcds extensions,
+    and DuckDB's vendored third-party archives. Linking all of them leaves no
+    undefined DuckDB symbol except four weak `duckdb_zstd::ZSTD_trace_*` hooks
+    and one re2 thread-local initialiser, none of which the shared library
+    defines either. -/
 def duckdbArchiveName : IO String := do
   if System.Platform.isOSX then
     return "libduckdb-osx-universal.zip"
@@ -110,11 +138,11 @@ def duckdbArchiveName : IO String := do
       let out ← IO.Process.output { cmd := "uname", args := #["-m"] }
       let arch := out.stdout.trimAscii.copy
       return if arch == "aarch64" || arch == "arm64" then
-        "libduckdb-linux-arm64.zip"
+        "static-libs-linux-arm64.zip"
       else
-        "libduckdb-linux-amd64.zip"
+        "static-libs-linux-amd64.zip"
     catch _ =>
-      return "libduckdb-linux-amd64.zip"
+      return "static-libs-linux-amd64.zip"
 
 /-- Make `p` absolute (relative to the current directory) if it isn't
     already, so paths baked into `-I`/`-L`/`-rpath` flags stay valid no
@@ -134,7 +162,19 @@ def toAbsolute (p : FilePath) : IO FilePath := do
 def ensureDuckdbUnpacked : IO FilePath := do
   let dir := duckdbCacheDir
   let header := dir / "duckdb.h"
-  if ← header.pathExists then
+  -- On Linux the short-circuit also checks for an archive that only the
+  -- `static-libs-*` asset carries. A cache left behind by an earlier revision
+  -- (which fetched `libduckdb-linux-*.zip`) has `duckdb.h` too, and would
+  -- otherwise be accepted and then quietly fall back to dynamic linking —
+  -- reinstating the aborts the sealed build exists to prevent.
+  let cacheComplete ← do
+    if !(← header.pathExists) then
+      pure false
+    else if System.Platform.isOSX then
+      pure true
+    else
+      (dir / "libcore_functions_extension.a").pathExists
+  if cacheComplete then
     return dir
   IO.FS.createDirAll dir
   let name ← duckdbArchiveName
@@ -165,6 +205,94 @@ def duckdbDirs : IO (FilePath × FilePath) := do
   | none =>
     let dir ← toAbsolute (← ensureDuckdbUnpacked)
     return (dir, dir)
+
+/-- Whether this is a Linux build — the one platform needing the sealed-DSO
+    treatment below. Kept as a named predicate so the several places that
+    branch on it read the same way. -/
+def isLinuxBuild : Bool := !System.Platform.isOSX && !System.Platform.isWindows
+
+/-- Ask `g++` for the absolute path of one of its static runtime archives.
+    `-print-file-name` echoes the bare name straight back when it cannot
+    locate the file, which is reported here as `none` rather than as a path
+    that does not exist. -/
+def gccStaticArchive (name : String) : IO (Option FilePath) := do
+  try
+    let out ← IO.Process.output { cmd := "g++", args := #["-print-file-name=" ++ name] }
+    if out.exitCode != 0 then return none
+    let p := out.stdout.trimAscii.copy
+    if p == name then return none
+    let fp : FilePath := p
+    if ← fp.pathExists then return some fp else return none
+  catch _ =>
+    return none
+
+/-- Every `.a` in `duckdbLibDir`, sorted for a reproducible link line. On
+    Linux this is the whole of `static-libs-linux-*.zip`: DuckDB's core
+    archive, its extensions (`core_functions` above all) and its vendored
+    third-party archives. Taking the directory wholesale rather than naming
+    archives individually means a DuckDB upgrade that adds or renames one
+    needs no change here. -/
+def duckdbLibArchives (duckdbLibDir : FilePath) : IO (Array FilePath) := do
+  let entries ← duckdbLibDir.readDir
+  let archives := entries.filterMap fun e =>
+    if e.path.extension == some "a" then some e.path else none
+  return archives.qsort (fun a b => a.toString < b.toString)
+
+/-- The archives sealed into `libduckdb_sealed.so` on Linux: all of DuckDB's,
+    then the C++ runtime and the unwinder. `none` if any piece is missing, in
+    which case the caller falls back to linking DuckDB dynamically and says so
+    loudly.
+
+    See `duckdbLinkArgs`' comment in the `run_cmd` block below for *why* Linux
+    needs this at all. -/
+def duckdbSealedArchives (duckdbLibDir : FilePath) : IO (Option (Array String)) := do
+  let ddArchives ← duckdbLibArchives duckdbLibDir
+  unless ddArchives.any (·.fileName == some "libduckdb_static.a") do
+    IO.eprintln s!"[linen] WARNING: no libduckdb_static.a under {duckdbLibDir}, \
+      so DuckDB cannot be sealed into a self-contained shared library on this \
+      Linux build. Falling back to linking libduckdb dynamically — on which \
+      every DuckDB error path aborts the process under Lean (see \
+      lakefile.lean's duckdbLinkArgs comment). Unset DUCKDB_PREFIX to use the \
+      pinned static-libs release archive."
+    return none
+  -- Sealing without the `core_functions` extension would silently cost Linux
+  -- much of the SQL function library, so its absence is a hard stop rather
+  -- than something to discover at query time.
+  unless ddArchives.any (·.fileName == some "libcore_functions_extension.a") do
+    IO.eprintln s!"[linen] WARNING: libduckdb_static.a is present under \
+      {duckdbLibDir} but libcore_functions_extension.a is not, which means \
+      this is the core-only static build from `libduckdb-linux-*.zip` rather \
+      than the complete one from `static-libs-linux-*.zip`. Sealing it would \
+      produce a DuckDB missing much of the SQL function library, so falling \
+      back to dynamic linking instead."
+    return none
+  let some stdcxx ← gccStaticArchive "libstdc++.a"
+    | IO.eprintln "[linen] WARNING: no static libstdc++.a (install g++ / \
+        libstdc++-dev); falling back to a dynamically linked libduckdb, on \
+        which every DuckDB error path aborts the process under Lean."
+      return none
+  let some gccEh ← gccStaticArchive "libgcc_eh.a"
+    | IO.eprintln "[linen] WARNING: no static libgcc_eh.a; falling back to a \
+        dynamically linked libduckdb, on which every DuckDB error path aborts \
+        the process under Lean."
+      return none
+  let some gccA ← gccStaticArchive "libgcc.a"
+    | IO.eprintln "[linen] WARNING: no static libgcc.a; falling back to a \
+        dynamically linked libduckdb, on which every DuckDB error path aborts \
+        the process under Lean."
+      return none
+  -- `--start-group` because these archives are mutually recursive: the
+  -- extension loader calls into core, core calls back into the extensions, and
+  -- a single left-to-right pass resolves only some of it.
+  let group := #["-Wl,--start-group"] ++ ddArchives.map (·.toString)
+    ++ #[stdcxx.toString, gccEh.toString, gccA.toString, "-Wl,--end-group"]
+  -- Localize every symbol taken from an archive, naming them explicitly
+  -- rather than using `ALL`, so this cannot start hiding whatever else `leanc`
+  -- happens to put on the link line.
+  let basenames := (ddArchives.map (fun p => p.fileName.getD "")
+    ++ #["libstdc++.a", "libgcc_eh.a", "libgcc.a"]).filter (· != "")
+  let excludeArg := "-Wl,--exclude-libs," ++ String.intercalate ":" basenames.toList
+  return some (group ++ #[excludeArg])
 
 -- Resolve the native link flags at lakefile-elaboration time via `pkg-config`.
 -- This runs on the build machine (Lake recompiles the lakefile per checkout),
@@ -207,16 +335,65 @@ run_cmd do
   -- flag applying uniformly to `lean_exe`, `Tests`' `#eval`s, and `Examples`
   -- alike, whereas copying would need repeating (and re-syncing on upgrade)
   -- for every one of those separate output locations.
+  --
+  -- On **Linux** DuckDB is *not* linked dynamically. It is sealed into one
+  -- self-contained `libduckdb_sealed.so` (see `duckdbSealedLib` below)
+  -- together with a static libstdc++ and libgcc, every symbol of which is
+  -- localized, and everything then links against that one shared object.
+  --
+  -- The reason is a Lean-toolchain interaction, not a DuckDB bug. Lean's Linux
+  -- toolchain statically links LLVM's libunwind into `libleanshared.so` and
+  -- exports only *part* of the unwind ABI at default visibility: 10 symbols,
+  -- where the system `libstdc++.so.6` imports 11. The four it does not export
+  -- — `_Unwind_GetIPInfo`, `_Unwind_GetDataRelBase`, `_Unwind_GetTextRelBase`,
+  -- `_Unwind_Resume_or_Rethrow` — fall through to `libgcc_s.so.1`. Since
+  -- `libleanshared.so` is a `DT_NEEDED` of `bin/lean`, it precedes
+  -- `libstdc++.so.6`/`libgcc_s.so.1` in the global lookup scope, so a
+  -- dynamically linked libduckdb unwinds through *two* unwinders: LLVM's
+  -- raises the exception, then libstdc++'s personality routine calls libgcc's
+  -- `_Unwind_GetIPInfo` on an LLVM-layout context, reads a garbage IP, matches
+  -- no landing pad, and calls `std::terminate` — even though DuckDB's own
+  -- `catch (...)` sits in the very frame being unwound. Every DuckDB error
+  -- path therefore aborted the process with SIGABRT (`terminate called after
+  -- throwing an instance of 'duckdb::…Exception'` / `terminate called
+  -- recursively`), which is what nine `Tests/Linen/Database/DuckDB/**` modules
+  -- hit on Linux and none hit on macOS.
+  --
+  -- Measured, not guessed: from plain C with no Lean in the process the
+  -- identical calls return `DuckDBError` normally, and `LD_PRELOAD`ing the one
+  -- complete unwinder made all nine modules pass. Sealing achieves the same
+  -- thing without asking anyone to set an environment variable — DuckDB's
+  -- throw, its catch, its C++ runtime and its unwinder all end up inside one
+  -- shared object, bound at link time and invisible to the global scope, so
+  -- Lean's partial export cannot interpose any of it. Verified on the built
+  -- artifact: no undefined `_Unwind_*`/`__cxa_throw`/`__cxa_begin_catch`/
+  -- `__gxx_personality_v0` remain, and no `libstdc++.so.6` in `DT_NEEDED`.
+  --
+  -- macOS needs none of this: `libduckdb.dylib` is two-level-namespace bound
+  -- directly to `/usr/lib/libc++.1.dylib`, so nothing in the process can
+  -- interpose its C++ runtime or unwinder in the first place.
   let (duckdbInc, duckdbLibDir) ← duckdbDirs
   let duckdbIncludeArgs : Array String := #["-I", duckdbInc.toString]
-  let duckdbLinkArgs : Array String :=
+  let duckdbDynamicLinkArgs : Array String :=
     #["-L", duckdbLibDir.toString, "-lduckdb", "-Wl,-rpath," ++ duckdbLibDir.toString]
+  let sealedArchives ← if isLinuxBuild then duckdbSealedArchives duckdbLibDir else pure none
+  let sealedLibDir ← toAbsolute (".lake" / "build" / "ffi")
+  let duckdbLinkArgs : Array String :=
+    if sealedArchives.isSome then
+      #["-L", sealedLibDir.toString, "-lduckdb_sealed",
+        "-Wl,-rpath," ++ sealedLibDir.toString]
+    else
+      duckdbDynamicLinkArgs
   mkDef `libpqLinkArgs pq
   mkDef `opensslLinkArgs ssl
   mkDef `zlibLinkArgs (macSdk ++ zlib)
   mkDef `keychainLinkArgs keychainLinkArgs
   mkDef `duckdbIncludeArgs duckdbIncludeArgs
   mkDef `duckdbLinkArgs duckdbLinkArgs
+  -- The pieces the sealed DSO is built from, and whether to build it at all.
+  mkDef `duckdbSealedLinkArgs (sealedArchives.getD #[])
+  elabCommand (← `(def $(mkIdent `duckdbUsesSealedLib) : Bool :=
+    $(quote sealedArchives.isSome)))
   mkDef `nativeLinkArgs (pq ++ ssl ++ macSdk ++ zlib ++ keychainLinkArgs ++ duckdbLinkArgs)
 
 -- `moreLinkArgs` here also flows into `ExternLib.linkArgs` (`self.pkg.moreLinkArgs`),
@@ -324,6 +501,47 @@ target duckdb.o pkg : FilePath := do
   let weakArgs := #["-I", (← getLeanIncludeDir).toString] ++ duckdbIncludeArgs
   buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
 
+/-- Link `duckdb.o` plus DuckDB's static archive, a static libstdc++ and a
+    static libgcc into one self-contained shared library, localizing every
+    symbol that came from an archive.
+
+    Linux only — see `duckdbLinkArgs`' comment above for the split-unwinder
+    problem this exists to solve. Two details matter:
+
+    - `--exclude-libs` names every archive explicitly instead of using `ALL`.
+      Object files are unaffected by `--exclude-libs`, so the shim's 269
+      `linen_duckdb_*` entry points keep default visibility and stay exported
+      while DuckDB's own `duckdb_*` symbols and the whole C++ runtime become
+      local. `ALL` would behave the same for `duckdb.o` today, but would also
+      silently localize whatever archives `leanc` itself adds to the link
+      line, which is not ours to decide.
+    - Lean's own symbols (`lean_alloc_external`, …) are deliberately left
+      undefined here, exactly as they are in the per-module `:dynlib`s the
+      interpreter loads; they resolve against the already-loaded
+      `libleanshared.so` at `dlopen` time.
+
+    This is one shared library, not a static archive folded into every
+    consumer, because `precompileModules` is on for both `Linen` and `Tests`:
+    a static DuckDB would be linked into each of the ~20 DuckDB test modules'
+    `:dynlib`s separately. -/
+target duckdbSealedLib pkg : Dynlib := do
+  let soFile := pkg.buildDir / "ffi" / nameToSharedLib "duckdb_sealed"
+  let objJob ← duckdb.o.fetch
+  -- `duckdbSealedLinkArgs` already carries the `--start-group`ed archives and
+  -- the matching `--exclude-libs`; see `duckdbSealedArchives`.
+  --
+  -- These go in `traceArgs`, NOT `weakArgs`: Lake includes `traceArgs` in the
+  -- build's input trace and deliberately excludes `weakArgs`. With the archive
+  -- list in `weakArgs`, changing *which* archives get sealed did not invalidate
+  -- the cached library, so CI (whose `.lake` is restored from cache) silently
+  -- relinked nothing and kept a sealed library built from the earlier,
+  -- core-only archive — which then failed at load with `undefined symbol:
+  -- duckdb::ExtensionHelper::LoadAllExtensions`. The archive set is a real
+  -- input to this artifact and has to be traced like one.
+  buildSharedLib "duckdb_sealed" soFile #[objJob] #[]
+    (traceArgs := duckdbSealedLinkArgs ++ #["-fPIC", "-lm", "-ldl", "-lpthread"])
+    (linker := "leanc")
+
 /-- Bundle the FFI object(s) into a static lib that Lake links automatically. -/
 extern_lib linenffi pkg := do
   let networkObj ← network.o.fetch
@@ -334,10 +552,27 @@ extern_lib linenffi pkg := do
   let keychainObj ← keychain.o.fetch
   let sqlite3Obj ← sqlite3.o.fetch
   let sqlite3ShimObj ← sqlite3_shim.o.fetch
-  let duckdbObj ← duckdb.o.fetch
-  buildStaticLib (pkg.staticLibDir / nameToStaticLib "linenffi")
-    #[networkObj, postgresObj, joseObj, tlsObj, zlibObj, keychainObj, sqlite3Obj, sqlite3ShimObj,
-      duckdbObj]
+  let mut objs :=
+    #[networkObj, postgresObj, joseObj, tlsObj, zlibObj, keychainObj, sqlite3Obj, sqlite3ShimObj]
+  let staticLibFile := pkg.staticLibDir / nameToStaticLib "linenffi"
+  if duckdbUsesSealedLib then
+    -- `duckdb.o` must NOT also go into this static archive: it is already
+    -- inside the sealed library, and a static copy would win at link time,
+    -- pulling in the dynamic `libduckdb.so` again and reinstating the very
+    -- abort the sealing removes.
+    --
+    -- The sealed library is sequenced *before* this archive's own job with
+    -- `bindM`, not merely fetched alongside it. Everything that links against
+    -- `linenffi` passes `-lduckdb_sealed` (via `nativeLinkArgs`), starting
+    -- with `linenffi`'s own `:shared` facet — and a bare
+    -- `let _ ← duckdbSealedLib.fetch` only *schedules* that build rather than
+    -- waiting for it, which lost the race and failed the `:shared` link with
+    -- `ld.lld: error: unable to find library -lduckdb_sealed`.
+    let sealedJob ← duckdbSealedLib.fetch
+    sealedJob.bindM fun _ => buildStaticLib staticLibFile objs
+  else
+    objs := objs.push (← duckdb.o.fetch)
+    buildStaticLib staticLibFile objs
 
 @[default_target]
 lean_lib Linen where

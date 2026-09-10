@@ -23,13 +23,20 @@
   - **macOS**: Security.framework Keychain (`kSecClassGenericPassword`),
     keyed on service+account attributes.
   - **Linux**: the D-Bus Secret Service, via libsecret's synchronous
-    convenience API. Only compiled/linked when `libsecret-1`'s `.pc` file is
-    present; the link flags degrade to nothing otherwise.
+    length-explicit API (`secret_value_new` plus
+    `secret_service_{store,lookup}_sync`, *not* the `secret_password_*`
+    convenience wrappers, which carry the secret as a NUL-terminated string
+    and would truncate any secret containing a NUL byte). Only
+    compiled/linked when `libsecret-1`'s `.pc` file is present; the link
+    flags degrade to nothing otherwise.
   - **Windows**: the Win32 Credential Manager (`wincred.h`).
 
-  Only the macOS branch is exercised by this repository's test suite/CI; the
-  Linux and Windows branches are written against the real libsecret/wincred
-  APIs but are **unverified** in this environment.
+  The macOS and Linux branches are both exercised by this repository's test
+  suite on every CI run — the Linux leg runs against a real `gnome-keyring`
+  Secret Service brought up on a session D-Bus by
+  `.github/actions/setup-native-deps`, because libsecret is only a client of
+  that service. The Windows branch is written against the real wincred API
+  but is **unverified**: CI runs no Windows leg.
 
   ## Error convention
 

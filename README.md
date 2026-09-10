@@ -48,7 +48,7 @@ Three rules hold across the whole library:
 
 ## Features
 
-`linen` covers the following areas — see **[docs/MODULES.md](docs/MODULES.md)**
+`linen` covers the following areas — see **[docs/modules.md](docs/modules.md)**
 for the full per-module feature list and module table.
 
 - **`Data.Functor` / `Control`** — functor, applicative & monad constructions
@@ -376,7 +376,7 @@ installed even to use, say, `Crypto.SigV4`.
 
 ## Modules
 
-See **[docs/MODULES.md](docs/MODULES.md)** for the full module table (all 770 modules).
+See **[docs/modules.md](docs/modules.md)** for the full module table (all 770 modules).
 
 ## Build & Test
 
@@ -569,9 +569,12 @@ If nothing is listening, the example prints a short "could not connect" hint
 
 ## Documentation
 
-- [docs/MODULES.md](docs/MODULES.md) — the full module feature list and module table.
+- [docs/modules.md](docs/modules.md) — the full module feature list and module table.
 - [docs/imports/index.md](docs/imports/index.md) — Hackage-package import order, with a
   per-package module dependency list under `docs/imports/<Package>/dependencies.md`.
+- [docs/linking.md](docs/linking.md) — how native libraries are linked: static vs
+  dynamic, PIC, and the C++ exception/unwinder hazard on Linux. Read before
+  adding an FFI dependency.
 - [CHANGELOG.md](CHANGELOG.md) — notable changes per released version.
 - [AGENTS.md](AGENTS.md) — conventions for contributing to the library.
 
