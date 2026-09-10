@@ -323,11 +323,10 @@ They are not mutually exclusive, but with the seal in place the preload is
 redundant for DuckDB, and adding a process-wide symbol-resolution override that
 nothing needs is not free of risk.
 
-### 4.2 The catch: DuckDB's static archive is not feature-equivalent
+### 4.2 The trap: two archives named alike are not the same library
 
-**Status: the sealing mechanism works; applying it to DuckDB is blocked
-upstream.** Recorded here because the trap is not DuckDB-specific and cost
-real time to find.
+**Resolved — by taking a different release asset, not by changing the design.**
+Recorded because the trap is not DuckDB-specific and cost several CI rounds.
 
 Sealing was verified end to end — the DSO links with `leanc`, has no undefined
 unwind/ABI symbols, and exports only the shim's entry points. But when the
@@ -358,14 +357,44 @@ extensions — it does not *contain* them:
 | `ListValueFun`           | **0**                | 4              |
 
 DuckDB's `core_functions` extension carries a large part of the SQL function
-library. A sealed static build would therefore give Linux users a DuckDB
-missing functions that macOS users have — precisely the "partial coverage
-looking complete" that `AGENTS.md` forbids, and not something to decide
-unilaterally.
+library. Stubbing would therefore have given Linux users a DuckDB missing
+functions that macOS users have — precisely the "partial coverage looking
+complete" that `AGENTS.md` forbids.
 
-**The lesson generalises:** a project shipping both `libfoo.so` and
-`libfoo_static.a` in one archive does not necessarily ship the *same library*
-twice. Diff the symbol tables before building a design on the static one.
+**The resolution was an asset, not a design change.** Bumping the DuckDB
+version does not help (v1.5.5 ships the identical gap), and no other DuckDB
+client is needed. The same release publishes a *separate*
+`static-libs-linux-<arch>.zip` containing the **complete** static build:
+`libduckdb_static.a` plus `libcore_functions_extension.a`,
+`libduckdb_generated_extension_loader.a` (which is what defines
+`LoadAllExtensions`), the parquet/json/icu/autocomplete/tpcds extensions, and
+DuckDB's vendored third-party archives. Linking all of them leaves no
+undefined DuckDB symbol except four weak `duckdb_zstd::ZSTD_trace_*` hooks and
+one re2 thread-local initialiser — neither of which the *shared* library
+defines either. So Linux gets the seal **and** full feature parity, with no
+source build and no stub. `lakefile.lean` fetches that asset on Linux and
+`libduckdb-osx-universal.zip` on macOS.
+
+**Three lessons, each of which cost a CI round:**
+
+1. **A project shipping both `libfoo.so` and `libfoo_static.a` in one archive
+   does not necessarily ship the same library twice.** Diff the symbol tables
+   before building a design on the static one.
+2. **Read the whole asset list.** The asset that solves this was there from the
+   start and was missed by piping `gh release view` through `head`.
+3. **A shared-library link permits undefined symbols.** A missing archive is
+   therefore *not* a link error — it surfaces much later as `symbol lookup
+   error` while building something unrelated. `ci/check-sealed-duckdb.sh` now
+   asserts on the linked artifact so this fails immediately and legibly, and
+   it is a build-time check because no `#guard` can observe a symbol table.
+
+A fourth, about Lake rather than DuckDB: the archive list initially went into
+`buildSharedLib`'s `weakArgs`, which Lake documents as **excluded from the
+build input trace** (`traceArgs` is the traced one). Changing which archives
+got sealed therefore did not invalidate the cached library, and because CI
+restores `.lake` from cache, it kept relinking nothing and reused a library
+built from the earlier, core-only archive. If an argument genuinely determines
+an artifact's contents, it belongs in `traceArgs`.
 
 ### 4.3 "Doesn't sealing stop me getting DuckDB updates?"
 
@@ -635,3 +664,70 @@ is why `linen` passes it explicitly.
    grow one for any throwing library it links.
 6. **Check a static archive is complete before designing around it.** Ours was
    not — see §4.2.
+
+## 8. Inventory: what `linen` links today
+
+One shim per native dependency, under `ffi/`. The three acquisition tiers are
+`AGENTS.md`'s preference order: vendor a small amalgamation where one exists,
+otherwise a pinned prebuilt, otherwise `pkg-config` on the host.
+
+| Shim | Native library | How it is obtained | In git? | Internally |
+| --- | --- | --- | --- | --- |
+| `network.c` | none — POSIX sockets, kqueue/epoll | libc / syscalls only | n/a | C |
+| `postgres.c` | libpq | host, `pkg-config libpq` | no | C |
+| `jose.c` | OpenSSL (libcrypto) | host, `pkg-config openssl` | no | C |
+| `tls.c` | OpenSSL (libssl+libcrypto) | host, `pkg-config openssl` | no | C |
+| `zlib.c` | zlib | host, `pkg-config zlib` | no | C |
+| `keychain.c` | macOS: Security + CoreFoundation<br>Linux: libsecret-1<br>Windows: advapi32 + credui | `-framework` / `pkg-config libsecret-1` / `-l` | no | C |
+| `sqlite3_shim.c` | **SQLite 3.51.0** | **vendored amalgamation**, compiled by Lake | **yes** | C |
+| `duckdb_shim.c` | **DuckDB 1.5.4** | pinned prebuilt, downloaded to `.lake/duckdb` | no | **C++** |
+
+### Why SQLite is vendored and DuckDB is not
+
+SQLite is the only library whose source lives in this repository
+(`ffi/vendor/sqlite3/`, 9.6MB). Four reasons, recorded in
+`docs/imports/sqlite-simple/dependencies.md`:
+
+1. **It is upstream's own default.** `direct-sqlite`, the package ported here,
+   bundles the amalgamation and compiles it in-tree; using the system library
+   is an opt-in cabal flag that defaults to off.
+2. **SQLite is designed for it** — one self-contained public-domain `.c`/`.h`
+   pair, which is SQLite's recommended distribution form.
+3. **It removes a build dependency entirely**: no `libsqlite3-dev`, no
+   `brew install`, no CI step, no fifth `pkg-config` probe. The SQLite FFI
+   build is then *identical* on macOS, Linux and anything else with a C
+   compiler.
+4. **It pins the exact version and compile flags in git.** Host SQLite
+   versions vary widely (macOS ships an old one) and SQLite's behaviour depends
+   heavily on compile-time flags — FTS5, JSON1, threading. `lakefile.lean` sets
+   `SQLITE_THREADSAFE=1` explicitly rather than inheriting a distributor's
+   choice.
+
+Note that the literal precondition in `AGENTS.md` — a library that "ships no
+`pkg-config` file and has no package in Ubuntu's default apt repos" — does
+**not** hold for SQLite: `sqlite3.pc` and `libsqlite3-dev` both exist. The
+operative question is closer to *"is there a small amalgamation, and do version
+skew or compile flags matter?"* than *"is it absent from apt?"*. The decision
+was taken explicitly rather than derived from the rule.
+
+DuckDB fails reason 2 and therefore lands in tier 2: no comparable
+amalgamation in its release assets, an enormous build, and prebuilt binaries
+published per platform — so it is pinned and downloaded rather than vendored,
+and `.lake/` is not committed.
+
+### Two things this table makes visible
+
+**DuckDB is the only C++ dependency, which is why it is the only one that hit
+§3.** Every other library here is plain C, and C has no exceptions, so nothing
+ever needs the unwinder. That is not a coincidence to be grateful for; it is
+the reason the rest of `ffi/` is safe, and the reason the *next* C++
+dependency is a candidate for the same failure. See §7.
+
+**Reproducibility splits three ways, and the middle tier is the soft spot.**
+SQLite is frozen in git; DuckDB is version-pinned in `lakefile.lean`; but
+libpq, OpenSSL, zlib and libsecret are **whatever the build machine has**. A
+`linen` build is therefore not hermetic — an OpenSSL 1.1 versus 3.x host can
+change behaviour with nothing in the repository changing. That is the normal
+and defensible trade for system libraries, since it is also how their security
+updates arrive (§4.3), but "pinned" applies to two dependencies here, not all
+of them.
