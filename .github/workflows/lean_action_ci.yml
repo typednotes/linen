@@ -8,6 +8,12 @@ on:
 jobs:
   build:
     strategy:
+      # Never cancel one platform because the other failed. These two legs fail
+      # for genuinely different reasons — the whole point of running both is to
+      # see each one's result — and the default (fail-fast: true) threw away the
+      # Linux result the moment a flaky macOS timing test failed. `release.yml`
+      # already sets this; the two should not disagree.
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
