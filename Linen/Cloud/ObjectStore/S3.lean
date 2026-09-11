@@ -48,8 +48,8 @@ import Linen.Cloud.Protocol.S3
 namespace Cloud.ObjectStore.S3
 
 open Cloud
-open Cloud.Protocol.S3 (objectPath bucketPath call sendXml unquoteETag parseNat
-  nextContinuationToken?)
+open Cloud.Protocol.S3 (objectPath bucketPath call sendXml sendUnit unquoteETag
+  parseNat parseBool nextContinuationToken?)
 open Network.HTTP.Client (Response)
 open Network.HTTP.Types (Query)
 
@@ -82,6 +82,27 @@ private def metaOfElement (el : Text.XML.Element) : Option ObjectMeta :=
     , etag := (el.childText "ETag").map unquoteETag
     , lastModified := el.childText "LastModified" }
 
+/-- One `<Version>` or `<DeleteMarker>` element of a `ListObjectVersions`
+    reply.
+
+    `isDeleteMarker` is passed in rather than read from the element, because the
+    two are distinguished by their *tag name* and carry the same child
+    elements — a marker simply has no `Size` or `ETag`. -/
+private def versionOfElement (isDeleteMarker : Bool) (el : Text.XML.Element) :
+    Option ObjectVersion :=
+  match el.childText "Key", el.childText "VersionId" with
+  | some key, some versionId =>
+    some
+      { info :=
+          { key
+          , size := parseNat (el.childText "Size")
+          , etag := (el.childText "ETag").map unquoteETag
+          , lastModified := el.childText "LastModified" }
+      , versionId
+      , isLatest := parseBool (el.childText "IsLatest")
+      , isDeleteMarker }
+  | _, _ => none
+
 -- ── Building the store ──────────────────────────────────────────────────────
 
 /-- The `ListObjectsV2` query for one page.
@@ -95,6 +116,35 @@ private def listQuery (prefix' : String) (cursor : Option Cursor) : Query :=
   ++ (match cursor with
       | some c => [("continuation-token", some c.token)]
       | none   => [])
+
+/-- The `ListObjectVersions` query for one page.
+
+    Two things differ from `ListObjectsV2` and both matter. The operation is
+    selected by a **valueless** `versions` parameter rather than by
+    `list-type`, and it pages by *two* markers — `key-marker` and
+    `version-id-marker` — because a key can have more versions than fit in a
+    page, so a position in the listing is a (key, version) pair rather than one
+    token. The two are packed into the single opaque `Cursor` this interface
+    carries, separated by a NUL, which cannot occur in either. -/
+private def listVersionsQuery (prefix' : String) (cursor : Option Cursor) : Query :=
+  [("versions", none)]
+  ++ (if prefix'.isEmpty then [] else [("prefix", some prefix')])
+  ++ (match cursor with
+      | some c =>
+        match c.token.splitOn "\x00" with
+        | [k, v] => [("key-marker", some k), ("version-id-marker", some v)]
+        | _      => [("key-marker", some c.token)]
+      | none   => [])
+
+/-- The cursor for the next page of a `ListObjectVersions` reply, packing the
+    two markers S3 requires. -/
+private def nextVersionMarker? (el : Text.XML.Element) : Option Cursor :=
+  if parseBool (el.childText "IsTruncated") then
+    match el.childText "NextKeyMarker", el.childText "NextVersionIdMarker" with
+    | some k, some v => some ⟨k ++ "\x00" ++ v⟩
+    | some k, none   => some ⟨k⟩
+    | none,   _      => none
+  else none
 
 /-- Headers for a write, from the caller's options.
 
@@ -162,7 +212,33 @@ def atEndpoint (t : Transport) (creds : Credentials) (ep : Endpoint) (bucket : S
       | .ok root =>
         return .ok {
             items := (root.named "Contents").filterMap metaOfElement
-          , next := nextContinuationToken? root } }
+          , next := nextContinuationToken? root }
+  , listVersions := fun prefix' cursor => do
+      let c := call creds ep "GET" (bucketPath bucket)
+        (query := listVersionsQuery prefix' cursor)
+      match ← sendXml t c with
+      | .error e => return .error e
+      | .ok root =>
+        -- Data versions and delete markers are separate element names in the
+        -- same reply, and both belong in the listing: a caller reconstructing
+        -- history needs to see that a key was deleted at a point in it.
+        -- Interleaved in document order, which is S3's newest-first order per
+        -- key.
+        let versions := (root.named "Version").filterMap (versionOfElement false)
+        let markers  := (root.named "DeleteMarker").filterMap (versionOfElement true)
+        return .ok {
+            items := versions ++ markers
+          , next := nextVersionMarker? root }
+  , getVersion := fun key versionId => do
+      match ← performNow t (call creds ep "GET" (objectPath bucket key)
+          (query := [("versionId", some versionId)])) with
+      | .error e => return .error e
+      | .ok resp => return .ok resp.body
+  , deleteVersion := fun key versionId =>
+      -- Unlike `delete`, this is destructive: it removes the named version
+      -- rather than adding a delete marker over it.
+      sendUnit t (call creds ep "DELETE" (objectPath bucket key)
+        (query := [("versionId", some versionId)])) }
 
 /-- An object store on a cloud's S3-compatible endpoint.
 

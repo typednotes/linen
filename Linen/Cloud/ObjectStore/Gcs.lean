@@ -94,6 +94,23 @@ def metaOfJson (v : Data.Json.Value) : Option ObjectMeta :=
     , contentType := string? v "contentType"
     , lastModified := string? v "updated" }
 
+/-- One archived or current object as an `ObjectVersion`.
+
+    GCS calls the identifier a **generation** and sends it as a quoted number,
+    so it is read with `string?` and kept as text: it is only ever compared and
+    passed back, never arithmetic. `timeDeleted` is present exactly on the
+    archived (non-current) generations, which is how the current one is
+    identified — GCS has no `IsLatest` field, and no delete markers at all, so
+    `isDeleteMarker` is always `false`. -/
+def versionOfJson (v : Data.Json.Value) : Option ObjectVersion :=
+  match metaOfJson v, string? v "generation" with
+  | some info, some generation =>
+    some
+      { info, versionId := generation
+      , isLatest := (string? v "timeDeleted").isNone
+      , isDeleteMarker := false }
+  | _, _ => none
+
 -- ── Building the store ──────────────────────────────────────────────────────
 
 /-- The listing query for one page. -/
@@ -102,6 +119,15 @@ private def listQuery (prefix' : String) (cursor : Option Cursor) : Query :=
   ++ (match cursor with
       | some c => [("pageToken", some c.token)]
       | none   => [])
+
+/-- The listing query for one page **including archived generations**.
+
+    `versions=true` is the whole difference: without it GCS returns only the
+    current generation of each name, which is what `list` wants and what
+    `listVersions` must not settle for. Paging is unchanged — one opaque
+    `pageToken`, unlike S3's two markers. -/
+private def listVersionsQuery (prefix' : String) (cursor : Option Cursor) : Query :=
+  [("versions", some "true")] ++ listQuery prefix' cursor
 
 /-- A Cloud Storage object store.
 
@@ -176,7 +202,32 @@ def withToken (t : Transport) (token bucket : String) : ObjectStore :=
       | .ok v =>
         return .ok {
             items := (array v "items").filterMap metaOfJson
-          , next := nextPageToken? v } }
+          , next := nextPageToken? v }
+  , listVersions := fun prefix' cursor => do
+      match ← Cloud.Protocol.GoogleRest.send t
+          (call "GET" (objectsPath bucket) (listVersionsQuery prefix' cursor)) with
+      | .error e => return .error e
+      | .ok v =>
+        return .ok {
+            items := (array v "items").filterMap versionOfJson
+          , next := nextPageToken? v }
+  , getVersion := fun key generation => do
+      -- `alt=media` for the bytes, as in `get`; `generation` selects which
+      -- snapshot of them.
+      match ← performNow t (call "GET" (objectPath bucket key)
+          [("alt", some "media"), ("generation", some generation)]) with
+      | .error e => return .error e
+      | .ok resp => return .ok resp.body
+  , deleteVersion := fun key generation => do
+      -- Destructive, unlike `delete`: it removes that generation rather than
+      -- archiving the current one. A 404 is *not* normalised to success here —
+      -- `delete` does that so it stays idempotent, but a caller naming a
+      -- specific generation that is not there has a stale reference and should
+      -- be told.
+      match ← performNow t (call "DELETE" (objectPath bucket key)
+          [("generation", some generation)]) with
+      | .error e => return .error e
+      | .ok _    => return .ok () }
 
 /-- A Cloud Storage object store, taking the token from credentials.
 

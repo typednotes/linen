@@ -6,12 +6,38 @@ format.
 
 ## [Unreleased]
 
-**One review finding remains open.** `Provider.Feature.objectVersioning` is
-still reported as `true` for all three clouds with nothing able to use it:
-there is no way to read, list or delete a specific object version. Making it
-real means a version type, version-aware operations on `ObjectStore`, S3's
-`ListObjectVersions` and GCS's `generation` parameter — a feature in its own
-right rather than a correction, and so not folded into 0.18.0.
+- **Object versioning is implemented**, closing the last finding from the
+  `Linen.Cloud` review. `Provider.Feature.objectVersioning` reported `true` for
+  all three clouds with nothing able to use it — no way to read, list or delete
+  a specific version.
+
+  `ObjectStore` gains `listVersions`, `getVersion` and `deleteVersion`, plus an
+  `ObjectVersion` type carrying the version's metadata, its provider
+  identifier, whether it is current, and whether it is a **delete marker**. S3
+  records a delete in a versioned bucket by adding a marker rather than
+  removing data, so a listing interleaves markers with real versions; they are
+  surfaced rather than filtered, because a caller reconstructing history needs
+  to see that a key was deleted at a point in it.
+
+  The two dialects differ in ways that are invisible from Lean and so are
+  pinned by tests on the wire form. S3 selects the operation with a
+  **valueless** `versions` parameter and pages by *two* markers — `key-marker`
+  and `version-id-marker` — because a single key can have more versions than
+  fit in a page, so a position in the listing is a (key, version) pair; both
+  are packed into the one opaque `Cursor` this interface carries. GCS uses
+  `versions=true` and a single page token, identifies the current generation by
+  the *absence* of `timeDeleted`, and has no delete markers at all.
+
+  `deleteVersion` is deliberately not `delete` with an argument: `delete` adds
+  a marker and keeps the data, while this destroys the named version
+  irrecoverably. For the same reason GCS's `deleteVersion` does **not**
+  normalise a 404 to success the way `delete` does — `delete` is idempotent by
+  design, but a caller naming a specific generation that is gone holds a stale
+  reference and should be told.
+
+  The three operations are fields with failing defaults rather than required
+  ones, so `ObjectStore.inMemory` — which keeps no history — declines instead
+  of faking a version store.
 
 ## [0.18.0] - 2026-09-11
 

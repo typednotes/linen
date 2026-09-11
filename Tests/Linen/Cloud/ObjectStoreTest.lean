@@ -273,6 +273,105 @@ def listReply : String :=
   | .ok page => return (← log.get, page.items.map (·.key), page.items.map (·.size), page.isLast)
   | .error _ => return (← log.get, [], [], false)
 
+-- ── Object versioning ──────────────────────────────────────────────────────
+
+/- `Provider.supports` reported `objectVersioning` for all three clouds long
+   before anything could use it. These pin the wire form, because that is where
+   the two dialects differ and where a mistake is invisible from Lean: S3 selects
+   the operation with a valueless `versions` parameter and pages by *two*
+   markers, GCS uses `versions=true` and one page token. -/
+
+/-- A `ListObjectVersions` reply: two data versions and a delete marker, plus a
+    truncation that carries both of S3's markers. -/
+def versionsReply : String :=
+  "<ListVersionsResult><Name>assets</Name><IsTruncated>true</IsTruncated>" ++
+  "<NextKeyMarker>logs/b.json</NextKeyMarker>" ++
+  "<NextVersionIdMarker>v9</NextVersionIdMarker>" ++
+  "<Version><Key>logs/a.json</Key><VersionId>v2</VersionId>" ++
+  "<IsLatest>true</IsLatest><Size>20</Size><ETag>&quot;bbb&quot;</ETag></Version>" ++
+  "<Version><Key>logs/a.json</Key><VersionId>v1</VersionId>" ++
+  "<IsLatest>false</IsLatest><Size>10</Size></Version>" ++
+  "<DeleteMarker><Key>logs/gone.json</Key><VersionId>v3</VersionId>" ++
+  "<IsLatest>true</IsLatest></DeleteMarker>" ++
+  "</ListVersionsResult>"
+
+/- The versions listing: `versions` is valueless, and every version and marker
+   comes back with its id, its latest flag and its kind. -/
+/-- info: ["GET s3.eu-west-3.amazonaws.com/assets?prefix=logs%2F&versions="] -/
+#guard_msgs in
+#eval show IO (List String) from do
+  let log ← IO.mkRef []
+  let s := ObjectStore.S3.atEndpoint (wire log status200 versionsReply) creds ep "assets"
+  let _ ← s.listVersions "logs/" none
+  log.get
+
+/- Every version and marker comes back with its id, its latest flag, and which
+   kind of entry it is. The delete marker is listed rather than dropped: a
+   caller reconstructing history needs to see that a key was deleted at a point
+   in it. -/
+/-- info: (["v2", "v1", "v3"], [true, false, true], [false, false, true]) -/
+#guard_msgs in
+#eval show IO (List String × List Bool × List Bool) from do
+  let log ← IO.mkRef []
+  let s := ObjectStore.S3.atEndpoint (wire log status200 versionsReply) creds ep "assets"
+  match ← s.listVersions "logs/" none with
+  | .ok page =>
+    return (page.items.map (·.versionId), page.items.map (·.isLatest),
+            page.items.map (·.isDeleteMarker))
+  | .error _ => return ([], [], [])
+
+/- A truncated page is *not* reported as the last one, and the cursor packs both
+   markers — a key can have more versions than fit in a page, so a position in
+   this listing is a (key, version) pair. -/
+/-- info: (false, true) -/
+#guard_msgs in
+#eval show IO (Bool × Bool) from do
+  let log ← IO.mkRef []
+  let s := ObjectStore.S3.atEndpoint (wire log status200 versionsReply) creds ep "assets"
+  match ← s.listVersions "logs/" none with
+  | .ok page =>
+    return (page.isLast, (page.next.map (·.token)) == some "logs/b.json\x00v9")
+  | .error _ => return (true, false)
+
+/- Following that cursor sends both markers back. -/
+/-- info: ["GET s3.eu-west-3.amazonaws.com/assets?key-marker=logs%2Fb.json&prefix=logs%2F&version-id-marker=v9&versions="] -/
+#guard_msgs in
+#eval show IO (List String) from do
+  let log ← IO.mkRef []
+  let s := ObjectStore.S3.atEndpoint (wire log status200 versionsReply) creds ep "assets"
+  let _ ← s.listVersions "logs/" (some ⟨"logs/b.json\x00v9"⟩)
+  log.get
+
+/- Reading and destroying one version address it by `versionId`. `deleteVersion`
+   is destructive where `delete` merely adds a marker, which is why they are
+   separate operations rather than one with an optional argument. -/
+/-- info: ["GET s3.eu-west-3.amazonaws.com/assets/a.json?versionId=v1"] -/
+#guard_msgs in
+#eval show IO (List String) from do
+  let log ← IO.mkRef []
+  let s := ObjectStore.S3.atEndpoint (wire log status200 "old bytes") creds ep "assets"
+  let _ ← s.getVersion "a.json" "v1"
+  log.get
+
+/-- info: ["DELETE s3.eu-west-3.amazonaws.com/assets/a.json?versionId=v1"] -/
+#guard_msgs in
+#eval show IO (List String) from do
+  let log ← IO.mkRef []
+  let s := ObjectStore.S3.atEndpoint (wire log status204 "") creds ep "assets"
+  let _ ← s.deleteVersion "a.json" "v1"
+  log.get
+
+/- A store that cannot version says so rather than answering something
+   unusable. `inMemory` keeps no history, so all three operations decline. -/
+/-- info: (true, true, true) -/
+#guard_msgs in
+#eval show IO (Bool × Bool × Bool) from do
+  let s ← ObjectStore.inMemory
+  let l ← s.listVersions "" none
+  let g ← s.getVersion "a" "v1"
+  let d ← s.deleteVersion "a" "v1"
+  return (l.toOption.isNone, g.toOption.isNone, d.toOption.isNone)
+
 /-- info: ["DELETE s3.eu-west-3.amazonaws.com/assets/a.json"] -/
 #guard_msgs in
 #eval show IO (List String) from do

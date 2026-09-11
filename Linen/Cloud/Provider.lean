@@ -322,7 +322,14 @@ def Locality.region? (l : Locality) (p : Provider) : Option (Region p) :=
     This table is the single source of truth for (3), and every row is pinned
     by a `#guard`. -/
 inductive Feature
-  /-- Per-object version history (`x-amz-version-id`, GCS generations). -/
+  /-- Per-object version history: S3 and Scaleway's `versionId`, Cloud
+      Storage's `generation`.
+
+      Reached through `ObjectStore.listVersions`, `getVersion` and
+      `deleteVersion`. All three clouds support it in a bucket where versioning
+      is enabled; in one where it never was, all three answer one entry per key
+      rather than failing, so a caller need not know which kind of bucket it
+      has. -/
   | objectVersioning
   /-- A receive call that blocks server-side until a message arrives — SQS's
       `WaitTimeSeconds`. Pub/Sub's pull blocks by its own rules and takes no

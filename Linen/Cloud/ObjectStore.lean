@@ -39,6 +39,13 @@
   storage classes, object locks, server-side encryption keys, multipart
   uploads, batch delete. `Cloud.Provider.supports` records the matrix.
 
+  Two operations are portable but **optional**, with defaults that fail rather
+  than pretend: `presign`, which needs SigV4, and the versioning trio
+  (`listVersions`, `getVersion`, `deleteVersion`). A store that cannot do them
+  says so, which is why they are fields with defaults rather than extra
+  required ones — `ObjectStore.inMemory` keeps no history and holds no
+  credentials, and should not have to fake either.
+
   ## Absence is not an error
 
   `head` answers `Option`, and `get?` exists alongside `get`, because "read it
@@ -114,6 +121,34 @@ def PresignedOp.method : PresignedOp → String
   | .download => "GET"
   | .upload   => "PUT"
 
+/-- One version of an object, in a bucket where versioning is enabled.
+
+    The three clouds name this differently — S3 and Scaleway call it a
+    `VersionId`, Cloud Storage a `generation` — but all three make it an opaque
+    token identifying one immutable snapshot of one key. It is a `String` here
+    for that reason: GCS's generations are numeric, and treating them as numbers
+    would invite arithmetic on an identifier that only ever gets compared. -/
+structure ObjectVersion where
+  /-- What is known about this version. `key` is the object's key, shared by
+      every version of it.
+
+      Named `info` rather than `meta`, which Lean 4 reserves. -/
+  info           : ObjectMeta
+  /-- The provider's identifier for this version, to pass back to
+      `getVersion` or `deleteVersion`. -/
+  versionId      : String
+  /-- Whether this is the version a plain `get` would return. -/
+  isLatest       : Bool := false
+  /-- Whether this entry is a **delete marker** rather than data.
+
+      S3 records a delete in a versioned bucket by adding a marker version
+      rather than removing anything, so a listing interleaves markers with real
+      versions. A marker has no body: `getVersion` on one fails, which is
+      correct and is why this flag is surfaced rather than hidden. GCS has no
+      equivalent and always reports `false`. -/
+  isDeleteMarker : Bool := false
+  deriving Repr, DecidableEq, Inhabited
+
 /-- An object store, bound to one bucket.
 
     Every operation answers `Except Error`, never raises; see `Cloud.Error` on
@@ -152,6 +187,37 @@ structure ObjectStore where
     fun _ _ _ => pure (.error
       { klass := .invalid
       , message := "this object store cannot mint presigned URLs" })
+  /-- One page of the versions of the keys under a prefix, newest first.
+
+      A versioned bucket keeps every write, so this is how the history is
+      reached. In a bucket where versioning was never enabled, all three clouds
+      answer one entry per key — the current one — rather than failing, so a
+      caller need not know which kind of bucket it has.
+
+      Interleaves delete markers with data versions on S3; see
+      `ObjectVersion.isDeleteMarker`. -/
+  listVersions  : String → Option Cursor → IO (Except Error (Page ObjectVersion)) :=
+    fun _ _ => pure (.error
+      { klass := .invalid
+      , message := "this object store does not support object versioning" })
+  /-- Fetch one specific version's contents.
+
+      Fails with `notFound` if the version is gone, and with an error rather
+      than empty bytes for an S3 delete marker, which has no body. -/
+  getVersion    : String → String → IO (Except Error ByteArray) :=
+    fun _ _ => pure (.error
+      { klass := .invalid
+      , message := "this object store does not support object versioning" })
+  /-- Remove one specific version, permanently.
+
+      **Not the same as `delete`.** In a versioned bucket `delete` adds a delete
+      marker and keeps the data; this destroys the named version and cannot be
+      undone. Removing the newest version makes the previous one current
+      again. -/
+  deleteVersion : String → String → IO (Except Error Unit) :=
+    fun _ _ => pure (.error
+      { klass := .invalid
+      , message := "this object store does not support object versioning" })
 
 -- ── Derived operations ──────────────────────────────────────────────────────
 
