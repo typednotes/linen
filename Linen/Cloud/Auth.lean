@@ -193,4 +193,50 @@ def Auth.usable : Auth → Bool
   | .authToken tok   => !tok.isEmpty
   | .anonymous       => true
 
+-- ── Presigned URLs ──────────────────────────────────────────────────────────
+
+/-- A URL that grants one operation, for a bounded time, to a holder with no
+    credentials of their own.
+
+    **SigV4 only**, which is the honest shape of the feature rather than a
+    limitation to work around: a presigned URL *is* a query-string signature.
+    The other schemes have no equivalent — a bearer token in a URL is the token
+    itself, not a scoped grant of it — so they return an error naming the
+    scheme rather than a URL that leaks a credential. This is why
+    `Provider.supports .gcp .presignedUrl` is `false`: Cloud Storage signed URLs
+    use an unrelated construction.
+
+    `expiresSeconds` is capped at seven days by AWS; exceeding it is rejected
+    here rather than at use time, where the complaint would be about the
+    signature.
+
+    The `Host` header is signed, so the URL is bound to `ep`'s authority —
+    including its port, which is what lets this work against a local MinIO. -/
+def Auth.presignedUrlAt (auth : Auth) (ep : Endpoint) (now : Data.Time.UTCTime)
+    (method path : String) (query : Network.HTTP.Types.Query)
+    (expiresSeconds : Nat) (doubleEncodePath : Bool := false) :
+    IO (Except Error String) := do
+  match auth with
+  | .sigV4 creds service region =>
+    if !creds.canSign then
+      return .error
+        { klass := .denied
+        , message := "presigning needs a complete key pair" }
+    match ← Crypto.SigV4.presignedUrl
+        { accessKeyId := creds.accessKey
+        , secretAccessKey := creds.secretKey
+        , sessionToken := creds.sessionToken }
+        region service now
+        { method, path, query
+        , headers := [("Host", ep.authority)]
+        , doubleEncodePath }
+        expiresSeconds ep.origin with
+    | .error m => return .error { klass := .invalid, message := m }
+    | .ok url  => return .ok url
+  | other =>
+    return .error
+      { klass := .invalid
+      , message := s!"presigned URLs require SigV4; this endpoint authenticates \
+with {other.scheme}, which has no scoped-URL equivalent" }
+
 end Cloud

@@ -24,10 +24,21 @@
   4. `authorization` — the header, carrying the signature and the exact set of
      headers it covers.
 
+  ## Query-string signing
+
+  `presign` and `presignedUrl` put the signature in the query rather than in an
+  `Authorization` header, which is how a **presigned URL** works: a link that
+  grants one operation, for a bounded time, to a holder with no credentials.
+  The construction is the same four steps, with the `X-Amz-*` parameters signed
+  as part of the query and the payload hash fixed at `UNSIGNED-PAYLOAD`,
+  because the body is not known when the URL is minted.
+
   ## What is *not* here
-  Query-string (presigned URL) signing, `AWS4-HMAC-SHA256-PAYLOAD` chunked
-  uploads, and Signature Version 4A (multi-region). Each is a separate scheme
-  layered on this one.
+
+  `AWS4-HMAC-SHA256-PAYLOAD` chunked uploads, and Signature Version 4A
+  (multi-region). Each is a separate scheme layered on this one. Google Cloud
+  Storage's signed URLs are unrelated to SigV4 and are not implemented, which
+  is why `Provider.supports .gcp .presignedUrl` is `false`.
 -/
 import Linen.Crypto.SHA256
 import Linen.Crypto.JOSE.FFI
@@ -279,5 +290,96 @@ def sign (creds : Credentials) (region service : String)
   let key ← signingKey creds.secretAccessKey scope
   let sig ← signWith key sts
   return extra ++ [("Authorization", authorization creds scope (signedHeaders allHeaders) sig)]
+
+-- ── Query-string signing (presigned URLs) ──
+
+/-- The longest expiry AWS accepts for a presigned URL: seven days. -/
+def maxPresignExpirySeconds : Nat := 604800
+
+/-- Sign a request into **query parameters** rather than headers, producing a
+    URL that grants one operation to whoever holds it, for a bounded time and
+    with no credentials of their own.
+
+    The same four steps as `sign`, differing in where the result goes and in
+    what the canonical request contains:
+
+    1. The `X-Amz-*` parameters — algorithm, credential, date, expiry and
+       signed-header list — are added to the query **before** canonicalisation,
+       so they are covered by the signature. `X-Amz-Signature` is the one
+       exception: it is the output, and appending it to its own input is not
+       possible.
+    2. The payload hash is `UNSIGNED-PAYLOAD`. The body is not known when the
+       URL is minted — for a download there is none, and for an upload it is
+       chosen by whoever uses the URL — so it cannot be hashed. This is why a
+       presigned URL is only as narrow as its method, path and expiry make it.
+    3. Only the headers the caller passes are signed, and whoever uses the URL
+       must reproduce them exactly. `host` is therefore mandatory and is what
+       binds the URL to one endpoint; anything further — a `content-type` the
+       uploader must match — tightens the grant but must be communicated
+       alongside the URL.
+
+    Returns the query parameters to put on the URL, `X-Amz-Signature` last.
+    Like `sign`, it hands back the pieces rather than a finished URL so the
+    caller keeps control of its own request type; `presignedUrl` assembles one.
+
+    Fails if `expiresSeconds` exceeds `maxPresignExpirySeconds`, because AWS
+    rejects such a URL at use time with a message about the signature rather
+    than about the expiry — a failure that arrives late and names the wrong
+    cause. -/
+def presign (creds : Credentials) (region service : String)
+    (time : Data.Time.UTCTime) (req : Request) (expiresSeconds : Nat) :
+    IO (Except String Network.HTTP.Types.Query) := do
+  if expiresSeconds == 0 then
+    return .error "a presigned URL needs a non-zero expiry"
+  if expiresSeconds > maxPresignExpirySeconds then
+    return .error
+      s!"expiry {expiresSeconds}s exceeds the maximum {maxPresignExpirySeconds}s (7 days)"
+  let amzDate := Data.Time.ISO8601.basicDateTime time
+  let scope : Scope := { date := Data.Time.ISO8601.basicDate time, region, service }
+  -- Only the caller's headers are signed. `host` must be among them: it is what
+  -- ties the URL to an endpoint, and SigV4 requires it.
+  let headers := prepareHeaders req.headers
+  let signed := signedHeaders headers
+  let authParams : Network.HTTP.Types.Query :=
+    [ ("X-Amz-Algorithm",     some algorithm)
+    , ("X-Amz-Credential",    some s!"{creds.accessKeyId}/{scope.render}")
+    , ("X-Amz-Date",          some amzDate)
+    , ("X-Amz-Expires",       some (toString expiresSeconds))
+    , ("X-Amz-SignedHeaders", some signed) ]
+    ++ (match creds.sessionToken with
+        | some t => [("X-Amz-Security-Token", some t)]
+        | none   => [])
+  let allQuery := req.query ++ authParams
+  let canonical : CanonicalRequest :=
+    { method := req.method.toUpper
+      uri := canonicalUri req.path req.doubleEncodePath
+      query := Network.HTTP.Types.canonicalQuery allQuery
+      headers := headers
+      -- Not the body's hash: see the doc-comment.
+      payloadHash := unsignedPayload }
+  let crHash ← hashStringHex canonical.render
+  let sts := stringToSign amzDate scope crHash
+  let key ← signingKey creds.secretAccessKey scope
+  let sig ← signWith key sts
+  return .ok (allQuery ++ [("X-Amz-Signature", some sig)])
+
+/-- A complete presigned URL.
+
+    `origin` is the scheme and host, without a trailing slash — e.g.
+    `https://bucket.s3.eu-west-3.amazonaws.com`. It must agree with the `host`
+    header that was signed, or the signature will not verify.
+
+    The query is rendered by `canonicalQuery`, the same function that rendered
+    what was signed, so the two cannot disagree. Whoever receives this URL must
+    not re-encode or reorder it — `Cloud.performPresigned` exists for that
+    reason. -/
+def presignedUrl (creds : Credentials) (region service : String)
+    (time : Data.Time.UTCTime) (req : Request) (expiresSeconds : Nat)
+    (origin : String) : IO (Except String String) := do
+  match ← presign creds region service time req expiresSeconds with
+  | .error e => return .error e
+  | .ok q    =>
+    return .ok (origin ++ canonicalUri req.path req.doubleEncodePath
+                       ++ "?" ++ Network.HTTP.Types.canonicalQuery q)
 
 end Crypto.SigV4

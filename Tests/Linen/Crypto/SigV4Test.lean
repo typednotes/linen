@@ -204,4 +204,114 @@ example : ByteArray → String → IO String := signWith
 example : String → Scope → String → String := stringToSign
 example : CanonicalRequest → String := CanonicalRequest.render
 
+
+-- ── Query-string signing (presigned URLs) ──────────────────────────────────
+
+/- A presigned URL carries the signature in the query rather than in a header,
+   and the `X-Amz-*` parameters are part of what is signed. These pin the shape
+   rather than a known-answer vector: the construction is exercised end to end,
+   and what matters is that every required parameter is present, that the
+   signature is last, and that nothing varies between two runs at the same
+   timestamp. -/
+
+/-- The parameters a presigned S3 GET must carry. -/
+private def presignedGet : IO (Except String Query) :=
+  presign creds "eu-west-3" "s3" t
+    { method := "GET", path := "/bucket/key.txt"
+    , headers := [("Host", "s3.eu-west-3.amazonaws.com")] }
+    3600
+
+/- Every required parameter appears, and `X-Amz-Signature` is last — it is the
+   output of signing the rest, so it cannot be part of its own input. -/
+/-- info: (true, true, true, true, true, "X-Amz-Signature") -/
+#guard_msgs in
+#eval show IO (Bool × Bool × Bool × Bool × Bool × String) from do
+  match ← presignedGet with
+  | .error e => return (false, false, false, false, false, e)
+  | .ok q =>
+    let has (k : String) : Bool := (q.find? (·.1 == k)).isSome
+    return ( has "X-Amz-Algorithm", has "X-Amz-Credential", has "X-Amz-Date"
+           , has "X-Amz-Expires", has "X-Amz-SignedHeaders"
+           , (q.getLast?.map (·.1)).getD "<none>" )
+
+/- The algorithm and expiry are the values that were asked for, and the
+   credential scope is the date/region/service triple. -/
+/-- info: (some "AWS4-HMAC-SHA256", some "3600", some "AKIDEXAMPLE/20150830/eu-west-3/s3/aws4_request") -/
+#guard_msgs in
+#eval show IO (Option String × Option String × Option String) from do
+  match ← presignedGet with
+  | .error _ => return (none, none, none)
+  | .ok q =>
+    let get (k : String) : Option String := (q.find? (·.1 == k)).bind (·.2)
+    return (get "X-Amz-Algorithm", get "X-Amz-Expires", get "X-Amz-Credential")
+
+/- Signing is deterministic for a fixed timestamp: two runs agree. A signature
+   that varied would be unverifiable by the service. -/
+/-- info: true -/
+#guard_msgs in
+#eval show IO Bool from do
+  match ← presignedGet, ← presignedGet with
+  | .ok a, .ok b =>
+    let sig (q : Query) := (q.find? (·.1 == "X-Amz-Signature")).bind (·.2)
+    return sig a == sig b && (sig a).isSome
+  | _, _ => return false
+
+/- Changing the method changes the signature: the grant is one verb, so a
+   download URL cannot be replayed as an upload. -/
+/-- info: true -/
+#guard_msgs in
+#eval show IO Bool from do
+  let put ← presign creds "eu-west-3" "s3" t
+    { method := "PUT", path := "/bucket/key.txt"
+    , headers := [("Host", "s3.eu-west-3.amazonaws.com")] } 3600
+  match ← presignedGet, put with
+  | .ok g, .ok p =>
+    let sig (q : Query) := (q.find? (·.1 == "X-Amz-Signature")).bind (·.2)
+    return sig g != sig p
+  | _, _ => return false
+
+/- An expiry beyond AWS's seven-day maximum is refused here, rather than at use
+   time where the complaint would be about the signature. -/
+/-- info: true -/
+#guard_msgs in
+#eval show IO Bool from do
+  match ← presign creds "eu-west-3" "s3" t
+      { method := "GET", path := "/b/k", headers := [("Host", "h")] }
+      (maxPresignExpirySeconds + 1) with
+  | .error m => return (m.splitOn "exceeds").length == 2
+  | .ok _    => return false
+
+/- And a zero expiry, which would mint an already-dead URL. -/
+/-- info: true -/
+#guard_msgs in
+#eval show IO Bool from do
+  match ← presign creds "eu-west-3" "s3" t
+      { method := "GET", path := "/b/k", headers := [("Host", "h")] } 0 with
+  | .error _ => return true
+  | .ok _    => return false
+
+/- A temporary credential's session token is signed as a query parameter, not
+   dropped: a URL minted from STS credentials without it is rejected. -/
+/-- info: true -/
+#guard_msgs in
+#eval show IO Bool from do
+  match ← presign { creds with sessionToken := some "FQoDYXdzE" } "eu-west-3" "s3" t
+      { method := "GET", path := "/b/k", headers := [("Host", "h")] } 900 with
+  | .error _ => return false
+  | .ok q    => return ((q.find? (·.1 == "X-Amz-Security-Token")).bind (·.2))
+                         == some "FQoDYXdzE"
+
+/- The assembled URL starts at the origin and carries the query. -/
+/-- info: true -/
+#guard_msgs in
+#eval show IO Bool from do
+  match ← presignedUrl creds "eu-west-3" "s3" t
+      { method := "GET", path := "/bucket/key.txt"
+      , headers := [("Host", "s3.eu-west-3.amazonaws.com")] }
+      3600 "https://s3.eu-west-3.amazonaws.com" with
+  | .error _ => return false
+  | .ok url  =>
+    return url.startsWith "https://s3.eu-west-3.amazonaws.com/bucket/key.txt?"
+        && (url.splitOn "X-Amz-Signature=").length == 2
+
 end Tests.Crypto.SigV4

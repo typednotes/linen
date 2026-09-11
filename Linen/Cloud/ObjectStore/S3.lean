@@ -112,6 +112,13 @@ private def putHeaders (opts : PutOptions) : List (String × String) :=
 def atEndpoint (t : Transport) (creds : Credentials) (ep : Endpoint) (bucket : String) :
     ObjectStore :=
   { describe := s!"s3://{bucket} at {ep.host}"
+  , presign := fun key op expiresSeconds => do
+      -- The path is signed unencoded and single-encoded on the wire, the same
+      -- rule `Call.wirePath` follows, so `objectPath` is passed through
+      -- untouched and `presignedUrl` canonicalises it. `doubleEncodePath` stays
+      -- false: S3 signs the path as sent.
+      (Auth.forEndpoint creds ep).presignedUrlAt ep (← Data.Time.getCurrentTime)
+        op.method (objectPath bucket key) [] expiresSeconds
   , get := fun key => do
       match ← performNow t (call creds ep "GET" (objectPath bucket key)) with
       | .error e => return .error e

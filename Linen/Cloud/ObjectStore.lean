@@ -96,6 +96,24 @@ structure PutOptions where
 
 -- ── The interface ───────────────────────────────────────────────────────────
 
+/-- Which operation a presigned URL grants.
+
+    An enumeration rather than an HTTP method string, so a URL cannot be minted
+    for an operation the store does not mean to delegate. A presigned URL's
+    signature covers the method, so this is the whole of what the holder may
+    do — the grant is genuinely one verb on one key until it expires. -/
+inductive PresignedOp where
+  /-- `GET`: read the object. -/
+  | download
+  /-- `PUT`: replace the object. -/
+  | upload
+  deriving Repr, DecidableEq, BEq
+
+/-- The HTTP method a presigned operation signs. -/
+def PresignedOp.method : PresignedOp → String
+  | .download => "GET"
+  | .upload   => "PUT"
+
 /-- An object store, bound to one bucket.
 
     Every operation answers `Except Error`, never raises; see `Cloud.Error` on
@@ -118,6 +136,22 @@ structure ObjectStore where
   list     : String → Option Cursor → IO (Except Error (Page ObjectMeta))
   /-- Where this store is, for diagnostics and logs. Never a credential. -/
   describe : String := "object store"
+  /-- A time-limited URL granting one operation on one key to a holder with no
+      credentials — a download link, or an upload target.
+
+      Defaults to an error naming the store, so an implementation that cannot
+      mint one says so rather than silently answering something unusable. The
+      S3-compatible stores override it; Cloud Storage's signed URLs use an
+      unrelated construction and are not implemented, which is what
+      `Provider.supports .gcp .presignedUrl = false` records.
+
+      Whoever receives such a URL must send it unmodified: its signature covers
+      the query exactly as encoded and ordered. `Cloud.performPresigned` exists
+      for that. -/
+  presign  : String → PresignedOp → Nat → IO (Except Error String) :=
+    fun _ _ _ => pure (.error
+      { klass := .invalid
+      , message := "this object store cannot mint presigned URLs" })
 
 -- ── Derived operations ──────────────────────────────────────────────────────
 
