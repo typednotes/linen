@@ -49,6 +49,41 @@ open Cloud
 
 -- ── Reading ─────────────────────────────────────────────────────────────────
 
+/-- Read an entry's INI body back into credentials.
+
+    Pure, and separate from the `IO` that fetches it, for the same reason
+    `render` is: the platform store cannot be driven from a `#guard`, so a
+    round-trip that is not checkable here is not checked anywhere. Both of the
+    defects this function had — a dropped `access_token` and blank fields
+    accepted as values — were invisible to a test that could only exercise
+    `render`. -/
+def parseBody (text : String) : Option Credentials :=
+  match Data.Ini.parse text with
+  | .error _ => none
+  | .ok ini =>
+    -- `normalizeEnv`: the same "set but empty means unset" rule the
+    -- environment source uses. A stored entry whose fields are present but
+    -- blank used to be answered as credentials, which then failed inside a TLS
+    -- handshake or as an opaque provider error instead of falling through to
+    -- the next source.
+    let field (k : String) : Option String := normalizeEnv (ini.lookupGlobal k)
+    let accessKey   := (field "access_key").getD ""
+    let secretKey   := (field "secret_key").getD ""
+    let accessToken := field "access_token"
+    -- An entry has to carry *something usable*: a key pair for the clouds that
+    -- sign, or a bearer token for GCP, whose whole credential is the token and
+    -- whose key pair is legitimately empty. Requiring the key pair
+    -- unconditionally made a GCP credential impossible to store.
+    if accessKey.isEmpty && secretKey.isEmpty && accessToken.isNone then
+      none
+    else
+      some
+        { accessKey, secretKey, accessToken
+          region         := (field "region").getD ""
+          sessionToken   := field "session_token"
+          projectId      := field "project_id"
+          organizationId := field "organization_id" }
+
 /-- Read credentials from a named account under the `linen` keychain service.
 
     The account name is a parameter rather than a `Provider` because not every
@@ -62,17 +97,7 @@ def fromAccount (account : String) : IO (Option Credentials) := do
   let entry := System.Keychain.Entry.new keychainService account
   let raw ← try pure (some (← entry.getPassword)) catch _ => pure none
   let some text := raw | return none
-  let ini ← match Data.Ini.parse text with
-    | .ok i    => pure i
-    | .error _ => return none
-  let some accessKey := ini.lookupGlobal "access_key" | return none
-  let some secretKey := ini.lookupGlobal "secret_key" | return none
-  return some
-    { accessKey, secretKey
-      region         := (ini.lookupGlobal "region").getD ""
-      sessionToken   := ini.lookupGlobal "session_token"
-      projectId      := ini.lookupGlobal "project_id"
-      organizationId := ini.lookupGlobal "organization_id" }
+  return parseBody text
 
 /-- Read the credentials stored for a cloud, under an account named after it. -/
 def forProvider (provider : Provider) : IO (Option Credentials) :=
@@ -90,6 +115,11 @@ def render (c : Credentials) : String :=
         , ("secret_key", c.secretKey)
         , ("region", c.region) ]
         ++ (match c.sessionToken with   | some t => [("session_token", t)]   | none => [])
+        -- GCP's whole credential. Omitted here until 0.18.0, so a stored GCP
+        -- credential loaded back without its token and short-circuited the
+        -- chain: `fromAccount` answered credentials that `requireToken` then
+        -- rejected, having skipped the sources that would have worked.
+        ++ (match c.accessToken with    | some t => [("access_token", t)]    | none => [])
         ++ (match c.projectId with      | some p => [("project_id", p)]      | none => [])
         ++ (match c.organizationId with | some o => [("organization_id", o)] | none => []) }
 

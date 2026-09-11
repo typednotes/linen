@@ -59,6 +59,63 @@ def full : Credentials :=
   | .error _ => false
   | .ok ini => ini.lookupGlobal "session_token" == some "FwoGZXIvYXdzEBYaDHNlY3JldA=="
 
+-- ── The round trip through `parseBody`, not just through `Data.Ini` ─────────
+
+/- The tests above check that `render` writes a body `Data.Ini` can read. That
+   is not the same as checking this module reads its *own* body back, and the
+   difference hid two defects: `render` omitted `access_token` entirely, and
+   the reader accepted blank fields as values. `parseBody` is pure precisely so
+   this can be asserted here. -/
+
+/-- A GCP credential: the key pair is legitimately empty and the bearer token
+    is the whole thing. This shape used to round-trip to `none`. -/
+def gcpCred : Credentials :=
+  { accessToken := some "ya29.a0AfH6SMB"
+  , projectId := some "my-project"
+  , region := "europe-west1" }
+
+/- The token survives the round trip. Before 0.18.0 `render` never wrote it, so
+   a stored GCP credential came back without the only field it had — and the
+   chain, having found *a* credential, stopped looking. -/
+#guard match parseBody (render gcpCred) with
+  | some c => c.accessToken == some "ya29.a0AfH6SMB"
+  | none   => false
+
+/- And the rest of it, so a fix that dropped a different field would fail. -/
+#guard match parseBody (render gcpCred) with
+  | some c => c.projectId == some "my-project" && c.region == "europe-west1"
+  | none   => false
+
+/- The busiest shape also survives whole, token included. -/
+#guard match parseBody (render { full with accessToken := some "tok-2" }) with
+  | some c =>
+    c.accessKey == "SCWACCESSKEY" && c.secretKey == "scw-secret"
+      && c.region == "fr-par" && c.sessionToken == some "tok"
+      && c.accessToken == some "tok-2"
+      && c.projectId == some "8460bf58-4c44-431e-9df4-8eae3888b1ce"
+      && c.organizationId == some "11111111-2222-3333-4444-555555555555"
+  | none => false
+
+/- **Set but empty means unset**, the same rule the environment source follows.
+   An entry whose fields are present but blank is not a credential; answering
+   one would fail much later inside a handshake, having skipped the sources
+   that would have worked. -/
+#guard (parseBody "access_key =\nsecret_key =\n").isNone
+
+/- Blank optional fields do not become `some ""` either. -/
+#guard match parseBody "access_key = AKIA\nsecret_key = s\nsession_token =\n" with
+  | some c => c.sessionToken == none && c.accessKey == "AKIA"
+  | none   => false
+
+/- An entry carrying only a token is usable — that is exactly GCP — while one
+   carrying nothing is not. -/
+#guard (parseBody "access_token = ya29.x\n").isSome
+#guard (parseBody "region = eu-west-3\n").isNone
+
+/- An unparseable body is `none`, so the chain falls through rather than
+   aborting. -/
+#guard (parseBody "\x00 not ini [[[").isNone
+
 -- ── The service name this library claims ────────────────────────────────────
 
 /- Named `linen`, not `infra`: an entry is addressed by (service, account), so
