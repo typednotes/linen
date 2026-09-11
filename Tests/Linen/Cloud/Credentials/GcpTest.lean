@@ -190,4 +190,68 @@ def minted : Token := { accessToken := "ya29.secret", expiresAt := 10 }
   | .ok none     => return true
   | .ok (some _) => return true   -- a developer machine may genuinely have one
   | .error _     => return true   -- as may one with a stale path
+
+-- ── The token endpoint comes from the key file ──────────────────────────────
+
+/- `ServiceAccount.tokenUri` is used as the JWT's `aud` *and* as where the
+   assertion is posted. Until 0.19.0 only the first was true: `exchange`
+   ignored `sa` and posted to a hardcoded host, so a key file naming a
+   different endpoint produced an assertion audienced for one host and sent to
+   another. These pin that the two now come from one field. -/
+
+#guard match splitTokenUri "https://oauth2.googleapis.com/token" with
+  | .ok (host, path) => host == "oauth2.googleapis.com" && path == "/token"
+  | .error _ => false
+
+/- A nested path survives, since the split is on the first slash only. -/
+#guard match splitTokenUri "https://token.example.com/v2/oauth/token" with
+  | .ok (host, path) => host == "token.example.com" && path == "/v2/oauth/token"
+  | .error _ => false
+
+/- No path means the root. -/
+#guard match splitTokenUri "https://token.example.com" with
+  | .ok (host, path) => host == "token.example.com" && path == "/"
+  | .error _ => false
+
+/- **Plaintext is refused.** The body carries an assertion signed with the
+   account's private key; posting it over http would hand it to the path. -/
+#guard match splitTokenUri "http://oauth2.googleapis.com/token" with
+  | .error e => e.klass == .invalid
+  | .ok _    => false
+
+/- As is a query string, rather than silently folding it into the path. -/
+#guard match splitTokenUri "https://token.example.com/token?alt=json" with
+  | .error e => e.klass == .invalid
+  | .ok _    => false
+
+/- And a URL naming no host. -/
+#guard match splitTokenUri "https:///token" with
+  | .error _ => true
+  | .ok _    => false
+
+/- End to end: the exchange posts to the host the key file names, not to
+   Google's default. A key file may legitimately name another endpoint — the
+   field exists because Google has changed it before. -/
+/-- info: ["POST token.example.com/v2/oauth/token"] -/
+#guard_msgs in
+#eval show IO (List String) from do
+  let log ← IO.mkRef []
+  let t := tokenEndpoint log
+    "{\"access_token\":\"ya29.x\",\"expires_in\":3599,\"token_type\":\"Bearer\"}"
+  let _ ← exchange t { sa with tokenUri := "https://token.example.com/v2/oauth/token" }
+    "aaa.bbb.ccc" 1440938160
+  log.get
+
+/- A key file whose `token_uri` is not https fails the exchange rather than
+   being silently rewritten to the default. -/
+/-- info: true -/
+#guard_msgs in
+#eval show IO Bool from do
+  let log ← IO.mkRef []
+  let t := tokenEndpoint log "{}"
+  match ← exchange t { sa with tokenUri := "http://evil.example.com/token" }
+      "aaa.bbb.ccc" 1440938160 with
+  | .error e => return e.klass == .invalid && (← log.get).isEmpty
+  | .ok _    => return false
+
 end Tests.Cloud.Credentials.Gcp

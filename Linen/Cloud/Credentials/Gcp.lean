@@ -231,16 +231,60 @@ def exchangeBody (assertion : String) : ByteArray :=
     Network.HTTP.Types.urlEncode s
   s!"grant_type={enc jwtBearerGrantType}&assertion={enc assertion}".toUTF8
 
+/-- Split a key file's `token_uri` into the host and path a `Call` needs.
+
+    Required to be **https**: the assertion in the body is a bearer credential
+    signed with the account's private key, and posting it in clear would hand it
+    to anyone on the path. A `token_uri` carrying a query string is refused
+    rather than silently folded into the path.
+
+    This exists because the destination must be the key file's, not a constant
+    — see `exchange`. -/
+def splitTokenUri (url : String) : Except Error (String × String) :=
+  if !url.startsWith "https://" then
+    .error
+      { klass := .invalid
+      , message := s!"token_uri must be https, found '{url}'" }
+  else if (url.splitOn "?").length != 1 then
+    .error
+      { klass := .invalid
+      , message := s!"token_uri must carry no query string, found '{url}'" }
+  else
+    match (url.drop 8).toString.splitOn "/" with
+    | []             => .error (Error.protocol s!"token_uri names no host: '{url}'")
+    | host :: segs   =>
+      if host.isEmpty then
+        .error (Error.protocol s!"token_uri names no host: '{url}'")
+      else
+        .ok (host, "/" ++ "/".intercalate segs)
+
 /-- Exchange a signed assertion for an access token.
 
     The transport is a parameter so this is testable against a stub — the
-    alternative being to hold a real service-account key in the repository. -/
+    alternative being to hold a real service-account key in the repository.
+
+    **The destination comes from the key file**, via `sa.tokenUri`. That is what
+    `ServiceAccount.tokenUri`'s doc-comment always claimed ("where to send the
+    assertion… a key file names the one it expects"), but this function used to
+    post to a hardcoded `Gcp.oauthTokenHost` and ignore `sa` entirely — the
+    parameter was unused, which is how the discrepancy surfaced.
+
+    It is not a cosmetic difference. `assertionClaims` already uses
+    `sa.tokenUri` as the JWT's `aud`, so a key file naming a different endpoint
+    produced an assertion audienced for one host and posted to another: rejected
+    as an invalid audience at best, and a credential signed for a host it was
+    not sent to at worst. Reading both from one field makes them agree by
+    construction — the same rule `Cloud.Transport`'s header states about signing
+    and sending. -/
 def exchange (t : Transport) (sa : ServiceAccount) (assertion : String)
     (issuedAtEpoch : Nat) : IO (Except Error Token) := do
+  let (host, path) ← match splitTokenUri sa.tokenUri with
+    | .error e => return .error e
+    | .ok hp   => pure hp
   let call : Call :=
     { method := "POST"
-    , endpoint := Gcp.endpoint Gcp.oauthTokenHost
-    , path := Gcp.oauthTokenPath
+    , endpoint := Gcp.endpoint host
+    , path := path
     , headers := [("Content-Type", "application/x-www-form-urlencoded")]
     , body := exchangeBody assertion
     , auth := .anonymous }

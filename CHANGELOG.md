@@ -8,6 +8,27 @@ format.
 
 ## [0.19.0] - 2026-09-11
 
+- **A GCP token exchange now posts to the endpoint the key file names.**
+  `ServiceAccount.tokenUri` is parsed from the key file and its doc-comment
+  said it was "where to send the assertion… a key file names the one it
+  expects". It was used as the JWT's `aud` claim and *nowhere else*:
+  `exchange` posted to a hardcoded host and ignored its `sa` parameter
+  entirely, which is how this surfaced — as an unused-binding warning.
+
+  Not cosmetic. A key file naming a different endpoint produced an assertion
+  audienced for one host and posted to another: rejected as an invalid
+  audience at best, and at worst a credential signed for a host it was never
+  sent to. Both now read from the one field, so they agree by construction.
+
+  The new `splitTokenUri` refuses a non-`https` `token_uri`, since the body
+  carries an assertion signed with the account's private key and posting it in
+  clear would hand it to anyone on the path — a tampered key file cannot
+  redirect a credential to a plaintext endpoint. It also refuses one carrying a
+  query string rather than folding it silently into the path.
+
+- **Warning-free build.** `String.mk` → `String.ofList`, and
+  `String.Slice.dropRight` → `dropEnd`, both deprecated upstream.
+
 - **Object versioning is implemented**, closing the last finding from the
   `Linen.Cloud` review. `Provider.Feature.objectVersioning` reported `true` for
   all three clouds with nothing able to use it — no way to read, list or delete

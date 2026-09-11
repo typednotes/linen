@@ -151,7 +151,7 @@ def parseNat (s : Option String) : Nat :=
 def unquoteETag (s : String) : String :=
   let t := s.trimAscii.toString
   if t.length >= 2 && t.startsWith "\"" && t.endsWith "\"" then
-    ((t.drop 1).dropRight 1).toString
+    ((t.drop 1).dropEnd 1).toString
   else t
 
 /-- S3's pagination cursor, if the listing is truncated.

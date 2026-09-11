@@ -189,7 +189,7 @@ def googleDenied : String :=
 #guard (describeError 500 "").message == "(empty response body)"
 
 /- A very long unintelligible body is truncated rather than dropped. -/
-#guard (describeError 500 (String.mk (List.replicate 900 'x'))).message.length
+#guard (describeError 500 (String.ofList (List.replicate 900 'x'))).message.length
   == bodyExcerptLimit + 1
 
 -- ── Retryability ────────────────────────────────────────────────────────────

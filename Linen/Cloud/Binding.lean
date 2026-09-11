@@ -131,7 +131,7 @@ def envPrefix : String := "LINEN_CLOUD"
     So a bucket called `my-assets.v2` is configured through
     `LINEN_CLOUD_OBJECTSTORE_MY_ASSETS_V2_PROVIDER`. -/
 def envName (name : String) : String :=
-  String.mk (name.toList.map fun c =>
+  String.ofList (name.toList.map fun c =>
     if c.isAlphanum then c.toUpper else '_')
 
 /-- The variable naming one field of one resource. -/
