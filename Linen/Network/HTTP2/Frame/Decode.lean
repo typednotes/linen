@@ -1,46 +1,87 @@
 /-
   Linen.Network.HTTP2.Frame.Decode — HTTP/2 frame decoding
 
-  Parses HTTP/2 frames from wire format as defined in RFC 9113 Section 4.
+  Parses HTTP/2 frames from wire format, per **RFC 9113** — the frame header is
+  §4.1, the frame definitions §6, and the settings parameters §6.5.2.
+
+  ## Every input is hostile
+
+  This module reads bytes off a socket before anything has been authenticated,
+  so a malformed, truncated or maliciously-sized frame is the *expected* input,
+  not an exceptional one. Two consequences run through the whole file:
+
+  - **Every decoder answers `Option`, and never raises.** A frame that cannot be
+    read is `none`, which the caller turns into the connection or stream error
+    RFC 9113 prescribes. A panic here would be a remote denial of service.
+  - **Bounds safety is structural, not by inspection.** Byte access goes through
+    `byte?`, which is `ByteArray`'s total `[i]?`, so a read past the end
+    *cannot* panic regardless of what the arithmetic above it does. The
+    decoders previously used `bs[i]!` behind hand-written bounds checks: correct
+    as written, but safe only for as long as every future edit kept the check
+    and the indexing in agreement, which is not a property worth relying on in
+    a parser exposed to the network.
+
+  The explicit length checks that remain (`decodeGoaway`, `decodeWindowUpdate`,
+  `decodeRstStream`) are **semantic** rather than defensive: they enforce the
+  minimum payload sizes RFC 9113 §6 specifies, and are not what keeps the
+  indexing in bounds.
 -/
 import Linen.Network.HTTP2.Frame.Types
 
 namespace Network.HTTP2
 
-def decodeUInt16BE (bs : ByteArray) (offset : Nat := 0) : Option UInt16 :=
-  if offset + 2 > bs.size then none
-  else
-    let b0 := bs[offset]!
-    let b1 := bs[offset + 1]!
-    some ((b0.toUInt16 <<< 8) ||| b1.toUInt16)
+-- ── Reading bytes ───────────────────────────────────────────────────────────
 
-def decodeUInt32BE (bs : ByteArray) (offset : Nat := 0) : Option UInt32 :=
-  if offset + 4 > bs.size then none
-  else
-    let b0 := bs[offset]!
-    let b1 := bs[offset + 1]!
-    let b2 := bs[offset + 2]!
-    let b3 := bs[offset + 3]!
-    some ((b0.toUInt32 <<< 24) ||| (b1.toUInt32 <<< 16) ||| (b2.toUInt32 <<< 8) ||| b3.toUInt32)
+/-- One byte, or `none` past the end.
 
-def decodeFrameHeader (bs : ByteArray) (offset : Nat := 0) : Option FrameHeader :=
-  if offset + 9 > bs.size then none
-  else
-    let len : UInt32 :=
-      (bs[offset]!).toUInt32 <<< 16 |||
-      (bs[offset + 1]!).toUInt32 <<< 8 |||
-      (bs[offset + 2]!).toUInt32
-    let ft := FrameType.fromUInt8 (bs[offset + 3]!)
-    let flags := bs[offset + 4]!
-    let rawSid : UInt32 :=
-      bs[offset + 5]!.toUInt32 <<< 24 |||
-      bs[offset + 6]!.toUInt32 <<< 16 |||
-      bs[offset + 7]!.toUInt32 <<< 8 |||
-      bs[offset + 8]!.toUInt32
-    some { payloadLength := len
-           frameType := ft
-           flags := flags
-           streamId := StreamId.fromWire rawSid }
+    `ByteArray`'s total indexing. Every decoder below reads through this, so no
+    arithmetic mistake in an offset can turn into a panic — it turns into a
+    `none`, which is a value the caller already handles. -/
+@[inline] private def byte? (bs : ByteArray) (i : Nat) : Option UInt8 := bs[i]?
+
+-- ── Integers ────────────────────────────────────────────────────────────────
+
+/-- A big-endian 16-bit integer at `offset`, or `none` if fewer than two bytes
+    remain. -/
+def decodeUInt16BE (bs : ByteArray) (offset : Nat := 0) : Option UInt16 := do
+  let b0 ← byte? bs offset
+  let b1 ← byte? bs (offset + 1)
+  return (b0.toUInt16 <<< 8) ||| b1.toUInt16
+
+/-- A big-endian 32-bit integer at `offset`, or `none` if fewer than four bytes
+    remain. -/
+def decodeUInt32BE (bs : ByteArray) (offset : Nat := 0) : Option UInt32 := do
+  let b0 ← byte? bs offset
+  let b1 ← byte? bs (offset + 1)
+  let b2 ← byte? bs (offset + 2)
+  let b3 ← byte? bs (offset + 3)
+  return (b0.toUInt32 <<< 24) ||| (b1.toUInt32 <<< 16)
+       ||| (b2.toUInt32 <<< 8) ||| b3.toUInt32
+
+-- ── The frame header ────────────────────────────────────────────────────────
+
+/-- The nine-octet frame header of RFC 9113 §4.1: a 24-bit length, an 8-bit
+    type, 8 bits of flags, and a 31-bit stream id with its reserved high bit.
+
+    `none` unless all nine octets are present. The reserved bit is discarded by
+    `StreamId.fromWire`, as §4.1 requires. -/
+def decodeFrameHeader (bs : ByteArray) (offset : Nat := 0) : Option FrameHeader := do
+  let l0 ← byte? bs offset
+  let l1 ← byte? bs (offset + 1)
+  let l2 ← byte? bs (offset + 2)
+  let tyByte ← byte? bs (offset + 3)
+  let flags ← byte? bs (offset + 4)
+  let s0 ← byte? bs (offset + 5)
+  let s1 ← byte? bs (offset + 6)
+  let s2 ← byte? bs (offset + 7)
+  let s3 ← byte? bs (offset + 8)
+  let len : UInt32 := l0.toUInt32 <<< 16 ||| l1.toUInt32 <<< 8 ||| l2.toUInt32
+  let rawSid : UInt32 :=
+    s0.toUInt32 <<< 24 ||| s1.toUInt32 <<< 16 ||| s2.toUInt32 <<< 8 ||| s3.toUInt32
+  return { payloadLength := len
+         , frameType := FrameType.fromUInt8 tyByte
+         , flags := flags
+         , streamId := StreamId.fromWire rawSid }
 
 def decodeSettingsParam (bs : ByteArray) (offset : Nat := 0) : Option (SettingsKeyId × UInt32) := do
   let key ← decodeUInt16BE bs offset
@@ -95,22 +136,29 @@ def decodeRstStream (bs : ByteArray) : Option ErrorCode :=
     let code ← decodeUInt32BE bs 0
     some (ErrorCode.fromUInt32 code)
 
-def decodePriority (bs : ByteArray) (offset : Nat := 0) : Option (Bool × StreamId × UInt8) :=
-  if offset + 5 > bs.size then none
-  else do
-    let first ← decodeUInt32BE bs offset
-    let exclusive := (first &&& 0x80000000) != 0
-    let weight := bs[offset + 4]!
-    some (exclusive, StreamId.fromWire first, weight)
+/-- The five-octet priority field of RFC 9113 §6.3: an exclusive flag, a
+    31-bit stream dependency, and a weight. -/
+def decodePriority (bs : ByteArray) (offset : Nat := 0) :
+    Option (Bool × StreamId × UInt8) := do
+  let first ← decodeUInt32BE bs offset
+  let weight ← byte? bs (offset + 4)
+  let exclusive := (first &&& 0x80000000) != 0
+  return (exclusive, StreamId.fromWire first, weight)
 
-def decodePadding (bs : ByteArray) : Option (ByteArray × Nat) :=
-  if bs.size == 0 then none
+-- ── Padding ─────────────────────────────────────────────────────────────────
+
+/-- Strip the padding of RFC 9113 §6.1: a pad-length octet, the content, then
+    that many padding octets. Answers the content and the padding length.
+
+    `none` when the payload is empty, or when the declared padding does not fit
+    — §6.1 requires a recipient to treat padding at least as long as the
+    payload as a `PROTOCOL_ERROR`, which is what refusing to decode reports. -/
+def decodePadding (bs : ByteArray) : Option (ByteArray × Nat) := do
+  let padLen ← (byte? bs 0).map UInt8.toNat
+  if padLen + 1 > bs.size then
+    none
   else
-    let padLen := bs[0]!.toNat
-    if padLen + 1 > bs.size then none
-    else
-      let content := bs.extract 1 (bs.size - padLen)
-      some (content, padLen)
+    return (bs.extract 1 (bs.size - padLen), padLen)
 
 def validateFrameSize (h : FrameHeader) (s : Settings) : Option ErrorCode :=
   let len := h.payloadLength

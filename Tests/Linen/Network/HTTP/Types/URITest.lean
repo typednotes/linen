@@ -34,8 +34,13 @@ namespace Tests.Network.HTTP.Types.URI
 #guard urlEncode "a-b_c.d~e" == "a-b_c.d~e"        -- unreserved chars pass through
 #guard urlEncode "a+b" == "a%2Bb"                  -- '+' is encoded (not a space)
 #guard urlEncode "100%" == "100%25"
--- Encoding is by Unicode codepoint, not UTF-8 byte: 'é' = U+00E9 ⇒ %E9.
-#guard urlEncode "café" == "caf%E9"
+-- UTF-8 bytes, per RFC 3986 §2.5: 'é' is U+00E9, which encodes as the two
+-- bytes C3 A9. This test previously asserted `caf%E9` — the code point as a
+-- single byte — which pinned the defect rather than the specification, and is
+-- why the encoder stayed wrong. Above U+00FF the old form did not merely
+-- disagree with the RFC, it emitted arbitrary characters.
+#guard urlEncode "café" == "caf%C3%A9"
+#guard urlEncode "€" == "%E2%82%AC"
 
 /-! ### urlDecode -/
 
@@ -59,9 +64,10 @@ namespace Tests.Network.HTTP.Types.URI
 #guard encodeQueryComponent "a/b" == "a%2Fb"             -- '/' is reserved, so escaped
 #guard encodeQueryComponent "a=b&c" == "a%3Db%26c"
 #guard encodeQueryComponent "" == ""
--- Encoded from UTF-8 bytes, unlike `urlEncode`, which encodes the code point.
+-- Both encode UTF-8 bytes: since 0.18.0 the two agree, `urlEncode` having been
+-- the one that was wrong. Kept side by side so a future divergence is visible.
 #guard encodeQueryComponent "café" == "caf%C3%A9"
-#guard urlEncode "café" == "caf%E9"                      -- the difference, side by side
+#guard urlEncode "café" == "caf%C3%A9"
 -- Hex digits are uppercase, as RFC 3986 §2.1 prefers and signing schemes require.
 #guard encodeQueryComponent "\t" == "%09"
 

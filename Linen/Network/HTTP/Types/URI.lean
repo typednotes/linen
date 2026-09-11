@@ -35,27 +35,33 @@ def renderQuery (q : Query) : String :=
       | none => k
     "?" ++ "&".intercalate parts
 
-/-- Simple percent-encoding for URLs. Encodes non-alphanumeric non-safe characters. -/
+/-- Percent-encode a string for use in a URL, escaping everything outside RFC
+    3986 §2.3's unreserved set `A-Za-z0-9-_.~`.
+
+    **UTF-8 bytes, not code points.** Until 0.18.0 this encoded `c.toNat`
+    directly, which was wrong for every character above U+007F and produced
+    invalid output above U+00FF: `é` (U+00E9) became `%E9` rather than `%C3%A9`,
+    and `€` (U+20AC) indexed a hex table with 522, emitting two arbitrary
+    characters instead of `%E2%82%AC`. It now delegates to
+    `Network.URI.escapeURIString`, so a non-ASCII query value survives a
+    round trip. -/
 def urlEncode (s : String) : String :=
-  let safe := "-._~"
-  String.join (s.toList.map fun c =>
-    if c.isAlphanum || safe.any (· == c) then s!"{c}"
-    else
-      let n := c.toNat
-      let hi := n / 16
-      let lo := n % 16
-      let hexChar (x : Nat) : Char :=
-        if x < 10 then Char.ofNat (48 + x) else Char.ofNat (55 + x)
-      s!"%{hexChar hi}{hexChar lo}")
+  Network.URI.escapeURIString Network.URI.isUnreserved s
 
 -- ── Canonical form ──
 
 /-- Percent-encode one query component strictly, escaping everything outside
     RFC 3986 §2.3's unreserved set `A-Za-z0-9-_.~` with uppercase hex.
 
-    Stricter than `urlEncode`, which leaves `+` and other characters alone and
-    mishandles non-ASCII by encoding code points rather than UTF-8 bytes.
-    Delegates to `Network.URI.escapeURIString`, which is UTF-8 correct. -/
+    Identical to `urlEncode` since 0.18.0 — both delegate to
+    `Network.URI.escapeURIString`, which encodes UTF-8 bytes. Both names are
+    kept because both are used, and because this one states the property that
+    matters to a signer: the encoding is exactly RFC 3986's unreserved set, so
+    what is signed and what is sent cannot differ.
+
+    (The previous note here said `urlEncode` "leaves `+` and other characters
+    alone". It did not — `+` was outside its safe set and was encoded. What it
+    really did wrong was encode code points rather than UTF-8 bytes.) -/
 def encodeQueryComponent (s : String) : String :=
   Network.URI.escapeURIString Network.URI.isUnreserved s
 

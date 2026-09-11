@@ -98,4 +98,71 @@ def mkHdr (len : UInt32) (ft : FrameType) (flags : FrameFlags) : FrameHeader :=
 #guard validateFrameSize (mkHdr 12 .settings 0) Settings.default == none
 #guard validateFrameSize (mkHdr 5 .settings 0) Settings.default == some ErrorCode.frameSizeError
 
+
+-- ── Hostile input ───────────────────────────────────────────────────────────
+
+/- These bytes arrive from a socket before anything is authenticated, so
+   truncation and absurd lengths are the expected input rather than the
+   exceptional one. Every decoder must answer `none` and none of them may
+   panic: a crash here would be a remote denial of service.
+
+   Before 0.18.0 these paths were guarded by hand-written bounds checks around
+   `bs[i]!`. They were correct, but their correctness depended on the check and
+   the indexing staying in agreement through every future edit. The decoders now
+   read through the total `[i]?`, so these cases are `none` by construction. -/
+
+/- Every truncation of a valid nine-octet frame header. -/
+#guard ((List.range 9).all fun n =>
+  (decodeFrameHeader (ByteArray.mk (Array.replicate n 0x00))).isNone)
+
+/- An empty payload decodes to nothing, everywhere. -/
+#guard (decodeFrameHeader ByteArray.empty).isNone
+#guard (decodeUInt16BE ByteArray.empty).isNone
+#guard (decodeUInt32BE ByteArray.empty).isNone
+#guard (decodePadding ByteArray.empty).isNone
+#guard (decodePriority ByteArray.empty).isNone
+#guard (decodeGoaway ByteArray.empty).isNone
+#guard (decodeWindowUpdate ByteArray.empty).isNone
+#guard (decodeRstStream ByteArray.empty).isNone
+
+/- An offset past the end is `none` rather than a panic — the case a bounds
+   check computed from the wrong variable would have let through. -/
+#guard (decodeUInt16BE (ByteArray.mk #[1, 2, 3, 4]) 3).isNone
+#guard (decodeUInt32BE (ByteArray.mk #[1, 2, 3, 4]) 1).isNone
+#guard (decodeFrameHeader (ByteArray.mk #[1, 2, 3, 4]) 100).isNone
+#guard (decodePriority (ByteArray.mk #[1, 2, 3, 4, 5]) 1).isNone
+
+/- Padding that claims to be longer than the payload is refused, as RFC 9113
+   §6.1 requires. `0xFF` of padding in a four-octet payload is the shape an
+   attacker sends to provoke an underflow. -/
+#guard (decodePadding (ByteArray.mk #[0xFF, 0x01, 0x02, 0x03])).isNone
+
+/- Padding exactly filling the payload leaves empty content, which is legal. -/
+#guard match decodePadding (ByteArray.mk #[0x03, 0xAA, 0x00, 0x00, 0x00]) with
+  | some (content, padLen) => content.size == 1 && padLen == 3
+  | none => false
+
+/- A pad length of zero is the unpadded case and keeps every content octet. -/
+#guard match decodePadding (ByteArray.mk #[0x00, 0xAA, 0xBB]) with
+  | some (content, padLen) => content.size == 2 && padLen == 0
+  | none => false
+
+/- A SETTINGS payload whose length is not a multiple of six is refused rather
+   than read past its end. -/
+#guard (decodeSettingsPayload (ByteArray.mk #[0x00, 0x01, 0x00])).isNone
+#guard (decodeSettingsPayload (ByteArray.mk (Array.replicate 7 0x00))).isNone
+
+/- An empty SETTINGS payload is valid and carries no parameters — the ACK
+   case. -/
+#guard decodeSettingsPayload ByteArray.empty == some []
+
+/- GOAWAY, WINDOW_UPDATE and RST_STREAM below their minimum payload sizes are
+   `none`, not partial reads. -/
+#guard ((List.range 8).all fun n =>
+  (decodeGoaway (ByteArray.mk (Array.replicate n 0x00))).isNone)
+#guard ((List.range 4).all fun n =>
+  (decodeWindowUpdate (ByteArray.mk (Array.replicate n 0x00))).isNone)
+#guard ((List.range 4).all fun n =>
+  (decodeRstStream (ByteArray.mk (Array.replicate n 0x00))).isNone)
+
 end Tests.Network.HTTP2.FrameDecode
