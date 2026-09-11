@@ -575,6 +575,9 @@ If nothing is listening, the example prints a short "could not connect" hint
 - [docs/linking.md](docs/linking.md) — how native libraries are linked: static vs
   dynamic, PIC, and the C++ exception/unwinder hazard on Linux. Read before
   adding an FFI dependency.
+- [docs/rfcs.md](docs/rfcs.md) — the specifications `linen` implements, mapped to
+  their modules; the foundational ones it rests on; and a few worth reading for
+  their own sake.
 - [CHANGELOG.md](CHANGELOG.md) — notable changes per released version.
 - [AGENTS.md](AGENTS.md) — conventions for contributing to the library.
 

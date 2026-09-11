@@ -7,6 +7,21 @@
   compile time; the parameter is **erased at runtime** -- zero overhead, zero
   branches, same codegen as raw C.
 
+  ## Specifications
+
+  The transport itself is the kernel's; these say what it does, and the
+  lifecycle states below are a type-level rendering of the connection states
+  they define.
+
+  - **RFC 9293** — Transmission Control Protocol. The current TCP
+    specification, which obsoleted **RFC 793** in 2022; 793 is still the number
+    most references use.
+  - **RFC 1122** — Requirements for Internet Hosts. What a host must do rather
+    than what the wire carries: the source of most of the observable socket
+    behaviour here, and of the robustness principle.
+  - **RFC 791** / **RFC 8200** — the IPv4 and IPv6 address families `.inet` and
+    `.inet6` select.
+
   ## How Lean 4's Dependent Types Enforce the POSIX Protocol
 
   Every function in this module declares its pre- and post-state in the type

@@ -4,6 +4,20 @@
   Provides IPv4/IPv6 address types, CIDR range matching, and routing
   table lookup (longest prefix match).
 
+  ## Specifications
+
+  - **RFC 791** — Internet Protocol. IPv4's 32-bit address, stored here as a
+    `UInt32`.
+  - **RFC 8200** — IPv6. The 128-bit address, stored as a pair of `UInt64`.
+  - **RFC 4632** — Classless Inter-Domain Routing. The `a.b.c.d/len` notation
+    and the longest-prefix-match rule `lookup` implements.
+  - **RFC 1918** — private IPv4 ranges, and **RFC 4193** for IPv6 unique-local
+    addresses.
+
+  Longest prefix match is the operation a router performs (RFC 4271 for the
+  protocol that distributes such tables), on a table this module does not
+  participate in building — it answers queries against one it is given.
+
   ## Design
 
   Mirrors Haskell's `Data.IP` from the `iproute` package.
