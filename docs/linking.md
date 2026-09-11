@@ -162,6 +162,17 @@ unpacked DuckDB archive, a static `libstdc++.a`, and static
   cannot be resolved from the global scope, and intra-library references bind
   at link time.
 
+**Where it is written, and where the `-L` looks, must be derived the same
+way.** The target writes to `pkg.buildDir / "ffi"` — always this package's own
+directory — while the flags are computed during lakefile elaboration, where
+`IO.currentDir` is the *workspace* root and so is the consumer's directory
+whenever `linen` is a dependency. The `-L` is therefore derived from the
+lakefile's own path (`getFileName`), not from the working directory. Deriving
+it from the working directory is what shipped in 0.17.0–0.19.0 and made every
+Linux consumer fail to link, while every standalone build — including this
+project's CI, where the two paths are the same directory — passed. A change
+here is only really tested by building a consumer.
+
 `--exclude-libs` names the archives explicitly rather than using `ALL`.
 `--exclude-libs` applies only to archive members, so `duckdb.o`'s entry points
 would retain default visibility under `ALL` as well; naming the archives keeps

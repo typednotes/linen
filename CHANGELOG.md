@@ -6,6 +6,32 @@ format.
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-09-11
+
+- **A Linux consumer could not build `linen` at all.** The `-L` naming
+  `libduckdb_sealed.so` was resolved against `IO.currentDir`, which during
+  lakefile elaboration is the **workspace** root — the *consumer's* directory
+  when `linen` is a dependency. The library itself is written by the
+  `duckdbSealedLib` target to `pkg.buildDir / "ffi"`, which is always `linen`'s
+  own directory. Standalone the two coincide; as a dependency they diverge, and
+  the consumer's link of `liblinenffi.so` fails with
+
+      ld.lld: error: unable to find library -lduckdb_sealed
+
+  seconds after its own log reports `✔ Built linen/duckdbSealedLib`. The `-L`
+  is now derived from this lakefile's own path, so both name `linen`'s build
+  directory in either context.
+
+  Affects **0.17.0, 0.18.0 and 0.19.0** — every version since the sealed
+  library was introduced — on Linux only, and only when `linen` is consumed as
+  a dependency. macOS is unaffected: the sealed path is `isLinuxBuild`-only and
+  the dynamic path it uses instead reads the workspace-relative cache
+  consistently at both ends.
+
+  **This project's own CI cannot catch this class of bug**, which is why three
+  releases shipped with it: building standalone is exactly the case where the
+  two paths agree. Catching it needs a build of a *consumer* package on Linux.
+
 ## [0.19.0] - 2026-09-11
 
 - **A GCP token exchange now posts to the endpoint the key file names.**

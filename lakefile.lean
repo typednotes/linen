@@ -377,7 +377,31 @@ run_cmd do
   let duckdbDynamicLinkArgs : Array String :=
     #["-L", duckdbLibDir.toString, "-lduckdb", "-Wl,-rpath," ++ duckdbLibDir.toString]
   let sealedArchives ← if isLinuxBuild then duckdbSealedArchives duckdbLibDir else pure none
-  let sealedLibDir ← toAbsolute (".lake" / "build" / "ffi")
+  -- `IO.currentDir` here is the **workspace** root, not this package's own
+  -- directory: when `linen` is a dependency, Lake elaborates this lakefile with
+  -- the *consumer's* root as the working directory. Every other path in this
+  -- block is content with that — the DuckDB download and its `-I`/`-L` all live
+  -- under the workspace's `.lake/duckdb` and agree with each other — but
+  -- `duckdbSealedLib` is a Lake *target*, and Lake writes a target's output to
+  -- `pkg.buildDir`, which is always *this* package's directory. So the `-L`
+  -- naming that library must be derived from this file's location rather than
+  -- from the working directory, or the two name different trees.
+  --
+  -- They did, and it broke every Linux consumer while this project's own CI
+  -- stayed green: built standalone, the workspace root *is* the package
+  -- directory and the two coincide. As a dependency they diverge, and the
+  -- consumer's link fails with
+  --
+  --     ld.lld: error: unable to find library -lduckdb_sealed
+  --
+  -- moments after its log says `✔ Built linen/duckdbSealedLib` — the library
+  -- exists, one directory tree over from where the linker was told to look.
+  -- Standalone CI cannot catch this by construction; only a consumer build can.
+  --
+  -- `getFileName` is absolute here (Lake passes the resolved lakefile path), so
+  -- `toAbsolute` is belt-and-braces rather than load-bearing.
+  let pkgDir : FilePath := (FilePath.mk (← getFileName)).parent.getD "."
+  let sealedLibDir ← toAbsolute (pkgDir / ".lake" / "build" / "ffi")
   let duckdbLinkArgs : Array String :=
     if sealedArchives.isSome then
       #["-L", sealedLibDir.toString, "-lduckdb_sealed",
@@ -402,7 +426,7 @@ run_cmd do
 -- is left as an unbound symbol that dyld's flat-namespace fallback can resolve to
 -- macOS's incompatible system `libboringssl.dylib` instead, crashing on the first call.
 package linen where
-  version := v!"0.19.0"
+  version := v!"0.19.1"
   moreLinkArgs := nativeLinkArgs
 
 -- ── Native FFI (POSIX sockets + kqueue/epoll, PostgreSQL libpq) ──
