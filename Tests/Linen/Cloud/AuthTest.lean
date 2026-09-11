@@ -141,6 +141,36 @@ def iamEndpoint : Endpoint :=
   | .error e => e.klass == .unbound
   | .ok _ => false
 
+/- AWS declines rather than guessing a service name. There is no single native
+   AWS scheme — every API signs under its own — so answering one would be right
+   only by coincidence. This used to return `execute-api`, API Gateway's name,
+   which signs correctly for API Gateway and produces `SignatureDoesNotMatch`
+   for everything else. -/
+#guard match Auth.native .aws { accessKey := "AK", secretKey := "sk" } with
+  | .error e => e.klass == .invalid
+  | .ok _ => false
+
+/- The error names the two functions that do work, because "no native scheme"
+   is only useful next to what to use instead. -/
+#guard match Auth.native .aws {} with
+  | .error e =>
+    (e.message.splitOn "Auth.forEndpoint").length == 2
+      && (e.message.splitOn "Auth.nativeFor").length == 2
+  | .ok _ => false
+
+/- `nativeFor` signs under the name it is given, for the case where the service
+   is known but no `Endpoint` was built. -/
+#guard match Auth.nativeFor .aws { accessKey := "AK", secretKey := "sk"
+                                 , region := "eu-west-3" } "secretsmanager" with
+  | .ok (.sigV4 _ service region) => service == "secretsmanager" && region == "eu-west-3"
+  | _ => false
+
+/- And it ignores the service for the clouds whose native scheme does not
+   sign, so a caller need not special-case them. -/
+#guard match Auth.nativeFor .scaleway { secretKey := "scw-secret" } "ignored" with
+  | .ok (.authToken t) => t == "scw-secret"
+  | _ => false
+
 -- ── Usability, checked before a request is built ────────────────────────────
 
 #guard (Auth.forEndpoint exampleCreds iamEndpoint).usable == true

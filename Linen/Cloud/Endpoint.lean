@@ -71,7 +71,35 @@ structure Endpoint where
       this is a field rather than something read from the credentials when the
       signature is computed. -/
   region  : String
+  /-- The TCP port, when it is not the scheme's default.
+
+      `none` means 443 for `secure`, 80 otherwise. Present so that a local
+      backend — MinIO on `:9000`, LocalStack on `:4566`, ElasticMQ on `:9324`
+      — really is "just a different `Endpoint`", as this subsystem's docs
+      promise. Every cloud endpoint leaves it `none`. -/
+  port    : Option Nat := none
+  /-- Whether to speak TLS. True for every real cloud endpoint; false is for a
+      container on `localhost`, which is the only place an unencrypted object
+      store belongs. -/
+  secure  : Bool := true
   deriving Repr, DecidableEq, BEq
+
+/-- The port actually used: the explicit one, or the scheme's default. -/
+def Endpoint.effectivePort (ep : Endpoint) : Nat :=
+  ep.port.getD (if ep.secure then 443 else 80)
+
+/-- The `Host` header's value: the host, plus the port when it is not the
+    scheme's default.
+
+    This is what gets **signed**, not just sent. SigV4 covers the `Host`
+    header, so a request to `localhost:9000` whose signature was computed over
+    a bare `localhost` is rejected with `SignatureDoesNotMatch` — which is why
+    the port belongs here rather than only in the socket address. RFC 9110
+    omits the port when it is the default, and so does this. -/
+def Endpoint.authority (ep : Endpoint) : String :=
+  match ep.port with
+  | some p => if p == (if ep.secure then 443 else 80) then ep.host else s!"{ep.host}:{p}"
+  | none   => ep.host
 
 /-- An endpoint for a host no table predicts: a VPC endpoint, a compatible
     third-party store, a region newer than this file.
@@ -80,10 +108,26 @@ structure Endpoint where
     it is visible at the call site. -/
 def Endpoint.raw (host service region : String) : Endpoint := { host, service, region }
 
-/-- The `https://` origin, for logs and for constructing absolute URLs. All
-    three clouds are TLS-only on these services, so the scheme is not a
-    parameter. -/
-def Endpoint.origin (ep : Endpoint) : String := s!"https://{ep.host}"
+/-- The origin, for logs and for constructing absolute URLs.
+
+    Derived from `secure` and `authority` rather than hardcoding `https://`:
+    all three clouds are TLS-only on these services, but a local container is
+    the documented exception and used to render as an `https://` URL that
+    nothing was listening on. -/
+def Endpoint.origin (ep : Endpoint) : String :=
+  (if ep.secure then "https://" else "http://") ++ ep.authority
+
+/-- An endpoint on `localhost`, for a container standing in for the real
+    service — MinIO, LocalStack, ElasticMQ.
+
+    Plaintext by default, because that is how those images ship. `service` and
+    `region` still matter: the request is signed, and a compatible
+    implementation checks the signature, so they must match what the container
+    expects (`us-east-1` is the usual default). -/
+def Endpoint.localhost (port : Nat) (service : String)
+    (region : String := "us-east-1") (host : String := "localhost")
+    (secure : Bool := false) : Endpoint :=
+  { host, service, region, port := some port, secure }
 
 /-- The absolute URL of a path at this endpoint. `path` must already begin with
     `/` and be percent-encoded. -/

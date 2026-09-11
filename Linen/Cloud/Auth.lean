@@ -98,13 +98,46 @@ instance : ToString Auth where
 def Auth.forEndpoint (creds : Credentials) (ep : Endpoint) : Auth :=
   .sigV4 creds ep.service ep.region
 
-/-- The scheme a cloud's *own* API uses, given its credentials.
+/-- The scheme a cloud's *own* API uses, for the two clouds where that is a
+    single answer.
 
-    Not for the S3- and SQS-compatible endpoints: those are SigV4 on all three
-    clouds that have them, whatever this says. Use `Auth.forEndpoint` there. -/
+    Scaleway authenticates every one of its own APIs with an `X-Auth-Token`,
+    and GCP with a bearer token, so for those two the provider determines the
+    scheme outright.
+
+    **AWS is not like that, and this returns an error for it.** Every AWS API
+    signs SigV4 under *its own* service name — `s3`, `sqs`, `secretsmanager`,
+    `dynamodb` — so there is no such thing as "the AWS native scheme" and no
+    name this function could pick that would be right more than occasionally.
+    It previously answered `execute-api`, which is API Gateway's name: correct
+    for calling an API Gateway deployment and a `SignatureDoesNotMatch` for
+    everything else. Use `Auth.forEndpoint`, which reads the service off the
+    endpoint, or `Auth.nativeFor` when the name is known but an `Endpoint` is
+    not to hand.
+
+    Not for the S3- and SQS-compatible endpoints either: those are SigV4 on all
+    three clouds that have them, whatever this says. `Auth.forEndpoint` again. -/
 def Auth.native (provider : Provider) (creds : Credentials) : Except Error Auth :=
   match provider with
-  | .aws      => .ok (.sigV4 creds "execute-api" creds.region)
+  | .aws      =>
+    .error {
+        klass := .invalid
+      , message := "AWS has no single native signing scheme: each service signs \
+under its own SigV4 service name. Use Auth.forEndpoint to read it off the \
+endpoint, or Auth.nativeFor to name it." }
+  | .scaleway => .ok (.authToken creds.secretKey)
+  | .gcp      => creds.requireToken .gcp |>.map Auth.bearer
+
+/-- `Auth.native`, with the AWS SigV4 service name supplied.
+
+    For the case where the service is known but no `Endpoint` has been built —
+    otherwise prefer `Auth.forEndpoint`, which cannot disagree with the host it
+    is signing for. `service` is ignored for the two clouds whose native scheme
+    does not sign. -/
+def Auth.nativeFor (provider : Provider) (creds : Credentials) (service : String) :
+    Except Error Auth :=
+  match provider with
+  | .aws      => .ok (.sigV4 creds service creds.region)
   | .scaleway => .ok (.authToken creds.secretKey)
   | .gcp      => creds.requireToken .gcp |>.map Auth.bearer
 

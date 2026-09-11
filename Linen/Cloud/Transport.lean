@@ -183,18 +183,22 @@ def Call.toRequestAt (c : Call) (now : Data.Time.UTCTime) : IO Request := do
     throw (IO.userError
       "Cloud.Call: pathPreEncoded cannot be combined with SigV4 signing; the \
 signature covers the unencoded path (see Call.pathPreEncoded)")
-  let authHeaders ← c.auth.headersAt now c.endpoint.host c.method c.path c.query
+  -- `authority`, not `host`: SigV4 signs the `Host` header, so a non-default
+  -- port has to be part of what is signed as well as where the socket goes.
+  -- Signing a bare host and sending `Host: localhost:9000` is rejected as
+  -- `SignatureDoesNotMatch`.
+  let authHeaders ← c.auth.headersAt now c.endpoint.authority c.method c.path c.query
     c.headers c.body c.doubleEncodePath c.unsignedBody
   let rendered := c.queryString
   return {
       method := parseMethod c.method
     , host := c.endpoint.host
-    , port := 443
+    , port := c.endpoint.effectivePort.toUInt16
     , path := c.wirePath
     , queryString := if rendered.isEmpty then "" else "?" ++ rendered
     , headers := (c.headers ++ authHeaders).map fun (n, v) => (Data.CI.mk' n, v)
     , body := if c.body.isEmpty then none else some c.body
-    , isSecure := true
+    , isSecure := c.endpoint.secure
     , timeoutMillis := timeoutMillis }
 
 /-- Sign a call against the current wall clock and build the HTTP request. -/
@@ -229,6 +233,27 @@ def isSuccess (resp : Response) : Bool :=
 
 -- ── Performing a call ───────────────────────────────────────────────────────
 
+/-- What must hold before a call is worth building, independent of how its
+    status will be judged.
+
+    Shared by `perform` and `performRaw` rather than written out in each. The
+    two differ only in what they do with the *response*; they must not differ
+    in whether they check the request. `performRaw` previously skipped both
+    checks, so the operations that use it — the ones where a non-2xx is the
+    expected answer — sent unauthenticated or mis-encoded requests where the
+    others returned a clear error. -/
+def Call.preflight (c : Call) : Except Error Unit :=
+  if !c.auth.usable then
+    .error {
+        klass := .denied
+      , message := s!"credentials for {c.auth.scheme} are incomplete" }
+  else if c.pathEncodingConflicts then
+    .error {
+        klass := .invalid
+      , message := "a pre-encoded path cannot be SigV4-signed (see Call.pathPreEncoded)" }
+  else
+    .ok ()
+
 /-- Send a call and require a 2xx, at a given time.
 
     Never raises. A non-2xx becomes a classified `Error` carrying the
@@ -236,14 +261,9 @@ def isSuccess (resp : Response) : Bool :=
     `Class.transport` with the exception's text. -/
 def perform (t : Transport) (c : Call) (now : Data.Time.UTCTime) :
     IO (Except Error Response) := do
-  if !c.auth.usable then
-    return .error {
-        klass := .denied
-      , message := s!"credentials for {c.auth.scheme} are incomplete" }
-  if c.pathEncodingConflicts then
-    return .error {
-        klass := .invalid
-      , message := "a pre-encoded path cannot be SigV4-signed (see Call.pathPreEncoded)" }
+  match c.preflight with
+  | .error e => return .error e
+  | .ok ()   => pure ()
   let resp ← try
       let req ← c.toRequestAt now
       pure (Except.ok (← t.send req))
@@ -264,6 +284,9 @@ def performNow (t : Transport) (c : Call) : IO (Except Error Response) := do
     answer and the caller wants to see it rather than a classified error. -/
 def performRaw (t : Transport) (c : Call) (now : Data.Time.UTCTime) :
     IO (Except Error Response) := do
+  match c.preflight with
+  | .error e => return .error e
+  | .ok ()   => pure ()
   try
     let req ← c.toRequestAt now
     return .ok (← t.send req)
