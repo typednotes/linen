@@ -93,26 +93,54 @@ def queueUrl (t : Transport) (creds : Credentials) (ep : Endpoint) (name : Strin
 
 -- ── Batch replies ───────────────────────────────────────────────────────────
 
-/-- Turn a batch reply into either the successful entries or an error.
+/-- What a batch reply says: the entries that were accepted, and a description
+    of the ones that were not.
 
-    A reply whose `Failed` list is non-empty and `Successful` list is empty is
-    an error: nothing happened, and reporting success would lose a message
-    silently. A *partial* failure answers the successes, with the failures
-    folded into the message so they are at least visible. -/
+    Both halves, because a partial failure is the case that matters and
+    discarding either half of it loses information the caller needs. A queue
+    producer that is told only "3 of 10 failed" must either drop 7 delivered
+    messages or resend them and duplicate. -/
+private structure Batch where
+  /-- The `Successful` entries, whatever happened to the others. -/
+  successful : List Value
+  /-- A summary of the `Failed` entries; `none` when every entry was accepted. -/
+  failure?   : Option String
+  deriving Inhabited
+
+/-- Turn a batch reply into its successes and its failures.
+
+    A reply in which **everything** failed is an `Error`: nothing happened, and
+    answering success would lose messages silently.
+
+    A **partial** failure is not an error here. It answers the successes *and*
+    the failure summary, leaving the decision to the caller, because what to do
+    depends on what the caller can express: `send` reports identifiers, so it
+    can name what got through; `ack` reports nothing, so for it a partial
+    failure has to be an error or it would be invisible.
+
+    This previously returned a bare `Except Error (List Value)` and answered
+    `.error` on a partial failure, discarding the successful entries — which
+    contradicted this very doc-comment, and was the branch no test covered. -/
 private def batchOutcome (v : Value) (what : String) :
-    Except Error (List Value) :=
+    Except Error Batch :=
   let ok := array v "Successful"
   let failed := array v "Failed"
-  if failed.isEmpty then .ok ok
+  if failed.isEmpty then .ok { successful := ok, failure? := none }
   else if ok.isEmpty then
     let first := failed.head?.bind (string? · "Message") |>.getD "no reason given"
     .error
       { klass := .invalid
       , message := s!"{what}: all {failed.length} entries failed: {first}" }
   else
-    .error
-      { klass := .invalid
-      , message := s!"{what}: {failed.length} of {ok.length + failed.length} entries failed" }
+    let first := failed.head?.bind (string? · "Message") |>.getD "no reason given"
+    .ok
+      { successful := ok
+      , failure? := some
+          s!"{what}: {failed.length} of {ok.length + failed.length} entries failed: {first}" }
+
+/-- A partial batch failure, for an operation that cannot report one. -/
+private def partialFailure (summary : String) : Error :=
+  { klass := .invalid, message := summary }
 
 -- ── The producer ────────────────────────────────────────────────────────────
 
@@ -134,12 +162,23 @@ def producerAt (t : Transport) (creds : Credentials) (ep : Endpoint) (url : Stri
       | .ok v =>
         match batchOutcome v "SendMessageBatch" with
         | .error e => return .error e
-        | .ok ok   =>
+        | .ok b    =>
           -- Answer in the caller's order. SQS may reorder `Successful`, so the
           -- entry ids are matched rather than assumed positional.
           let idFor (i : Nat) : Option String :=
-            (ok.find? (fun e => string? e "Id" == some s!"e{i}")).bind (string? · "MessageId")
-          return .ok ((List.range msgs.length).filterMap idFor) }
+            (b.successful.find? (fun e => string? e "Id" == some s!"e{i}")).bind
+              (string? · "MessageId")
+          let ids := (List.range msgs.length).filterMap idFor
+          match b.failure? with
+          | none         => return .ok ids
+          | some summary =>
+            -- `Producer.send` promises an identifier for *every* message in
+            -- order, so a partial failure cannot be answered as success. It
+            -- names the messages that did get through, because the caller's
+            -- only other options are to lose them or to resend and duplicate.
+            return .error
+              { klass := .invalid
+              , message := s!"{summary}. Delivered: {ids}" } }
 
 -- ── The consumer ────────────────────────────────────────────────────────────
 
@@ -190,7 +229,15 @@ def consumerAt (t : Transport) (creds : Credentials) (ep : Endpoint) (url : Stri
           (.object [("QueueUrl", .string url)
                    , ("Entries", .array (receiptEntries receipts none))]) with
       | .error e => return .error e
-      | .ok v    => return (batchOutcome v "DeleteMessageBatch").map (fun _ => ())
+      | .ok v    =>
+        -- Reports nothing on success, so a partial failure has to be an
+        -- error here or it would be invisible.
+        match batchOutcome v "DeleteMessageBatch" with
+        | .error e => return .error e
+        | .ok b    =>
+          match b.failure? with
+          | none         => return .ok ()
+          | some summary => return .error (partialFailure summary)
   , extendLease := fun receipts seconds => do
       if receipts.isEmpty then return .ok ()
       match ← invoke t creds ep Cloud.Sqs.jsonVersion
@@ -198,7 +245,15 @@ def consumerAt (t : Transport) (creds : Credentials) (ep : Endpoint) (url : Stri
           (.object [("QueueUrl", .string url)
                    , ("Entries", .array (receiptEntries receipts (some seconds)))]) with
       | .error e => return .error e
-      | .ok v    => return (batchOutcome v "ChangeMessageVisibilityBatch").map (fun _ => ())
+      | .ok v    =>
+        -- Reports nothing on success, so a partial failure has to be an
+        -- error here or it would be invisible.
+        match batchOutcome v "ChangeMessageVisibilityBatch" with
+        | .error e => return .error e
+        | .ok b    =>
+          match b.failure? with
+          | none         => return .ok ()
+          | some summary => return .error (partialFailure summary)
   , purge := do
       match ← invoke t creds ep Cloud.Sqs.jsonVersion (target "PurgeQueue")
           (.object [("QueueUrl", .string url)]) with
