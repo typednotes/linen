@@ -6,6 +6,8 @@ format.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-09-11
+
 - **Object versioning is implemented**, closing the last finding from the
   `Linen.Cloud` review. `Provider.Feature.objectVersioning` reported `true` for
   all three clouds with nothing able to use it — no way to read, list or delete
