@@ -37,6 +37,13 @@ open Cloud.Protocol.ScalewayRest (invoke string? array findId? regionalPath)
 -- See `Cloud.Secret.SecretsManager` on why `Value` is not opened here.
 abbrev Json := Data.Json.Value
 
+/-- How many secrets to ask for per page.
+
+    One definition, because it is used twice — in the request and in judging
+    whether a page was full — and two copies of a page size is how a listing
+    starts reporting itself complete when it is not. -/
+def listPageSize : Nat := 50
+
 /-- The path of the regional secret collection. -/
 def secretsPath (region : String) : String :=
   regionalPath Cloud.Scaleway.secretProduct region "/secrets"
@@ -69,8 +76,12 @@ def atRegion (t : Transport) (creds : Credentials) (region project : String) :
     match (← cache.get).find? (·.1 == name) with
     | some (_, id) => return .ok id
     | none =>
+      -- `page_size` is explicit so the reply's length can be compared against
+      -- something known. The `name` parameter is a server-side filter, so this
+      -- is normally one short page.
       match ← invoke t creds region "GET" (secretsPath region)
-          (query := [("project_id", some project), ("name", some name)]) with
+          (query := [ ("project_id", some project), ("name", some name)
+                    , ("page_size", some (toString listPageSize)) ]) with
       | .error e => return .error e
       | .ok v =>
         match findId? v "secrets" "name" "id" name with
@@ -78,9 +89,27 @@ def atRegion (t : Transport) (creds : Credentials) (region project : String) :
             cache.modify (fun c => (name, id) :: c)
             return .ok id
         | none =>
-          return .error
-            { klass := .notFound, status := 404, code := "not_found"
-            , message := s!"no secret named '{name}' in project {project}" }
+          -- No exact match on this page. Distinguish "there is no such secret"
+          -- from "the filter returned more than one page and the exact match
+          -- may be on a later one": reporting the second as a 404 would have a
+          -- caller create a secret that already exists.
+          let raw := array v "secrets"
+          let truncated : Bool :=
+            raw.length >= listPageSize
+              || (match Cloud.Protocol.ScalewayRest.nat? v "total_count" with
+                  | some total => total > raw.length
+                  | none       => false)
+          if truncated then
+            return .error
+              { klass := .invalid
+              , message := s!"looking up secret '{name}' in project {project}: the \
+name filter returned {raw.length} entries and more pages exist, none of them an \
+exact match. Refusing to report this as 'not found', which would invite creating \
+a secret that may already exist." }
+          else
+            return .error
+              { klass := .notFound, status := 404, code := "not_found"
+              , message := s!"no secret named '{name}' in project {project}" }
   let readVersion (name version : String) : IO (Except Error Secret.Value) := do
     match ← resolve name with
     | .error e => return .error e
@@ -139,14 +168,39 @@ def atRegion (t : Transport) (creds : Credentials) (region project : String) :
         match ← invoke t creds region "GET" (secretsPath region)
             (query := [ ("project_id", some project)
                       , ("page", some (toString page))
-                      , ("page_size", some "50") ]) with
+                      , ("page_size", some (toString listPageSize)) ]) with
         | .error e => return .error e
         | .ok v =>
-          let items := (array v "secrets").filterMap metadataOf
-          let total := (Cloud.Protocol.ScalewayRest.nat? v "total_count").getD items.length
+          -- The raw entries, before `metadataOf` drops any it cannot read.
+          -- Completeness has to be judged on what the server returned, not on
+          -- what survived parsing here.
+          let raw := array v "secrets"
+          let items := raw.filterMap metadataOf
+          -- **Read completeness off the reply; never infer it from the size we
+          -- asked for.** A page that comes back short is the last page — that
+          -- is observed. `total_count` is used only to stop a page earlier when
+          -- it is present, never as the sole signal, because it is absent from
+          -- some replies.
+          --
+          -- The previous form was `page * 50 >= total` with
+          -- `total := total_count ?? items.length`, which reported a truncated
+          -- listing as complete in two ways: a reply without `total_count` fell
+          -- back to the post-filter count, so a full page of 50 compared
+          -- `50 >= 50` and stopped; and any entry `metadataOf` rejected shrank
+          -- the total that the same arithmetic was measured against. Reporting
+          -- a partial listing as whole is the failure `Cloud.Page` exists to
+          -- prevent — a caller iterating to `next = none` believes it has seen
+          -- everything.
+          let more : Bool :=
+            if raw.length < listPageSize then
+              false
+            else
+              match Cloud.Protocol.ScalewayRest.nat? v "total_count" with
+              | some total => page * listPageSize < total
+              | none       => true
           return .ok {
               items
-            , next := if page * 50 >= total then none else some ⟨toString (page + 1)⟩ } }
+            , next := if more then some ⟨toString (page + 1)⟩ else none } }
 
 /-- A Scaleway Secret Manager store, taking the region and project from
     credentials. -/
