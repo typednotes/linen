@@ -6,6 +6,88 @@ format.
 
 ## [Unreleased]
 
+Four of the eight correctness findings from the `Linen.Cloud` review are fixed
+in 0.18.0 below. **Still outstanding**, and not to be mistaken for done:
+presigned URLs and `objectVersioning` are still advertised by
+`Provider.Feature` without an implementation behind them; Scaleway's secret
+listing still infers completeness from an assumed page size and its `resolve`
+still searches only the first page; `Cloud.Credentials.Keychain` still does not
+round-trip `accessToken`, so a stored GCP credential loads without its token.
+`Network.HTTP2.Frame.Decode` still panics on malformed input, and one of the
+three percent-encoders still mishandles non-ASCII.
+
+## [0.18.0] - 2026-09-11
+
+Correctness fixes in `Linen.Cloud`, where the claims made by docs, feature
+tables and diagnostics had drifted from what the code did. In each case the
+announcement was implemented rather than withdrawn.
+
+- **GCP key-file credentials work.** `Credentials.Gcp.fromKeyFile` implemented
+  the full RFC 7523 JWT-bearer flow and **nothing called it**, while
+  `Credentials.sourceDescriptions` advertised the key file as the *first* source
+  tried for GCP. A service deployed the ordinary way — a key file named by
+  `GOOGLE_APPLICATION_CREDENTIALS`, no `gcloud` CLI, no keychain — could not
+  authenticate, and the not-found error named a source that was never consulted.
+
+  The key-file source is now a parameter of `Credentials.loadWith`, tried first,
+  as the diagnostics always claimed. It must be a parameter for the same reason
+  the keychain source already was: minting a token is an HTTP round-trip, so the
+  source needs a `Transport` and `Credentials` stays free of one. New module
+  **`Cloud.Credentials.Chain`** is the one place that imports both it and
+  `Credentials.Keychain`, so it can assemble the whole chain — key file,
+  `gcloud`, keychain, environment for GCP; file, keychain, environment for AWS
+  and Scaleway. Prefer it: `Keychain.load` still skips the key file, by design,
+  for callers who want exactly one source.
+
+  A key file that is *named but unusable* now fails the lookup rather than
+  falling through, so a typo in `GOOGLE_APPLICATION_CREDENTIALS` cannot report
+  itself as "no credentials found". Absent sources still decline silently.
+
+- **Local backends really are "just a different `Endpoint`".** Four places in
+  the docs promised MinIO, LocalStack and ElasticMQ worked that way, while
+  `Endpoint` had no port and no scheme and the request builder hardcoded
+  `port := 443` and `isSecure := true`. `Endpoint` gains `port : Option Nat` and
+  `secure : Bool`, both defaulting to the cloud case, with `effectivePort`,
+  `authority`, and an `Endpoint.localhost` constructor.
+
+  The part that makes this more than a field: SigV4 signs the `Host` header, so
+  a request to `localhost:9000` signed over a bare `localhost` is rejected as
+  `SignatureDoesNotMatch`. Signing and sending now use the same authority, with
+  the port included exactly when RFC 9110 says it should be.
+
+- **`performRaw` validated nothing.** `perform` rejected unusable credentials
+  and a pre-encoded path under SigV4; `performRaw` did neither, so the
+  operations that use it — those where a non-2xx is the expected answer — sent
+  unauthenticated or mis-encoded requests where their siblings returned a clear
+  error. Both now share `Call.preflight`.
+
+- **`Auth.native .aws` no longer invents a service name.** It signed for
+  `execute-api`, which is API Gateway's: correct for calling API Gateway and
+  `SignatureDoesNotMatch` for everything else. There is no single native AWS
+  scheme — each service signs under its own name — so `.aws` now returns an
+  `invalid` naming the two functions that do work, and the new
+  **`Auth.nativeFor`** takes the service for callers who know it but hold no
+  `Endpoint`. No capability is lost: `Auth.forEndpoint` was already the correct
+  path and cannot disagree with the host it signs for.
+
+- **A partial SQS batch failure no longer discards its successes.**
+  `batchOutcome`'s own doc-comment said a partial failure answers the successes
+  with the failures folded in; the code returned an error and threw the
+  `Successful` list away — and that branch had no test. Told only "3 of 10
+  failed", a caller had to either drop 7 delivered messages or resend them and
+  duplicate. `send` now names the messages that were delivered; `ack` and
+  `extendLease` report nothing on success, so for them a partial failure remains
+  an error rather than vanishing. "Everything failed" is unchanged.
+
+- **New: [docs/rfcs.md](docs/rfcs.md).** The specifications `linen` implements,
+  mapped to their modules; the foundational ones it rests on but does not
+  implement (791, 793/9293, 1122, 8200, 8446); those it deliberately does not
+  (MPLS, BGP-4); and several worth reading for their own sake. Citations were
+  missing at the source too — `Network.TLS.Types` now names RFC 8446 while
+  stating that OpenSSL implements it rather than `linen`, `Network.Socket` names
+  RFC 9293 and 1122, and `Data.IP` names RFC 791, 8200 and 4632. Obsoleted
+  documents carry both numbers, since RFC 793 is still the number everyone uses.
+
 ## [0.17.0] - 2026-09-11
 
 - **The test suite now actually runs in CI, on both platforms.** `Tests` is not
