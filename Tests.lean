@@ -753,6 +753,7 @@ import Tests.Linen.Cloud.ErrorTest
 import Tests.Linen.Cloud.CredentialsTest
 import Tests.Linen.Cloud.Credentials.KeychainTest
 import Tests.Linen.Cloud.Credentials.GcpTest
+import Tests.Linen.Cloud.Credentials.ChainTest
 import Tests.Linen.Cloud.EndpointTest
 import Tests.Linen.Cloud.PageTest
 import Tests.Linen.Cloud.AuthTest

@@ -344,12 +344,32 @@ def noCredentialsMessage (paths : Paths) (provider : Provider) (profile : String
     supplies the real one and `loadFrom` below wires it up. A caller that wants
     no keychain lookup at all passes `fun _ => pure none`. -/
 def loadWith (paths : Paths) (provider : Provider)
-    (fromStore : Provider → IO (Option Credentials)) : IO (Except Error Credentials) := do
+    (fromStore : Provider → IO (Option Credentials))
+    (fromKeyFile : Provider → IO (Except Error (Option Credentials)) :=
+      fun _ => pure (.ok none)) :
+    IO (Except Error Credentials) := do
   let profile ← awsProfile
+  -- The key-file source is tried first, matching the order
+  -- `sourceDescriptions` reports. It is a parameter for the same reason
+  -- `fromStore` is: minting a token from a service-account key is an RFC 7523
+  -- round-trip, so the source needs a `Transport`, and this module stays free
+  -- of it. `Cloud.Credentials.Gcp.keyFileSource` supplies the real one and
+  -- `Cloud.Credentials.Chain.load` wires it up.
+  --
+  -- A key file that is named but unreadable, malformed, or rejected by the
+  -- token endpoint is an *error*, not a decline: the operator pointed at it
+  -- deliberately, so falling through to another source would hide the mistake
+  -- behind a later, less specific failure.
+  match ← fromKeyFile provider with
+  | .error e     => return .error e
+  | .ok (some c) => return .ok c
+  | .ok none     => pure ()
   let fromFiles ← match provider with
     | .aws      => fromAwsFiles paths profile
     | .scaleway => fromScalewayFile paths
-    -- Not a file for GCP: `gcloud` mints the token rather than storing one.
+    -- No credentials *file* for GCP: the key file is handled by the
+    -- `fromKeyFile` source above, and `gcloud` mints a token rather than
+    -- storing one.
     | .gcp      => fromGcloud
   let found ← match fromFiles with
     | some c => pure (some c)

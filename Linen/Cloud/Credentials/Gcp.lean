@@ -306,6 +306,27 @@ def fromKeyFile (t : Transport) (region : String := "") :
         , projectId := sa.projectId
         , accessToken := some tok.accessToken })
 
+/-- `fromKeyFile` in the shape `Cloud.Credentials.loadWith` expects as its
+    key-file source: declines for every provider but GCP, which is the only
+    one with a service-account key file to exchange.
+
+    This is what connects the RFC 7523 flow above to the credential chain, so
+    that the key file `Cloud.Credentials.sourceDescriptions` names first is
+    actually consulted. `Cloud.Credentials.Chain.load` passes it. -/
+def keyFileSource (t : Transport) (region : String := "") :
+    Provider → IO (Except Error (Option Credentials))
+  | .gcp => fromKeyFile t region
+  | _    => pure (.ok none)
+
+/-- The GCP chain with the key-file source supplied, skipping the OS
+    credential store: key file, then `gcloud`, then the environment.
+
+    For the full chain including the keychain, use
+    `Cloud.Credentials.Chain.load`. -/
+def loadFrom (t : Transport) (paths : Paths) (region : String := "") :
+    IO (Except Error Credentials) :=
+  Cloud.loadWith paths .gcp (fun _ => pure none) (keyFileSource t region)
+
 -- ── Self-checks ─────────────────────────────────────────────────────────────
 
 #guard jwtBearerGrantType == "urn:ietf:params:oauth:grant-type:jwt-bearer"

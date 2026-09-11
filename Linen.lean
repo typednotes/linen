@@ -708,6 +708,7 @@ import Linen.Cloud.Page
 import Linen.Cloud.Auth
 import Linen.Cloud.Transport
 import Linen.Cloud.Credentials.Gcp
+import Linen.Cloud.Credentials.Chain
 import Linen.Cloud.Protocol.S3
 import Linen.Cloud.Protocol.AwsJson
 import Linen.Cloud.Protocol.GoogleRest

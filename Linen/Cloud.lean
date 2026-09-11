@@ -47,6 +47,7 @@ import Linen.Cloud.Error
 import Linen.Cloud.Credentials
 import Linen.Cloud.Credentials.Keychain
 import Linen.Cloud.Credentials.Gcp
+import Linen.Cloud.Credentials.Chain
 import Linen.Cloud.Endpoint
 import Linen.Cloud.Page
 import Linen.Cloud.Auth
