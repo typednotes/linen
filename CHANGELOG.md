@@ -6,15 +6,12 @@ format.
 
 ## [Unreleased]
 
-Four of the eight correctness findings from the `Linen.Cloud` review are fixed
-in 0.18.0 below. **Still outstanding**, and not to be mistaken for done:
-presigned URLs and `objectVersioning` are still advertised by
-`Provider.Feature` without an implementation behind them; Scaleway's secret
-listing still infers completeness from an assumed page size and its `resolve`
-still searches only the first page; `Cloud.Credentials.Keychain` still does not
-round-trip `accessToken`, so a stored GCP credential loads without its token.
-`Network.HTTP2.Frame.Decode` still panics on malformed input, and one of the
-three percent-encoders still mishandles non-ASCII.
+**One review finding remains open.** `Provider.Feature.objectVersioning` is
+still reported as `true` for all three clouds with nothing able to use it:
+there is no way to read, list or delete a specific object version. Making it
+real means a version type, version-aware operations on `ObjectStore`, S3's
+`ListObjectVersions` and GCS's `generation` parameter — a feature in its own
+right rather than a correction, and so not folded into 0.18.0.
 
 ## [0.18.0] - 2026-09-11
 
@@ -78,6 +75,53 @@ announcement was implemented rather than withdrawn.
   duplicate. `send` now names the messages that were delivered; `ack` and
   `extendLease` report nothing on success, so for them a partial failure remains
   an error rather than vanishing. "Everything failed" is unchanged.
+
+- **`System.Keychain` credentials round-trip whole.** The credential-store
+  source never wrote `access_token` — the one field that *is* GCP's credential
+  — so storing a GCP credential and loading it back produced one with no token:
+  the chain found *a* credential, stopped looking, and the first request failed
+  a check the skipped sources would have satisfied. It also read blank fields as
+  values, ignoring the "set but empty means unset" rule `Cloud.Credentials`
+  documents and applies to the environment. The parse half is now the pure
+  `parseBody`, so the real round trip is checkable by `#guard`; the previous
+  test went `render` → `Data.Ini.parse`, which proves the INI is well-formed but
+  never asks whether the module reads its own body back.
+
+- **Scaleway secret listings no longer report a partial result as complete.**
+  `next` was derived from the page size that was *requested* rather than from the
+  reply: a response with no `total_count` and a full page compared `50 >= 50` and
+  answered "no more pages", and any entry that failed to parse shrank the total
+  the arithmetic was measured against. Completeness is now observed — a short
+  page is the last page — which is what `Cloud.Page` exists to guarantee.
+  `resolve` also no longer returns a 404 when the name filter was truncated,
+  which would have a caller create a secret that already exists.
+
+- **Presigned URLs work.** `Provider.supports` reported `presignedUrl` for AWS
+  and Scaleway while `Crypto.SigV4` listed query-string signing under "what is
+  *not* here". `SigV4.presign`/`presignedUrl` implement it — the `X-Amz-*`
+  parameters signed as part of the query, `UNSIGNED-PAYLOAD` because the body is
+  not known when the URL is minted, and `Host` signed so the grant is bound to
+  one endpoint (including its port, so it works against a local MinIO). Exposed
+  as `ObjectStore.presign` taking a `PresignedOp` — `download` or `upload` —
+  rather than a method string, so a URL cannot be minted for a verb the store
+  did not mean to delegate. Over-long and zero expiries are refused at minting
+  rather than at use, where AWS complains about the signature instead.
+
+- **HTTP/2 frame decoding is bounds-safe by construction.** Byte access in
+  `Network.HTTP2.Frame.Decode` went through `bs[i]!` behind hand-written bounds
+  checks — correct as written, but safe only while every future edit kept the
+  check and the indexing in agreement, in a parser fed by unauthenticated
+  sockets where a panic is a remote denial of service. It now reads through a
+  total accessor, so an out-of-range read is `none` by construction. The module
+  also gained the doc-comments it entirely lacked, and tests for every
+  truncation, over-long padding, and malformed SETTINGS length.
+
+- **`urlEncode` percent-encodes UTF-8 bytes.** It encoded *code points*: `é`
+  became `%E9` rather than `%C3%A9`, and anything above U+00FF emitted arbitrary
+  characters — `€` indexed a 16-entry hex table with 522. It now delegates to
+  the already-correct `Network.URI.escapeURIString`, and `Text.Pandoc.URI`
+  inherits the fix. A test had asserted the wrong answer, which is why this
+  lasted.
 
 - **New: [docs/rfcs.md](docs/rfcs.md).** The specifications `linen` implements,
   mapped to their modules; the foundational ones it rests on but does not
