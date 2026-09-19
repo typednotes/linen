@@ -6,6 +6,22 @@ format.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-19
+
+- **Lean 4.34.0.** `lean-toolchain` moves from `v4.33.1`, and the README badge
+  with it. Three deprecated simp lemmas were the only breakage — `if_neg` →
+  `ite_eq_right` in `Control.Monad.Effect.FileSystem`, `if_true` → `ite_true`
+  in `Text.Pandoc.Builder` — and the replacements were drop-in. The full suite
+  passes at 4615 jobs with no warnings.
+
+  Measured rather than assumed: `libleanshared.so` in the Linux v4.34.0 release
+  exports the **same ten** `_Unwind_*` symbols as every release before it, with
+  `_Unwind_GetIPInfo` still absent. So the toolchain upgrade does not remove the
+  need for the sealed DuckDB library described in
+  [docs/linking.md](docs/linking.md) §4, and
+  [leanprover/lean4#15112](https://github.com/leanprover/lean4/issues/15112)
+  remains open.
+
 ## [0.19.1] - 2026-09-11
 
 - **A Linux consumer could not build `linen` at all.** The `-L` naming

@@ -336,7 +336,7 @@ theorem permits_union_left {a b : Capability} {op : Op} {p : Path}
   · simp [Capability.permits, Capability.union, hb]
   · by_cases ha : a.scopes.isEmpty = true
     · simp [Capability.permits, Capability.union, ha]
-    · rw [Capability.union, Capability.permits, if_neg (by simp [ha, hb])]
+    · rw [Capability.union, Capability.permits, ite_eq_right (by simp [ha, hb])]
       simp only [Capability.permits, ha, Bool.false_or] at h
       simp only [List.any_append, h, Bool.true_or, Bool.or_true]
 
@@ -347,7 +347,7 @@ theorem permits_union_right {a b : Capability} {op : Op} {p : Path}
   · simp [Capability.permits, Capability.union, ha]
   · by_cases hb : b.scopes.isEmpty = true
     · simp [Capability.permits, Capability.union, hb]
-    · rw [Capability.union, Capability.permits, if_neg (by simp [ha, hb])]
+    · rw [Capability.union, Capability.permits, ite_eq_right (by simp [ha, hb])]
       simp only [Capability.permits, hb, Bool.false_or] at h
       simp only [List.any_append, h, Bool.or_true]
 

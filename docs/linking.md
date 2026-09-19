@@ -7,7 +7,8 @@ on Linux.
 Read §3–§4 before linking a native library whose implementation is **C++**.
 Plain C dependencies are unaffected by the whole of §3.
 
-Measurements in this document were taken on Lean v4.33.1, DuckDB v1.5.4,
+Measurements in this document were taken on Lean v4.33.1 (the export counts
+in §5.1 also hold on v4.34.0, which this project now uses), DuckDB v1.5.4,
 Ubuntu 24.04 (`libstdc++.so.6.0.33`) and macOS on Apple silicon. Statements
 derived by reasoning rather than measurement are marked **(inference)**.
 
@@ -310,6 +311,11 @@ byte-identical at `v4.0.0`, `v4.8.0`, `v4.15.0`, `v4.20.0`, `v4.25.0`,
 | v4.33.1 x86_64 (2026-08) | 10                                         |
 | v4.33.1 aarch64          | 10                                         |
 | v4.34.0-rc2              | 10                                         |
+| v4.34.0 (2026-09)        | 10                                         |
+
+Same ten names in v4.34.0 as in every release before it — `_Unwind_GetIPInfo`
+is still absent — so upgrading the toolchain does not remove the need for §4's
+sealing.
 
 Changing Lean version does not affect §3.
 

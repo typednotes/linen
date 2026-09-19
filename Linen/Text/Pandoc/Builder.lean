@@ -297,7 +297,7 @@ private theorem dropAtMostWhile_len (p : Int → Bool) (n : Nat) (l : List Int) 
     | nil => simp [dropAtMostWhile]
     | cons x xs =>
       cases hpx : p x with
-      | true => simp only [dropAtMostWhile, hpx, if_true, List.length_cons]; have := ih xs; omega
+      | true => simp only [dropAtMostWhile, hpx, ite_true, List.length_cons]; have := ih xs; omega
       | false => simp [dropAtMostWhile, hpx]
 
 set_option linter.unusedVariables false in

@@ -15,7 +15,7 @@
   <a href="https://github.com/typednotes/linen/stargazers"><img src="https://img.shields.io/github/stars/typednotes/linen?style=flat" alt="GitHub Stars"></a>
   <a href="https://github.com/typednotes/linen/blob/main/LICENSE"><img src="https://img.shields.io/github/license/typednotes/linen" alt="License"></a>
   <a href="https://github.com/typednotes/linen"><img src="https://img.shields.io/github/last-commit/typednotes/linen" alt="Last Commit"></a>
-  <a href="https://lean-lang.org/"><img src="https://img.shields.io/badge/Lean-4.33.1-blue" alt="Lean 4"></a>
+  <a href="https://lean-lang.org/"><img src="https://img.shields.io/badge/Lean-4.34.0-blue" alt="Lean 4"></a>
 </p>
 
 <p align="center">
