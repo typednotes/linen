@@ -137,18 +137,27 @@ jobs:
     runs-on: ubuntu-latest
     container: debian:bookworm-slim
     steps:
+      # `debian:bookworm-slim` ships no bash, so GitHub runs steps with `sh -e`
+      # (dash) until one exists. This step is therefore deliberately POSIX-only:
+      # the first attempt used `set -o pipefail` and died with "Illegal option
+      # -o pipefail" before testing anything. It installs bash for the steps
+      # below, which declare `shell: bash` explicitly.
       - name: Minimal toolchain — deliberately no g++
         run: |
-          set -euo pipefail
+          set -eu
           apt-get update -qq
-          # curl/unzip for the DuckDB download, git for elan, cc for the C
-          # shims. No g++, so no static libstdc++.a.
+          # curl/unzip for the DuckDB download, git for elan, gcc for the C
+          # shims. No g++, so no static libstdc++.a — which is the point.
           apt-get install -y -qq --no-install-recommends \
-            curl unzip git ca-certificates gcc libc6-dev \
+            bash curl unzip git ca-certificates gcc libc6-dev \
             libpq-dev libssl-dev zlib1g-dev libsecret-1-dev pkg-config
-          ! command -v g++ || (echo "g++ present; this job tests its absence" >&2; exit 1)
+          if command -v g++ >/dev/null 2>&1; then
+            echo "g++ is present; this job exists to test its absence" >&2
+            exit 1
+          fi
       - uses: actions/checkout@v5
       - name: Install elan
+        shell: bash
         run: |
           set -euo pipefail
           curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz \
@@ -156,6 +165,7 @@ jobs:
           ./elan-init -y --default-toolchain "$(cat lean-toolchain)"
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
       - name: The build must fail, naming the cause and the fix
+        shell: bash
         run: |
           set -uo pipefail
           out="$(lake build Linen.Database.DuckDB.FFI.OpenConnect 2>&1)" && rc=0 || rc=$?
@@ -170,6 +180,7 @@ jobs:
             || { echo "::error::the message does not name the fix" >&2; exit 1; }
           echo "OK: refused to build, named the cause and the fix"
       - name: And the documented escape hatch works
+        shell: bash
         run: |
           set -euo pipefail
           LINEN_ALLOW_UNSEALED_DUCKDB=1 lake build Linen.Database.DuckDB.FFI.OpenConnect 2>&1 \
