@@ -294,6 +294,68 @@ def duckdbSealedArchives (duckdbLibDir : FilePath) : IO (Option (Array String)) 
   let excludeArg := "-Wl,--exclude-libs," ++ String.intercalate ":" basenames.toList
   return some (group ++ #[excludeArg])
 
+/-- Refuse to continue when DuckDB cannot be sealed on Linux.
+
+    `duckdbSealedArchives` warns and answers `none` when a piece is missing, and
+    the dynamic linking that follows is not a degraded-but-working
+    configuration: it is the one on which *every* DuckDB error path aborts the
+    process (see `duckdbLinkArgs`). There is nothing to fall back *to*, so
+    continuing only moves the failure somewhere that names neither the cause nor
+    the fix.
+
+    This was a warning for one release because CI could not reach it — GitHub's
+    Ubuntu runners ship `g++`, so the static libstdc++ is always present. On a
+    minimal Debian, a RHEL-family image, or a container built
+    `--no-install-recommends` it is reachable, and a warning in four thousand
+    lines of build output is not a signal.
+
+    The escape hatch is explicit and has to be typed. Someone deliberately
+    building a subset that never touches a DuckDB error path is a real case and
+    should not be blocked — but they should say so rather than inherit it from a
+    missing package. -/
+def requireSealedOrExplain (isLinux : Bool) (sealed : Option (Array String))
+    (hasSharedDuckdb : Bool) : IO Unit := do
+  if isLinux && sealed.isNone then
+    match ← IO.getEnv "LINEN_ALLOW_UNSEALED_DUCKDB" with
+    | some "1" =>
+      -- The opt-out only leads anywhere if there is a shared library to link.
+      -- The pinned Linux asset is `static-libs-linux-*.zip`, which carries
+      -- archives and no `libduckdb.so`, so without `DUCKDB_PREFIX` the
+      -- "fallback" is an `unable to find library -lduckdb` several thousand
+      -- lines later — a worse failure than the one it was meant to bypass.
+      if !hasSharedDuckdb then
+        throw <| IO.userError "\
+[linen] LINEN_ALLOW_UNSEALED_DUCKDB=1 was set, but there is no shared libduckdb \
+to link against: the pinned Linux asset is `static-libs-linux-*.zip`, which \
+contains static archives only.\n\
+\n\
+  The unsealed path therefore needs a DuckDB you supply yourself:\n\
+      DUCKDB_PREFIX=/path/to/duckdb   # with lib/libduckdb.so and include/duckdb.h\n\
+\n\
+  Otherwise install a static libstdc++ and let the build seal DuckDB \
+properly — see the message this opt-out was meant to bypass, and \
+docs/linking.md section 4."
+      IO.eprintln "[linen] WARNING: LINEN_ALLOW_UNSEALED_DUCKDB=1 — linking \
+DuckDB dynamically. Every DuckDB error path will abort the process under Lean \
+on Linux. See docs/linking.md section 4."
+    | _ =>
+      throw <| IO.userError "\
+[linen] Cannot seal DuckDB on this Linux host, and an unsealed build aborts the \
+process on every DuckDB error path rather than returning an error.\n\
+\n\
+  Install the pieces named in the WARNING above. On Debian/Ubuntu:\n\
+      apt-get install -y g++            # brings libstdc++-*-dev\n\
+  On RHEL/Fedora:\n\
+      dnf install -y gcc-c++ libstdc++-static\n\
+\n\
+  If DUCKDB_PREFIX is set, unset it: the pinned static-libs archive is what \
+carries the static libraries.\n\
+\n\
+  To build anyway — only sensible if nothing will touch a DuckDB error path — \
+set LINEN_ALLOW_UNSEALED_DUCKDB=1.\n\
+\n\
+  Background: docs/linking.md section 4, and leanprover/lean4#15112."
+
 -- Resolve the native link flags at lakefile-elaboration time via `pkg-config`.
 -- This runs on the build machine (Lake recompiles the lakefile per checkout),
 -- so the Ubuntu runner gets Linux paths and dev boxes get their own — with no
@@ -377,6 +439,11 @@ run_cmd do
   let duckdbDynamicLinkArgs : Array String :=
     #["-L", duckdbLibDir.toString, "-lduckdb", "-Wl,-rpath," ++ duckdbLibDir.toString]
   let sealedArchives ← if isLinuxBuild then duckdbSealedArchives duckdbLibDir else pure none
+  -- Whether a *shared* libduckdb exists to fall back to. On Linux the pinned
+  -- asset is `static-libs-linux-*.zip`, which contains archives only — so the
+  -- unsealed path has nothing to link and is available solely to someone who
+  -- supplied their own DuckDB through `DUCKDB_PREFIX`.
+  let hasSharedDuckdb ← (duckdbLibDir / "libduckdb.so").pathExists
   -- `IO.currentDir` here is the **workspace** root, not this package's own
   -- directory: when `linen` is a dependency, Lake elaborates this lakefile with
   -- the *consumer's* root as the working directory. Every other path in this
@@ -419,6 +486,11 @@ run_cmd do
   elabCommand (← `(def $(mkIdent `duckdbUsesSealedLib) : Bool :=
     $(quote sealedArchives.isSome)))
   mkDef `nativeLinkArgs (pq ++ ssl ++ macSdk ++ zlib ++ keychainLinkArgs ++ duckdbLinkArgs)
+  -- **Last**, after every `mkDef`. Throwing earlier aborts the rest of this
+  -- block, so the definitions below it are never generated and the real message
+  -- arrives buried under four `Unknown identifier nativeLinkArgs` errors that
+  -- make it look as though the lakefile is broken rather than the host.
+  requireSealedOrExplain isLinuxBuild sealedArchives hasSharedDuckdb
 
 -- `moreLinkArgs` here also flows into `ExternLib.linkArgs` (`self.pkg.moreLinkArgs`),
 -- so `linenffi`'s `:shared` dynlib — loaded directly by the interpreter for `#eval` —
