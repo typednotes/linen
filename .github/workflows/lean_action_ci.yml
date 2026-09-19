@@ -15,7 +15,17 @@ jobs:
       # already sets this; the two should not disagree.
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # Three legs, one per axis that actually varies. The ~770 pure-Lean
+        # modules are platform-independent and elan pins the compiler to one
+        # commit, so adding distros would re-test identical `.olean` semantics.
+        # Everything that varies lives at the FFI boundary:
+        #
+        #   ubuntu-latest      Linux x86_64 — the sealed-DuckDB path, amd64 asset
+        #   ubuntu-24.04-arm   Linux arm64  — the `static-libs-linux-arm64.zip`
+        #                      branch of `duckdbArchiveName`, which no CI run had
+        #                      ever executed, plus arm64 static-libstdc++ discovery
+        #   macos-latest       Darwin arm64 — the dynamic dylib path, no sealing
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -38,3 +48,132 @@ jobs:
       # the build. Shared with the release workflow so the two cannot drift.
       - name: Verify the sealed DuckDB library is self-contained
         run: ./ci/check-sealed-duckdb.sh
+
+      # The seal is a property of a linked binary, so it is asserted on the
+      # artifact. Skipped on macOS by the script itself.
+      - name: Verify the sealed DuckDB library is self-contained
+        run: ./ci/check-sealed-duckdb.sh
+
+  # ── Can a consumer build against this? ──────────────────────────────────────
+  #
+  # The axis standalone CI cannot test. When `linen` is a dependency, Lake
+  # elaborates its lakefile with the *consumer's* root as the working directory
+  # while writing target outputs to `linen`'s own build directory. Built
+  # standalone the two coincide, so this repository's own green CI said nothing
+  # about it — and a `-L` resolved against the wrong one broke every Linux
+  # consumer while CI stayed green (fixed in 0.19.1).
+  #
+  # Only the FFI-bearing modules are imported: the point is to link, not to
+  # re-run a suite the matrix above already ran.
+  consumer:
+    name: Consumer build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: linen
+      - uses: ./linen/.github/actions/setup-native-deps
+      - uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: linen
+          build: false
+          test: false
+      - name: Build a package that requires linen as a dependency
+        run: |
+          set -euo pipefail
+          mkdir -p consumer
+          cd consumer
+          cp ../linen/lean-toolchain .
+          cat > lakefile.lean <<'LAKE'
+          import Lake
+          open Lake DSL
+
+          require linen from ".." / "linen"
+
+          package consumer
+
+          lean_lib Consumer where
+            precompileModules := true
+          LAKE
+          mkdir -p Consumer
+          # One import per FFI-bearing subsystem, so the link covers every
+          # native object: DuckDB (the sealed library), SQLite (vendored),
+          # libpq, OpenSSL, zlib, and the keychain.
+          cat > Consumer.lean <<'SRC'
+          import Linen.Database.DuckDB.FFI.OpenConnect
+          import Linen.Database.SQLite
+          import Linen.Database.PostgreSQL.LibPQ
+          import Linen.Crypto.JOSE.JWS
+          import Linen.Crypto.Zlib.FFI
+          import Linen.System.Keychain
+          import Linen.Cloud
+
+          -- Force the DuckDB FFI to be linked and called, not merely imported:
+          -- the 0.19.1 bug produced a library that built and then failed to
+          -- link into a consumer, so this must reach an `@[extern]` symbol.
+          #eval show IO Unit from do
+            match ← Database.DuckDB.FFI.OpenConnect.openDatabase none with
+            | .ok db =>
+              IO.println s!"duckdb {← Database.DuckDB.FFI.OpenConnect.libraryVersion}"
+              Database.DuckDB.FFI.OpenConnect.close db
+            | .error m => throw (IO.userError s!"consumer could not open duckdb: {m}")
+          SRC
+          lake build Consumer
+
+  # ── Does the build refuse to produce a broken library? ──────────────────────
+  #
+  # `duckdbSealedArchives` needs a static libstdc++, which GitHub's Ubuntu
+  # runners always have because they ship `g++` — so the missing-pieces branch
+  # was unreachable in CI for a whole release. On a minimal image it is
+  # reachable, and an unsealed build aborts on every DuckDB error path. Since
+  # 0.21.0 that is a hard failure rather than a warning, and this asserts the
+  # failure happens and says something useful.
+  unsealable:
+    name: A host that cannot seal DuckDB fails loudly
+    runs-on: ubuntu-latest
+    container: debian:bookworm-slim
+    steps:
+      - name: Minimal toolchain — deliberately no g++
+        run: |
+          set -euo pipefail
+          apt-get update -qq
+          # curl/unzip for the DuckDB download, git for elan, cc for the C
+          # shims. No g++, so no static libstdc++.a.
+          apt-get install -y -qq --no-install-recommends \
+            curl unzip git ca-certificates gcc libc6-dev \
+            libpq-dev libssl-dev zlib1g-dev libsecret-1-dev pkg-config
+          ! command -v g++ || (echo "g++ present; this job tests its absence" >&2; exit 1)
+      - uses: actions/checkout@v5
+      - name: Install elan
+        run: |
+          set -euo pipefail
+          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz \
+            | tar xz
+          ./elan-init -y --default-toolchain "$(cat lean-toolchain)"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: The build must fail, naming the cause and the fix
+        run: |
+          set -uo pipefail
+          out="$(lake build Linen.Database.DuckDB.FFI.OpenConnect 2>&1)" && rc=0 || rc=$?
+          echo "$out" | tail -30
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::the build succeeded on a host that cannot seal DuckDB" >&2
+            exit 1
+          fi
+          echo "$out" | grep -q "Cannot seal DuckDB" \
+            || { echo "::error::failed, but not with the sealing message" >&2; exit 1; }
+          echo "$out" | grep -q "apt-get install -y g++" \
+            || { echo "::error::the message does not name the fix" >&2; exit 1; }
+          echo "OK: refused to build, named the cause and the fix"
+      - name: And the documented escape hatch works
+        run: |
+          set -euo pipefail
+          LINEN_ALLOW_UNSEALED_DUCKDB=1 lake build Linen.Database.DuckDB.FFI.OpenConnect 2>&1 \
+            | tee out.log | tail -5
+          grep -q "LINEN_ALLOW_UNSEALED_DUCKDB=1" out.log \
+            || { echo "::error::opt-out did not warn" >&2; exit 1; }
+          echo "OK: opt-out builds, with a warning"

@@ -6,6 +6,39 @@ format.
 
 ## [Unreleased]
 
+- **An unsealable Linux host is now a build failure, not a warning.** When a
+  static libstdc++ is missing, `duckdbSealedArchives` warned and fell back to
+  dynamic linking — which is the configuration on which *every* DuckDB error
+  path aborts the process. There is nothing to fall back to, so the build now
+  stops and names both the cause and the `apt-get`/`dnf` line that fixes it.
+  `LINEN_ALLOW_UNSEALED_DUCKDB=1` is the explicit opt-out, for someone building
+  a subset that never touches a DuckDB error path.
+
+  This stayed a warning for a release because CI could not reach it: GitHub's
+  Ubuntu runners ship `g++`, so the branch was unreachable there.
+
+- **CI covers the axes that actually vary.** Three additions, chosen because
+  the ~770 pure-Lean modules are platform-independent and elan pins the
+  compiler to one commit — so more distros would re-test identical `.olean`
+  semantics, while everything that varies lives at the FFI boundary:
+
+  - **`ubuntu-24.04-arm`** in the build matrix. `duckdbArchiveName`'s
+    `static-libs-linux-arm64.zip` branch had **never executed** in CI:
+    `ubuntu-latest` is x86_64 and `macos-latest` takes the Darwin branch. The
+    asset exists and the code was live but untested.
+  - **A consumer build**, on all three platforms, of a throwaway package that
+    `require`s `linen` and calls a DuckDB `@[extern]` entry point. This is the
+    axis standalone CI cannot test — Lake elaborates a dependency's lakefile
+    with the *consumer's* root as the working directory, which is how 0.19.1's
+    bug broke every Linux consumer while this repository stayed green.
+  - **An unsealable host**, in a `debian:bookworm-slim` container with no
+    `g++`, asserting the build fails, that the message names the fix, and that
+    the documented opt-out works.
+
+  Alpine/musl is deliberately absent: Lean publishes `linux` and
+  `linux_aarch64` only, with no musl build, so it is unsupported rather than
+  untested.
+
 ## [0.20.0] - 2026-09-19
 
 - **Lean 4.34.0.** `lean-toolchain` moves from `v4.33.1`, and the README badge
