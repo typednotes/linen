@@ -179,12 +179,48 @@ jobs:
           echo "$out" | grep -q "apt-get install -y g++" \
             || { echo "::error::the message does not name the fix" >&2; exit 1; }
           echo "OK: refused to build, named the cause and the fix"
-      - name: And the documented escape hatch works
+      # The opt-out is *not* a way to get a working build out of this host. The
+      # pinned Linux asset is `static-libs-linux-*.zip`, which carries archives
+      # and no `libduckdb.so`, so there is nothing for the unsealed path to
+      # link. It leads somewhere only for a caller who supplied their own
+      # DuckDB through `DUCKDB_PREFIX`.
+      #
+      # The first version of this step asserted the opt-out *built*, and it
+      # failed with `unable to find library -lduckdb` — which was the honest
+      # answer to a dishonest expectation. So the assertion is now that the
+      # opt-out refuses, and names `DUCKDB_PREFIX`.
+      - name: The opt-out refuses when there is no libduckdb to link
         shell: bash
         run: |
-          set -euo pipefail
-          LINEN_ALLOW_UNSEALED_DUCKDB=1 lake build Linen.Database.DuckDB.FFI.OpenConnect 2>&1 \
-            | tee out.log | tail -5
-          grep -q "LINEN_ALLOW_UNSEALED_DUCKDB=1" out.log \
-            || { echo "::error::opt-out did not warn" >&2; exit 1; }
-          echo "OK: opt-out builds, with a warning"
+          set -uo pipefail
+          out="$(LINEN_ALLOW_UNSEALED_DUCKDB=1 \
+            lake build Linen.Database.DuckDB.FFI.OpenConnect 2>&1)" && rc=0 || rc=$?
+          echo "$out" | tail -20
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::the opt-out produced a build on a host with no libduckdb" >&2
+            exit 1
+          fi
+          echo "$out" | grep -q "no shared libduckdb" \
+            || { echo "::error::refused, but not for the stated reason" >&2; exit 1; }
+          echo "$out" | grep -q "DUCKDB_PREFIX" \
+            || { echo "::error::the message does not name DUCKDB_PREFIX" >&2; exit 1; }
+          echo "OK: the opt-out refuses and names what it would need"
+
+      # And the real message is not buried. Throwing from the middle of the
+      # lakefile's `run_cmd` used to abort it before the `mkDef`s ran, so the
+      # cause arrived under four `Unknown identifier nativeLinkArgs` errors that
+      # pointed at the lakefile rather than the host. The check now runs last.
+      - name: The failure is not buried under a cascade
+        shell: bash
+        run: |
+          set -uo pipefail
+          out="$(lake build Linen.Database.DuckDB.FFI.OpenConnect 2>&1)" && rc=0 || rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::expected this host to refuse" >&2; exit 1
+          fi
+          if echo "$out" | grep -q "Unknown identifier"; then
+            echo "::error::the real message is buried under a cascade:" >&2
+            echo "$out" | grep "Unknown identifier" >&2
+            exit 1
+          fi
+          echo "OK: the sealing failure is the only error reported"
