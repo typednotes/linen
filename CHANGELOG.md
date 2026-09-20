@@ -6,6 +6,38 @@ format.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-20
+
+- **Importing part of `linen` no longer builds all of it.** `lean_lib Linen`
+  set `precompileModules := true`, which forces `Linen:shared` — a
+  whole-library artifact that no consumer can link against without first
+  compiling every module. Measured on a clean checkout, a package whose only
+  import was `Linen.Data.Functor` (a leaf with no Linen imports at all) ran
+  **2333 build jobs in 5m04s**; it now runs **16 jobs in 13s**. The library is
+  no longer precompiled; `Tests` still is, which is what keeps the `#eval`s
+  that call `@[extern]` bindings through the interpreter working.
+
+  README's own "linking against linen" section already warned consumers off
+  `precompileModules` because "the shared form links the whole archive" — the
+  library was imposing on every dependent precisely the cost that warning
+  describes.
+
+  **If you call an `@[extern]` binding from `#eval`/`#guard` in your own
+  package**, set `precompileModules := true` on your library, as
+  `lean_action_ci.yml`'s consumer job does. Compiled code is unaffected.
+
+  Two further changes were implemented, measured and reverted, and are
+  recorded here so they are not re-attempted blindly: splitting `linenffi`
+  into one archive per subsystem, and giving each area its own `lean_lib` with
+  only the archives it reaches. Neither reduces anything, because **Lake
+  builds every `extern_lib` in a dependency package regardless of any
+  library's `needs`** — a pure-tree consumer still compiled all nine FFI
+  objects and still downloaded DuckDB's 143MB archive. Making that download
+  lazy is therefore also pointless on its own. Removing the remaining native
+  cost needs either per-module native dependencies in Lake, or moving the
+  FFI-reaching sources into glob-separable subtrees.
+
+
 - **An unsealable Linux host is now a build failure, not a warning.** When a
   static libstdc++ is missing, `duckdbSealedArchives` warned and fell back to
   dynamic linking — which is the configuration on which *every* DuckDB error

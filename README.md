@@ -374,6 +374,22 @@ carries these flags. It is deliberately not the default: the shared form links
 the whole archive, so every dependent would need libpq, SQLite and DuckDB
 installed even to use, say, `Crypto.SigV4`.
 
+`linen`'s own `Linen` library is not precompiled either, and for the same
+reason — **you build only the modules you import.** A package whose only
+import is `Linen.Data.Functor` builds one module, not all ~770; when that
+library was precompiled it built all of them, because `Linen:shared` is a
+whole-library artifact. If you call an `@[extern]` binding from `#eval` or
+`#guard` (as opposed to from compiled code, which is unaffected), set
+`precompileModules := true` on **your** library: that is what makes the
+bindings reachable through the interpreter, at the cost of building the whole
+dependency.
+
+What you still pay regardless is the native layer: Lake builds every
+`extern_lib` in a dependency package whatever you import, so the C shims are
+compiled and DuckDB's pinned archive is fetched even for a pure-Lean import.
+That is a Lake limitation rather than a choice here — see the 1.0.0 entry in
+[CHANGELOG.md](CHANGELOG.md) for the splits that were tried and measured.
+
 ## Modules
 
 See **[docs/modules.md](docs/modules.md)** for the full module table (all 770 modules).
