@@ -171,9 +171,8 @@ fifth `pkg-config` probe:
   `apt-get`/`brew install` step for SQLite in
   `.github/workflows/lean_action_ci.yml`. This makes the SQLite FFI build
   identical on macOS and Linux (and any other platform with a C compiler),
-  satisfying `AGENTS.md`'s "must build on at least macOS and Linux"
-  requirement more directly than a `pkg-config`-discovered system library
-  would.
+  satisfying `AGENTS.md`'s requirement that an FFI module build on every CI
+  axis more directly than a `pkg-config`-discovered system library would.
 
 ## Termination notes
 

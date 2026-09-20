@@ -540,7 +540,7 @@ So this route is not prohibitively slow. Its costs are elsewhere:
   `third_party/` 33 MB. Roughly 12x the vendored SQLite, in every clone.
 - **Owning a DuckDB build**: the CMake invocation, its extension selection, and
   re-verification on every upgrade.
-- **Build time on every cold CI build, on both platforms.** The figure above is
+- **Build time on every cold CI build, on every matrix leg.** The figure above is
   from fast local cores; a runner would be slower **(inference)**.
 
 What it would buy is real: full functionality, no build-time download, and —

@@ -8,9 +8,9 @@ on:
 jobs:
   build:
     strategy:
-      # Never cancel one platform because the other failed. These two legs fail
-      # for genuinely different reasons — the whole point of running both is to
-      # see each one's result — and the default (fail-fast: true) threw away the
+      # Never cancel one platform because another failed. These legs fail for
+      # genuinely different reasons — the whole point of running them is to see
+      # each one's result — and the default (fail-fast: true) threw away the
       # Linux result the moment a flaky macOS timing test failed. `release.yml`
       # already sets this; the two should not disagree.
       fail-fast: false
@@ -35,22 +35,19 @@ jobs:
       - uses: ./.github/actions/setup-native-deps
       - uses: leanprover/lean-action@v1
       # `Tests` is not a default target, so `lean-action`'s `lake build` does
-      # not reach it. Build it explicitly on both matrix legs: AGENTS.md
-      # requires the full test suite to run on macOS and Linux whenever an FFI
-      # target is in the build graph, and every `#guard`/`#guard_msgs` check in
-      # the suite runs at elaboration time — so building `Tests` *is* running
-      # the tests.
+      # not reach it. Build it explicitly on every matrix leg: AGENTS.md
+      # requires the full test suite to run on each platform axis whenever an
+      # FFI target is in the build graph, and every `#guard`/`#guard_msgs`
+      # check in the suite runs at elaboration time — so building `Tests` *is*
+      # running the tests.
       - name: Build the test suite (runs every #guard check)
         run: lake build Tests
 
       # A symbol table is not observable from a `#guard`, and getting this
       # wrong aborts the process on every DuckDB error path rather than failing
-      # the build. Shared with the release workflow so the two cannot drift.
-      - name: Verify the sealed DuckDB library is self-contained
-        run: ./ci/check-sealed-duckdb.sh
-
-      # The seal is a property of a linked binary, so it is asserted on the
-      # artifact. Skipped on macOS by the script itself.
+      # the build. The seal is a property of a linked binary, so it is asserted
+      # on the artifact; the script skips itself on macOS. Shared with the
+      # release workflow so the two cannot drift.
       - name: Verify the sealed DuckDB library is self-contained
         run: ./ci/check-sealed-duckdb.sh
 

@@ -32,13 +32,48 @@ Guidance for working in the **linen** Lean library.
 ### FFI and native-library dependencies
 
 - **Any module that links against a native C library (FFI) must build and
-  pass its tests on at least macOS and Linux.** This covers both the `ffi/*.c`
+  pass its tests on every axis below.** This covers both the `ffi/*.c`
   shim and the `lakefile.lean` linking logic (`pkg-config` discovery, vendored
-  source, or downloaded prebuilt archives).
-- CI (`.github/workflows/`) must run the full `lake build Tests` on both
-  platforms whenever any FFI target is present in the build graph — a native
-  dependency that only builds on the contributor's own machine is not
-  considered done.
+  source, or downloaded prebuilt archives). A native dependency that only
+  builds on the contributor's own machine is not considered done.
+- **CI covers four axes, not two platforms.** `lean_action_ci.yml` is
+  structured this way because each axis, when it was added, immediately caught
+  something the others could not see. Pure-Lean modules are
+  platform-independent and elan pins the compiler to one commit, so more
+  distros would only re-test identical `.olean` semantics — everything that
+  varies lives at the FFI boundary:
+
+  | Axis | Job | What only it can catch |
+  |---|---|---|
+  | Linux x86_64 | `build` | the sealed-DuckDB path, amd64 assets |
+  | Linux **arm64** | `build` | per-arch asset names and arch-specific library discovery |
+  | macOS arm64 | `build` | the dylib path, two-level namespace, no sealing |
+  | **Consumer** build | `consumer` | anything that depends on `linen` being the *root* package |
+  | **Unsealable** host | `unsealable` | branches that a runner with a full toolchain cannot reach |
+
+  The last two are the ones a contributor will not think of, so they are worth
+  spelling out:
+
+  - **Consumer.** Lake elaborates a dependency's lakefile with the
+    *consumer's* directory as the working directory, while target outputs go
+    to the dependency's own build directory. Built standalone the two
+    coincide, so this repository's own green CI proves nothing about them. A
+    path resolved against the wrong one broke every Linux consumer while CI
+    stayed green (0.19.1). **Any new path in `lakefile.lean` must be anchored
+    to `pkg.buildDir`/`pkg.dir`, never to `IO.currentDir`.**
+  - **Unsealable host.** GitHub's Ubuntu runners ship `g++`, so the
+    missing-static-libstdc++ branch was unreachable there and shipped broken
+    for a release. The job runs in `debian:bookworm-slim` *without* `g++` and
+    asserts the build fails, names the fix, and is not buried under a cascade
+    of secondary errors. **If you add a branch that only fires when a tool is
+    absent, add a job where it is absent** — an untaken branch is untested
+    code, and a fallback is exactly the code that runs when things are already
+    going wrong.
+- **Assert on the linked artifact when the property is not observable from a
+  `#guard`.** `ci/check-sealed-duckdb.sh` inspects the symbol table
+  (no undefined `_Unwind_*`, no `libstdc++.so.6` in `DT_NEEDED`, the extension
+  is present). Getting this wrong does not fail a build — it aborts the
+  process at run time on a path tests do not reach. See `docs/linking.md`.
 - When a native library ships no `pkg-config` file and has no package in
   Ubuntu's default apt repos (so the existing `pkgConfig`/`pkgLinkFlags`
   pattern in `lakefile.lean` doesn't apply), prefer, in order: (1) vendoring
@@ -82,6 +117,14 @@ never gated on whatever CI happened to run for the branch — and publishes a
 GitHub release whose notes are the CHANGELOG section. A tag with a prerelease
 suffix (`v0.17.0-rc1`) publishes as a prerelease, so it does not become
 "latest".
+
+**`release.yml` is narrower than `lean_action_ci.yml`, deliberately or not —
+know which.** Its `test` job runs `[ubuntu-latest, macos-latest]` only: it does
+**not** cover the arm64 Linux leg, the consumer build, or the unsealable host.
+So a tag is gated on two of the four axes above. Two of those three uncovered
+axes have each already caught a bug that reached a release (0.19.1 and the
+unsealable fallback), so do not read a green release workflow as "every axis
+passed" — check `lean_action_ci.yml` on the tagged commit for that.
 
 Two things worth knowing:
 
