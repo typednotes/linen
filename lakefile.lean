@@ -698,10 +698,15 @@ lean_lib Linen where
   -- `lean_action_ci.yml`'s consumer job does.
   --
   -- Splitting `linenffi` per subsystem and giving each `lean_lib` only the
-  -- archives it reaches was tried and reverted: Lake builds every
-  -- `extern_lib` in a dependency package regardless of any library's `needs`,
-  -- so a pure-tree consumer still compiled all nine objects and still fetched
-  -- DuckDB. The split cost eight extra targets and bought nothing measurable.
+  -- archives it reaches was tried and reverted. Per-library `needs` *is*
+  -- honoured, but only for `.olean`-only builds, and only for the library
+  -- that claims the module — which is always the one rooted at `Linen`,
+  -- since every module here is `Linen.*` and a root library claims its whole
+  -- prefix. So the per-area libraries were inert. Worse, any consumer that
+  -- *links* (any `lean_exe`, or any library with `precompileModules := true`)
+  -- builds every `extern_lib` in the package regardless: measured, a consumer
+  -- executable importing only `Linen.Database.SQLite` still built all eight
+  -- archives. See the 1.0.0 CHANGELOG entry.
   precompileModules := false
 
 lean_lib Tests where

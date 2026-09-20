@@ -27,49 +27,32 @@ format.
   `lean_action_ci.yml`'s consumer job does. Compiled code is unaffected.
 
   Two further changes were implemented, measured and reverted, and are
-  recorded here so they are not re-attempted blindly: splitting `linenffi`
-  into one archive per subsystem, and giving each area its own `lean_lib` with
-  only the archives it reaches. Neither reduces anything, because **Lake
-  builds every `extern_lib` in a dependency package regardless of any
-  library's `needs`** — a pure-tree consumer still compiled all nine FFI
-  objects and still downloaded DuckDB's 143MB archive. Making that download
-  lazy is therefore also pointless on its own. Removing the remaining native
-  cost needs either per-module native dependencies in Lake, or moving the
-  FFI-reaching sources into glob-separable subtrees.
+  recorded here with the mechanism spelled out, because the obvious reading
+  of the measurement is wrong twice over.
 
+  The changes were: splitting `linenffi` into one archive per subsystem, and
+  giving each area its own `lean_lib` declaring only the archives it reaches.
+  What actually governs whether a consumer pays for the natives is:
 
-- **An unsealable Linux host is now a build failure, not a warning.** When a
-  static libstdc++ is missing, `duckdbSealedArchives` warned and fell back to
-  dynamic linking — which is the configuration on which *every* DuckDB error
-  path aborts the process. There is nothing to fall back to, so the build now
-  stops and names both the cause and the `apt-get`/`dnf` line that fixes it.
-  `LINEN_ALLOW_UNSEALED_DUCKDB=1` is the explicit opt-out, for someone building
-  a subset that never touches a DuckDB error path.
+  - **Per-library `needs` is respected, but only for `.olean`-only builds.**
+    A consumer that merely elaborates modules builds the natives of the
+    library that *claims* the imported module, and nothing else.
+  - **The claiming library is the one rooted at `Linen`.** Every module here
+    is `Linen.*`, so a `lean_lib Linen` claims all ~770 of them by prefix and
+    its `needs` wins; the per-area libraries never get a say, whatever their
+    globs. With `needs` on that root library, an area split changes nothing;
+    with `needs` removed from it, *no* module declares any native at all.
+  - **Any consumer that links builds every `extern_lib` in the package.**
+    Measured: a consumer executable importing only `Linen.Database.SQLite`
+    built all eight archives, with the root library declaring no `needs`.
+    Linking is the common case — any `lean_exe`, or any library with
+    `precompileModules := true`.
 
-  This stayed a warning for a release because CI could not reach it: GitHub's
-  Ubuntu runners ship `g++`, so the branch was unreachable there.
-
-- **CI covers the axes that actually vary.** Three additions, chosen because
-  the ~770 pure-Lean modules are platform-independent and elan pins the
-  compiler to one commit — so more distros would re-test identical `.olean`
-  semantics, while everything that varies lives at the FFI boundary:
-
-  - **`ubuntu-24.04-arm`** in the build matrix. `duckdbArchiveName`'s
-    `static-libs-linux-arm64.zip` branch had **never executed** in CI:
-    `ubuntu-latest` is x86_64 and `macos-latest` takes the Darwin branch. The
-    asset exists and the code was live but untested.
-  - **A consumer build**, on all three platforms, of a throwaway package that
-    `require`s `linen` and calls a DuckDB `@[extern]` entry point. This is the
-    axis standalone CI cannot test — Lake elaborates a dependency's lakefile
-    with the *consumer's* root as the working directory, which is how 0.19.1's
-    bug broke every Linux consumer while this repository stayed green.
-  - **An unsealable host**, in a `debian:bookworm-slim` container with no
-    `g++`, asserting the build fails, that the message names the fix, and that
-    the documented opt-out works.
-
-  Alpine/musl is deliberately absent: Lean publishes `linux` and
-  `linux_aarch64` only, with no musl build, so it is unsupported rather than
-  untested.
+  So reorganising sources into glob-separable subtrees cannot remove the
+  native cost for a consumer that links, which is most of them. It would help
+  only `.olean`-only consumers, and only by giving up the `Linen` root module
+  that makes `import Linen` work. The split was reverted as inert complexity
+  in the subsystem that has already broken two releases.
 
 ## [0.20.0] - 2026-09-19
 

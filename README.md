@@ -384,11 +384,13 @@ whole-library artifact. If you call an `@[extern]` binding from `#eval` or
 bindings reachable through the interpreter, at the cost of building the whole
 dependency.
 
-What you still pay regardless is the native layer: Lake builds every
-`extern_lib` in a dependency package whatever you import, so the C shims are
-compiled and DuckDB's pinned archive is fetched even for a pure-Lean import.
-That is a Lake limitation rather than a choice here — see the 1.0.0 entry in
-[CHANGELOG.md](CHANGELOG.md) for the splits that were tried and measured.
+The native layer is a separate matter. If your package only elaborates
+modules, you build no C shims at all. As soon as anything **links** — any
+`lean_exe`, or a library with `precompileModules := true` — Lake builds every
+`extern_lib` in the package, so the shims are compiled and DuckDB's pinned
+archive is fetched even if you imported only pure-Lean modules. See the 1.0.0
+entry in [CHANGELOG.md](CHANGELOG.md) for the splits that were tried and why
+reorganising sources cannot avoid this.
 
 ## Modules
 
