@@ -512,8 +512,10 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   and non-blocking send / recv, UDP `sendto` / `recvfrom`, socket options,
   `getAddrInfo`, a buffered `RecvBuffer`, and an event loop over **kqueue
   (macOS) / epoll (Linux)**. The shim is compiled and linked by `lakefile.lean`
-  (`extern_lib linenffi`); the `Linen` library is `precompileModules`-enabled so
-  the bindings are callable from `#eval`.
+  (`extern_lib linenffi`). The `Linen` library is deliberately *not*
+  `precompileModules`-enabled, so importing one module does not build all of
+  them; `Tests` is, which is what makes the bindings callable from `#eval`.
+  A consumer that needs the same sets it on its own library.
 - `Network.Socket` — the safe, high-level API over the FFI: `socket → bind →
   listen → accept` (and `connect`/`connectFinish`, `send`/`recv`, `sendAll`,
   UDP `sendTo`/`recvFrom`) with each transition's pre/post state in its

@@ -2,9 +2,29 @@
 
 All notable changes to `linen` are documented here, one entry per released
 version (see `version` in `lakefile.lean`). Dates are UTC, in `YYYY-MM-DD`
-format.
+format. Entries follow [Keep a Changelog](https://keepachangelog.com):
+*Added*, *Changed*, *Deprecated*, *Removed*, *Fixed*, *Security*.
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-09-20
+
+### Changed
+
+- **A consumer now builds only the modules it imports.** `lean_lib Linen` is
+  no longer `precompileModules`-enabled. Precompilation forces `Linen:shared`,
+  a whole-library artifact that nothing can link against until every module is
+  compiled — so importing a single leaf module built all ~770. A package whose
+  only import is `Linen.Data.Functor` goes from **2333 build jobs (5m04s) to
+  16 (13s)**.
+
+  Compiled code is unaffected. **If you call an `@[extern]` binding from
+  `#eval` or `#guard`, set `precompileModules := true` on your own library** —
+  that is what makes the bindings reachable through the interpreter.
+
+  This does not change the native layer: any package that links still builds
+  every `extern_lib`, so the C shims are compiled and DuckDB's pinned archive
+  fetched whatever you import.
 
 - **An unsealable Linux host is now a build failure, not a warning.** When a
   static libstdc++ is missing, `duckdbSealedArchives` warned and fell back to
@@ -16,6 +36,8 @@ format.
 
   This stayed a warning for a release because CI could not reach it: GitHub's
   Ubuntu runners ship `g++`, so the branch was unreachable there.
+
+### Added
 
 - **CI covers the axes that actually vary.** Three additions, chosen because
   the ~770 pure-Lean modules are platform-independent and elan pins the

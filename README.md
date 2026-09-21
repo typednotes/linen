@@ -374,6 +374,20 @@ carries these flags. It is deliberately not the default: the shared form links
 the whole archive, so every dependent would need libpq, SQLite and DuckDB
 installed even to use, say, `Crypto.SigV4`.
 
+`linen`'s own `Linen` library is not precompiled either, and for the same
+reason — **you build only the modules you import.** A package whose only
+import is `Linen.Data.Functor` builds one module, not all ~770. If you call an
+`@[extern]` binding from `#eval` or `#guard` (as opposed to from compiled
+code, which is unaffected), set `precompileModules := true` on **your**
+library: that is what makes the bindings reachable through the interpreter, at
+the cost of building the whole dependency.
+
+The native layer is separate. A package that only elaborates modules builds no
+C shims at all; as soon as anything **links** — any `lean_exe`, or a library
+with `precompileModules := true` — Lake builds every `extern_lib` in the
+package, so the shims are compiled and DuckDB's pinned archive fetched even if
+you imported only pure-Lean modules.
+
 ## Modules
 
 See **[docs/modules.md](docs/modules.md)** for the full module table (all 770 modules).

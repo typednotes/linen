@@ -498,7 +498,7 @@ run_cmd do
 -- is left as an unbound symbol that dyld's flat-namespace fallback can resolve to
 -- macOS's incompatible system `libboringssl.dylib` instead, crashing on the first call.
 package linen where
-  version := v!"0.20.0"
+  version := v!"1.0.0"
   moreLinkArgs := nativeLinkArgs
 
 -- ── Native FFI (POSIX sockets + kqueue/epoll, PostgreSQL libpq) ──
@@ -617,9 +617,10 @@ target duckdb.o pkg : FilePath := do
       `libleanshared.so` at `dlopen` time.
 
     This is one shared library, not a static archive folded into every
-    consumer, because `precompileModules` is on for both `Linen` and `Tests`:
-    a static DuckDB would be linked into each of the ~20 DuckDB test modules'
-    `:dynlib`s separately. -/
+    consumer, because `Tests` is `precompileModules`-enabled: a static DuckDB
+    would be linked into each of the ~20 DuckDB test modules' `:dynlib`s
+    separately. (`Linen` itself no longer precompiles — see its comment
+    below — but `Tests` still does, so the reason stands.) -/
 target duckdbSealedLib pkg : Dynlib := do
   let soFile := pkg.buildDir / "ffi" / nameToSharedLib "duckdb_sealed"
   let objJob ← duckdb.o.fetch
@@ -682,7 +683,25 @@ lean_lib Linen where
   -- link (and every downstream consumer's link) to pass `-rpath` twice,
   -- triggering `ld64.lld: warning: duplicate -rpath ... ignored`.
   needs := #[linenffi]
-  precompileModules := true
+  -- **Deliberately not precompiled.** `precompileModules := true` forces
+  -- `Linen:shared`, a whole-library artifact, so nothing can link against one
+  -- module until all ~770 are compiled: a consumer whose only import is
+  -- `Linen.Data.Functor` took 2333 jobs and 5m04s, against 16 jobs and 13s
+  -- here. README's "linking against linen" section warns consumers off
+  -- `precompileModules` for this same reason.
+  --
+  -- `Tests` below still precompiles, which is what keeps `Linen:shared` built
+  -- for the `#eval`s that call `@[extern]` bindings through the interpreter.
+  -- A consumer needing that sets it on its own library, as the consumer job
+  -- in `lean_action_ci.yml` does.
+  --
+  -- Do not try to go finer by splitting `linenffi` per subsystem and giving
+  -- each `lean_lib` only the archives it reaches. Two Lake rules defeat it: a
+  -- library claims every module beneath its root prefix, so the `Linen`-rooted
+  -- library's `needs` governs all ~770 whatever globs the others declare; and
+  -- anything that links builds every `extern_lib` in the package regardless of
+  -- `needs`.
+  precompileModules := false
 
 lean_lib Tests where
   -- `Tests.Linen.Database.DuckDB.FFI.TestSupport` (a `Tests`-tree module, not
