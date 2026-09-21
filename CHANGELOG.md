@@ -2,57 +2,64 @@
 
 All notable changes to `linen` are documented here, one entry per released
 version (see `version` in `lakefile.lean`). Dates are UTC, in `YYYY-MM-DD`
-format.
+format. Entries follow [Keep a Changelog](https://keepachangelog.com):
+*Added*, *Changed*, *Deprecated*, *Removed*, *Fixed*, *Security*.
 
 ## [Unreleased]
 
 ## [1.0.0] - 2026-09-20
 
-- **Importing part of `linen` no longer builds all of it.** `lean_lib Linen`
-  set `precompileModules := true`, which forces `Linen:shared` — a
-  whole-library artifact that no consumer can link against without first
-  compiling every module. Measured on a clean checkout, a package whose only
-  import was `Linen.Data.Functor` (a leaf with no Linen imports at all) ran
-  **2333 build jobs in 5m04s**; it now runs **16 jobs in 13s**. The library is
-  no longer precompiled; `Tests` still is, which is what keeps the `#eval`s
-  that call `@[extern]` bindings through the interpreter working.
+### Changed
 
-  README's own "linking against linen" section already warned consumers off
-  `precompileModules` because "the shared form links the whole archive" — the
-  library was imposing on every dependent precisely the cost that warning
-  describes.
+- **A consumer now builds only the modules it imports.** `lean_lib Linen` is
+  no longer `precompileModules`-enabled. Precompilation forces `Linen:shared`,
+  a whole-library artifact that nothing can link against until every module is
+  compiled — so importing a single leaf module built all ~770. A package whose
+  only import is `Linen.Data.Functor` goes from **2333 build jobs (5m04s) to
+  16 (13s)**.
 
-  **If you call an `@[extern]` binding from `#eval`/`#guard` in your own
-  package**, set `precompileModules := true` on your library, as
-  `lean_action_ci.yml`'s consumer job does. Compiled code is unaffected.
+  Compiled code is unaffected. **If you call an `@[extern]` binding from
+  `#eval` or `#guard`, set `precompileModules := true` on your own library** —
+  that is what makes the bindings reachable through the interpreter.
 
-  Two further changes were implemented, measured and reverted, and are
-  recorded here with the mechanism spelled out, because the obvious reading
-  of the measurement is wrong twice over.
+  This does not change the native layer: any package that links still builds
+  every `extern_lib`, so the C shims are compiled and DuckDB's pinned archive
+  fetched whatever you import.
 
-  The changes were: splitting `linenffi` into one archive per subsystem, and
-  giving each area its own `lean_lib` declaring only the archives it reaches.
-  What actually governs whether a consumer pays for the natives is:
+- **An unsealable Linux host is now a build failure, not a warning.** When a
+  static libstdc++ is missing, `duckdbSealedArchives` warned and fell back to
+  dynamic linking — which is the configuration on which *every* DuckDB error
+  path aborts the process. There is nothing to fall back to, so the build now
+  stops and names both the cause and the `apt-get`/`dnf` line that fixes it.
+  `LINEN_ALLOW_UNSEALED_DUCKDB=1` is the explicit opt-out, for someone building
+  a subset that never touches a DuckDB error path.
 
-  - **Per-library `needs` is respected, but only for `.olean`-only builds.**
-    A consumer that merely elaborates modules builds the natives of the
-    library that *claims* the imported module, and nothing else.
-  - **The claiming library is the one rooted at `Linen`.** Every module here
-    is `Linen.*`, so a `lean_lib Linen` claims all ~770 of them by prefix and
-    its `needs` wins; the per-area libraries never get a say, whatever their
-    globs. With `needs` on that root library, an area split changes nothing;
-    with `needs` removed from it, *no* module declares any native at all.
-  - **Any consumer that links builds every `extern_lib` in the package.**
-    Measured: a consumer executable importing only `Linen.Database.SQLite`
-    built all eight archives, with the root library declaring no `needs`.
-    Linking is the common case — any `lean_exe`, or any library with
-    `precompileModules := true`.
+  This stayed a warning for a release because CI could not reach it: GitHub's
+  Ubuntu runners ship `g++`, so the branch was unreachable there.
 
-  So reorganising sources into glob-separable subtrees cannot remove the
-  native cost for a consumer that links, which is most of them. It would help
-  only `.olean`-only consumers, and only by giving up the `Linen` root module
-  that makes `import Linen` work. The split was reverted as inert complexity
-  in the subsystem that has already broken two releases.
+### Added
+
+- **CI covers the axes that actually vary.** Three additions, chosen because
+  the ~770 pure-Lean modules are platform-independent and elan pins the
+  compiler to one commit — so more distros would re-test identical `.olean`
+  semantics, while everything that varies lives at the FFI boundary:
+
+  - **`ubuntu-24.04-arm`** in the build matrix. `duckdbArchiveName`'s
+    `static-libs-linux-arm64.zip` branch had **never executed** in CI:
+    `ubuntu-latest` is x86_64 and `macos-latest` takes the Darwin branch. The
+    asset exists and the code was live but untested.
+  - **A consumer build**, on all three platforms, of a throwaway package that
+    `require`s `linen` and calls a DuckDB `@[extern]` entry point. This is the
+    axis standalone CI cannot test — Lake elaborates a dependency's lakefile
+    with the *consumer's* root as the working directory, which is how 0.19.1's
+    bug broke every Linux consumer while this repository stayed green.
+  - **An unsealable host**, in a `debian:bookworm-slim` container with no
+    `g++`, asserting the build fails, that the message names the fix, and that
+    the documented opt-out works.
+
+  Alpine/musl is deliberately absent: Lean publishes `linux` and
+  `linux_aarch64` only, with no musl build, so it is unsupported rather than
+  untested.
 
 ## [0.20.0] - 2026-09-19
 

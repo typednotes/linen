@@ -683,30 +683,24 @@ lean_lib Linen where
   -- link (and every downstream consumer's link) to pass `-rpath` twice,
   -- triggering `ld64.lld: warning: duplicate -rpath ... ignored`.
   needs := #[linenffi]
-  -- **Deliberately not precompiled.** `precompileModules := true` here forces
-  -- `Linen:shared`, a whole-library artifact, so no consumer can link against
-  -- any module without first compiling all ~770 of them. Measured on a clean
-  -- checkout, a consumer whose only import is `Linen.Data.Functor` (a leaf
-  -- with no Linen imports) took 2333 jobs and 5m04s; with this `false`, 16
-  -- jobs and 13s. README's "linking against linen" section already warns
-  -- consumers off `precompileModules` for exactly this reason — setting it
-  -- here imposed on every dependent the cost that warning describes.
+  -- **Deliberately not precompiled.** `precompileModules := true` forces
+  -- `Linen:shared`, a whole-library artifact, so nothing can link against one
+  -- module until all ~770 are compiled: a consumer whose only import is
+  -- `Linen.Data.Functor` took 2333 jobs and 5m04s, against 16 jobs and 13s
+  -- here. README's "linking against linen" section warns consumers off
+  -- `precompileModules` for this same reason.
   --
-  -- `Tests` below still precompiles, and that is what keeps `Linen:shared`
-  -- built for the `#eval`s that call `@[extern]` bindings through the
-  -- interpreter. A consumer needing the same sets it on its own library, as
-  -- `lean_action_ci.yml`'s consumer job does.
+  -- `Tests` below still precompiles, which is what keeps `Linen:shared` built
+  -- for the `#eval`s that call `@[extern]` bindings through the interpreter.
+  -- A consumer needing that sets it on its own library, as the consumer job
+  -- in `lean_action_ci.yml` does.
   --
-  -- Splitting `linenffi` per subsystem and giving each `lean_lib` only the
-  -- archives it reaches was tried and reverted. Per-library `needs` *is*
-  -- honoured, but only for `.olean`-only builds, and only for the library
-  -- that claims the module — which is always the one rooted at `Linen`,
-  -- since every module here is `Linen.*` and a root library claims its whole
-  -- prefix. So the per-area libraries were inert. Worse, any consumer that
-  -- *links* (any `lean_exe`, or any library with `precompileModules := true`)
-  -- builds every `extern_lib` in the package regardless: measured, a consumer
-  -- executable importing only `Linen.Database.SQLite` still built all eight
-  -- archives. See the 1.0.0 CHANGELOG entry.
+  -- Do not try to go finer by splitting `linenffi` per subsystem and giving
+  -- each `lean_lib` only the archives it reaches. Two Lake rules defeat it: a
+  -- library claims every module beneath its root prefix, so the `Linen`-rooted
+  -- library's `needs` governs all ~770 whatever globs the others declare; and
+  -- anything that links builds every `extern_lib` in the package regardless of
+  -- `needs`.
   precompileModules := false
 
 lean_lib Tests where
