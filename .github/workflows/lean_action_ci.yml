@@ -5,6 +5,14 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Two pushes of the same commit seconds apart (or rapid successive pushes)
+# each fire the full ~11-minute matrix; only the newest run per ref matters,
+# so supersede the older instead of running it out. Grouped per ref, so a
+# tag push never cancels a branch's run or another tag's.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     strategy:
