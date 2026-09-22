@@ -7,6 +7,8 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-23
+
 ### Fixed
 
 - **Consumer executables no longer fail to link on Linux.** On Linux,

@@ -561,7 +561,7 @@ run_cmd do
 -- targets. OpenSSL needs none of them: Lean's toolchain ends every link with
 -- `-lssl -lcrypto` against its bundled static archives (see `nativeLinkArgs`).
 package linen where
-  version := v!"1.0.0"
+  version := v!"1.1.0"
   moreLinkArgs := nativeLinkArgs
 
 -- ── Native FFI (POSIX sockets + kqueue/epoll, PostgreSQL libpq) ──
