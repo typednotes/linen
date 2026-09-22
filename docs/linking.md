@@ -375,6 +375,24 @@ Reproducibility differs by tier: SQLite is fixed in git; DuckDB is
 version-pinned in `lakefile.lean`; libpq, OpenSSL, zlib and libsecret are
 whatever the build machine provides.
 
+Two link-flag rules live in `lakefile.lean` and are worth knowing before
+changing them:
+
+- **No OpenSSL link flags are emitted, on any platform.** `pkg-config
+  openssl` supplies the *headers* `jose.c`/`tls.c` compile against, nothing
+  more: Lean's own toolchain ends every link with `-lssl -lcrypto` resolving
+  to the static `libssl.a`/`libcrypto.a` it bundles. Naming the system
+  `.so` as well fails the executable link on Linux under lld's
+  `--no-allow-shlib-undefined` — the system library's GLIBC symbol versions
+  are newer than the glibc Lean bundles.
+- **On Linux, library directories are never added with `-L`.**
+  `/usr/lib/<multiarch>` holds the system `libc.so`; a `-L` naming it
+  preempts the glibc Lean bundles, and the vendored `Scrt1.o` (built against
+  a pre-2.34 glibc) then fails to resolve `__libc_csu_init`/`__libc_csu_fini`
+  in any executable link. `pkgAbsoluteLibs` names each library file outright
+  instead; `pkgLinkFlags` (which does pass `-L`) is macOS-only, where the
+  keg-only Homebrew directory contains no libc and is safe.
+
 ### 6.1 Embedded and client-server dependencies
 
 `linen` binds both architectures, which determines where SQL functions execute.

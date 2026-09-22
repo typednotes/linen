@@ -7,6 +7,32 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+### Fixed
+
+- **Consumer executables no longer fail to link on Linux.** On Linux,
+  `pkgLinkFlags`' explicit `-L<libdir>` named `/usr/lib/<multiarch>`, which
+  holds the *system* `libc.so` — preempting the glibc Lean bundles, so any
+  consumer's `lean_exe` failed with `undefined symbol: __libc_csu_init`
+  (Lean's vendored `Scrt1.o` references compat symbols glibc 2.34 removed).
+  `linen`'s own CI never saw it: no target it builds links an executable
+  startup object. libpq, zlib and libsecret now link by naming the library
+  file outright (`pkgAbsoluteLibs`) on Linux; `pkgLinkFlags` remains for
+  macOS, where the keg-only Homebrew directory is safe.
+
+- **No system OpenSSL link flags are emitted, on any platform.** Lean's
+  toolchain already ends every link with `-lssl -lcrypto` against its bundled
+  static archives, so the flags were redundant — and on Linux actively
+  fatal, since the system `libssl.so` needs GLIBC symbol versions newer than
+  the glibc Lean bundles.
+
+### Added
+
+- **CI now links a consumer `lean_exe`** (Linux arm64/x86_64 and macOS), with
+  `main` referencing `linen_pg_*` and `linen_jose_hmac` symbols. A `lean_lib`
+  never links `Scrt1.o`, so until now nothing in CI exercised the shape every
+  consumer (`infra`, `ledger`, `liaison`) actually builds. This is the
+  regression test for both fixes above.
+
 ## [1.0.0] - 2026-09-20
 
 ### Changed

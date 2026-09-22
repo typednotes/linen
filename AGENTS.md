@@ -48,7 +48,7 @@ Guidance for working in the **linen** Lean library.
   | Linux x86_64 | `build` | the sealed-DuckDB path, amd64 assets |
   | Linux **arm64** | `build` | per-arch asset names and arch-specific library discovery |
   | macOS arm64 | `build` | the dylib path, two-level namespace, no sealing |
-  | **Consumer** build | `consumer` | anything that depends on `linen` being the *root* package |
+  | **Consumer** build | `consumer` | anything that depends on `linen` being the *root* package, and **executable links** — the job also builds a consumer `lean_exe`, and a `lean_lib` never links `Scrt1.o` |
   | **Unsealable** host | `unsealable` | branches that a runner with a full toolchain cannot reach |
 
   The last two are the ones a contributor will not think of, so they are worth
@@ -60,7 +60,13 @@ Guidance for working in the **linen** Lean library.
     coincide, so this repository's own green CI proves nothing about them. A
     path resolved against the wrong one broke every Linux consumer while CI
     stayed green (0.19.1). **Any new path in `lakefile.lean` must be anchored
-    to `pkg.buildDir`/`pkg.dir`, never to `IO.currentDir`.**
+    to `pkg.buildDir`/`pkg.dir`, never to `IO.currentDir`.** The same blind
+    spot applies to the *link*: no target in this repository links an
+    executable startup object (`Scrt1.o`), so a flag that breaks only
+    `lean_exe` links — the `-L<multiarch>` glibc shadowing, fixed after
+    1.0.0 — was invisible here while breaking `infra`/`ledger`/`liaison`.
+    The job's `consumerApp` executable is the guard: **any change to the
+    link-flag recipe must keep it linking.**
   - **Unsealable host.** GitHub's Ubuntu runners ship `g++`, so the
     missing-static-libstdc++ branch was unreachable there and shipped broken
     for a release. The job runs in `debian:bookworm-slim` *without* `g++` and

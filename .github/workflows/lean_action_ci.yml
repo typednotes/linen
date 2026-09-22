@@ -87,14 +87,63 @@ jobs:
           cp ../linen/lean-toolchain .
           cat > lakefile.lean <<'LAKE'
           import Lake
-          open Lake DSL
+          open System Lake DSL
 
           require linen from ".." / "linen"
+
+          /-- Run `pkg-config <args>`, splitting stdout on whitespace. -/
+          def pkgConfig (args : Array String) : IO (Array String) := do
+            let out ← IO.Process.output { cmd := "pkg-config", args }
+            if out.exitCode != 0 then return #[]
+            let normalized := (out.stdout.replace "\n" " ").replace "\t" " "
+            return (normalized.splitOn " ").filter (· != "") |>.toArray
+
+          /-- Link flags that name each library file outright rather than adding
+              its directory to `-L`. On Linux that directory is
+              `/usr/lib/<multiarch>`, which holds the system `libc.so`; adding
+              it shadows the glibc Lean bundles and the executable fails with
+              `undefined symbol: __libc_csu_init` from Lean's vendored
+              `Scrt1.o`. This is the recipe `linen` hands consumers. -/
+          def pkgAbsoluteLibs (pkg : String) : IO (Array String) := do
+            let libs ← pkgConfig #["--libs", pkg]
+            let dirs ← pkgConfig #["--variable=libdir", pkg]
+            let dir : Option String := (dirs.filter (· != ""))[0]?
+            let ext := if System.Platform.isOSX then "dylib" else "so"
+            let mut out : Array String := #[]
+            for tok in libs do
+              if tok.startsWith "-L" then
+                continue
+              else if tok.startsWith "-l" then
+                let name := (tok.drop 2).toString
+                match dir with
+                | some d =>
+                  let c : FilePath := (d : FilePath) / s!"lib{name}.{ext}"
+                  if ← c.pathExists then out := out.push c.toString else out := out.push tok
+                | none => out := out.push tok
+              else
+                out := out.push tok
+            return out
+
+          open Lean Elab Command in
+          run_cmd do
+            let mkDef (n : Name) (flags : Array String) : CommandElabM Unit := do
+              let lits : Array (TSyntax `term) := flags.map (fun s => quote s)
+              elabCommand (← `(def $(mkIdent n) : Array String := #[$lits,*]))
+            let pq ← pkgAbsoluteLibs "libpq"
+            mkDef `nativeLinkArgs pq
 
           package consumer
 
           lean_lib Consumer where
             precompileModules := true
+
+          /-- An *executable* consumer: the shape Lake refuses to give a
+              dependency's `moreLinkArgs` to, and so the only shape that would
+              have caught the `-L` bug. The library above never links
+              `Scrt1.o`; this does. -/
+          lean_exe consumerApp where
+            root := `ConsumerApp
+            moreLinkArgs := nativeLinkArgs
           LAKE
           mkdir -p Consumer
           # One import per FFI-bearing subsystem, so the link covers every
@@ -119,7 +168,34 @@ jobs:
               Database.DuckDB.FFI.OpenConnect.close db
             | .error m => throw (IO.userError s!"consumer could not open duckdb: {m}")
           SRC
+          # An *executable* consumer — the shape a dependency's `moreLinkArgs`
+          # can never reach. `main` references a `linen_pg_*` and a
+          # `linen_jose_hmac` symbol, pulling `postgres.o` (libpq) and `jose.o`
+          # (OpenSSL) into the link; it is never run, only linked. Deliberately
+          # imports no DuckDB: this repository's own `lean_exe` cannot be the
+          # test, because it links `-lduckdb_sealed`, and the sealed `.so` is
+          # built by the host `g++` against a newer glibc than Lean bundles
+          # (`--no-allow-shlib-undefined` rejects it).
+          cat > ConsumerApp.lean <<'SRC'
+          import Linen.Database.PostgreSQL.LibPQ
+          import Linen.Crypto.JOSE.FFI
+
+          open Database.PostgreSQL.LibPQ
+
+          def main : IO Unit := do
+            -- References one `linen_pg_*` and one `linen_jose_hmac` symbol, so
+            -- the link pulls both `postgres.o` (libpq) and `jose.o` (OpenSSL,
+            -- satisfied by Lean's bundled static libssl/libcrypto). Never run,
+            -- only linked.
+            let _ ← connect "host=127.0.0.1 port=1 dbname=linktest"
+            let _ ← Crypto.JOSE.FFI.hmac "key".toUTF8 "data".toUTF8 0
+            pure ()
+          SRC
           lake build Consumer
+          # The regression test: with the old `-L<libdir> -lpq` recipe this
+          # executable link fails on Linux with an undefined `__libc_csu_init`
+          # in Lean's vendored `Scrt1.o`; `pkgAbsoluteLibs` links it.
+          lake build consumerApp
 
   # ── Does the build refuse to produce a broken library? ──────────────────────
   #

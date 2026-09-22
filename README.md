@@ -334,6 +334,29 @@ def pkgLinkFlags (pkg : String) : IO (Array String) := do
   let libdir ← pkgConfigFlags #["--variable=libdir", pkg]
   return (libdir.filter (· != "")).map ("-L" ++ ·) ++ libs
 
+/-- The executable-safe form of `pkgLinkFlags`: name each library file
+    outright instead of adding its directory to the linker's search path.
+    See the note after the snippet for why this is the one to use on Linux. -/
+def pkgAbsoluteLibs (pkg : String) : IO (Array String) := do
+  let libs ← pkgConfigFlags #["--libs", pkg]
+  let dirs ← pkgConfigFlags #["--variable=libdir", pkg]
+  let dir : Option String := (dirs.filter (· != ""))[0]?
+  let ext := if System.Platform.isOSX then "dylib" else "so"
+  let mut out : Array String := #[]
+  for tok in libs do
+    if tok.startsWith "-L" then
+      continue
+    else if tok.startsWith "-l" then
+      let name := (tok.drop 2).toString
+      match dir with
+      | some d =>
+        let c : FilePath := (d : FilePath) / s!"lib{name}.{ext}"
+        if ← c.pathExists then out := out.push c.toString else out := out.push tok
+      | none => out := out.push tok
+    else
+      out := out.push tok
+  return out
+
 /-- Lean ships its own `lld`, which has no default framework search path. -/
 def macSdkArgs : IO (Array String) := do
   try
@@ -354,19 +377,34 @@ run_cmd do
     if System.Platform.isOSX then
       (macSdkArgs).map (· ++ #["-framework", "Security", "-framework", "CoreFoundation"])
     else if System.Platform.isWindows then pure #["-ladvapi32", "-lcredui"]
-    else pkgLinkFlags "libsecret-1"
-  -- `Crypto.*` and `Network.TLS`. The explicit `-L` matters on macOS: without
-  -- it these can bind to the system's incompatible `libboringssl`, which links
-  -- cleanly and then crashes on the first TLS call.
-  let ssl ← pkgLinkFlags "openssl"
-  mkDef `nativeLinkArgs (keychain ++ ssl)
+    else pkgAbsoluteLibs "libsecret-1"
+  -- No OpenSSL flags, on any platform: Lean's toolchain already ends every
+  -- link with `-lssl -lcrypto`, resolving to its bundled static
+  -- `libssl.a`/`libcrypto.a`. Naming the system `.so` as well breaks the
+  -- executable link on Linux (its GLIBC symbol versions are newer than the
+  -- glibc Lean bundles), and a static archive cannot be re-bound at load time
+  -- to macOS's incompatible `libboringssl` — the crash the old `-L` guarded
+  -- against is gone rather than avoided.
+  mkDef `nativeLinkArgs keychain
 
 package myapp where
   moreLinkArgs := nativeLinkArgs
 ```
 
-Add `pkgLinkFlags "libpq"` for `Database.PostgreSQL`, `pkgLinkFlags "zlib"` for
-`Crypto.Zlib`, and DuckDB's `lib` directory for `Database.DuckDB`.
+For `Database.PostgreSQL` add `pkgAbsoluteLibs "libpq"`, for `Crypto.Zlib`
+`pkgAbsoluteLibs "zlib"`, and DuckDB's `lib` directory for `Database.DuckDB`.
+
+**Why the absolute-path form exists.** A `lean_lib` never links the executable
+startup object, but your `lean_exe` does — and `pkgLinkFlags`' `-L<libdir>` is
+fatal there on Linux. `pkg-config --variable=libdir` reports
+`/usr/lib/<multiarch>`, which holds the *system* `libc.so`: passing it as `-L`
+puts it ahead of the glibc Lean bundles, and Lean's vendored `Scrt1.o` still
+references the `__libc_csu_init`/`__libc_csu_fini` compat symbols glibc 2.34
+removed, so the link fails with an undefined C-runtime symbol nowhere near your
+code. Naming the library file (`…/libpq.so`) links exactly what you meant and
+shadows nothing. (`pkgAbsoluteLibs` falls back to the bare `-lfoo` token when
+the file is absent; on macOS the keg-only Homebrew directory is safe to pass as
+`-L`, since it contains no libc.)
 
 Setting `precompileModules := true` on this package *would* make all of the
 above automatic, since Lake then links the extern library's shared form, which

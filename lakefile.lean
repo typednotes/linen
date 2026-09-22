@@ -33,11 +33,57 @@ def pkgConfig (args : Array String) : IO (Array String) := do
     `ld.lld` does NOT search those — so a bare `-lpq`/`-lssl` fails on the
     GitHub runner with "unable to find library". `--variable=libdir` reports the
     exact directory on every platform (multiarch on Linux, the keg-only Homebrew
-    prefix on macOS), so no library path is ever hardcoded. -/
+    prefix on macOS), so no library path is ever hardcoded.
+
+    **Adding that `-L` back is only safe when nothing links an executable.**
+    This library's own `Linen`/`Tests` targets never do (see the `lean_exe`
+    note below), but every consumer that links a `lean_exe` does, and on Linux
+    the directory is fatal there: `/usr/lib/<multiarch>` holds the *system*
+    `libc.so`, so `-lc` resolves to it while Lean's vendored `Scrt1.o` still
+    references the `__libc_csu_init`/`__libc_csu_fini` compat symbols glibc
+    2.34 removed — an undefined-symbol link failure inside the C runtime,
+    nowhere near anything `linen` wrote. Use `pkgAbsoluteLibs` on such a
+    platform instead. Kept for macOS, where Homebrew is keg-only (there is no
+    system multiarch directory to shadow) and the explicit `-L` is required. -/
 def pkgLinkFlags (pkg : String) : IO (Array String) := do
   let libs ← pkgConfig #["--libs", pkg]
   let libdir ← pkgConfig #["--variable=libdir", pkg]
   return (libdir.filter (· != "")).map ("-L" ++ ·) ++ libs
+
+/-- Link flags for a pkg-config package that name each library file outright
+    (`<libdir>/libfoo.so`, or `.dylib` on macOS), rather than adding its
+    directory to the linker's search path.
+
+    This is the executable-safe form of `pkgLinkFlags`: naming the file links
+    exactly the intended library and adds nothing to the `-L` search order, so
+    the glibc Lean bundles keeps winning `-lc` and its vendored `Scrt1.o` still
+    resolves. Falls back to the bare `-lfoo` for that entry if the file is
+    absent, so a distro with an unusual layout still gets a chance.
+
+    Mirrors `infra/lakefile.lean`'s `pkgAbsoluteLibs`, the version already
+    exercised by a Linux CI that links executables. -/
+def pkgAbsoluteLibs (pkg : String) : IO (Array String) := do
+  let libs ← pkgConfig #["--libs", pkg]
+  let libdirs ← pkgConfig #["--variable=libdir", pkg]
+  let libdir : Option String := (libdirs.filter (· != ""))[0]?
+  let ext := if System.Platform.isOSX then "dylib" else "so"
+  let mut out : Array String := #[]
+  for tok in libs do
+    if tok.startsWith "-L" then
+      continue                                  -- deliberately dropped
+    else if tok.startsWith "-l" then
+      let name := (tok.drop 2).toString
+      match libdir with
+      | some d =>
+        let candidate : FilePath := (d : FilePath) / s!"lib{name}.{ext}"
+        if ← candidate.pathExists then
+          out := out.push candidate.toString
+        else
+          out := out.push tok
+      | none => out := out.push tok
+    else
+      out := out.push tok
+  return out
 
 /-- On macOS, `libz` ships only as a versioned dylib in `/usr/lib`
     (`libz.1.dylib`, no unversioned `libz.dylib` symlink) plus a linkable
@@ -359,33 +405,51 @@ set LINEN_ALLOW_UNSEALED_DUCKDB=1.\n\
 -- Resolve the native link flags at lakefile-elaboration time via `pkg-config`.
 -- This runs on the build machine (Lake recompiles the lakefile per checkout),
 -- so the Ubuntu runner gets Linux paths and dev boxes get their own — with no
--- library location hardcoded. Defines `libpqLinkArgs`, `opensslLinkArgs`,
--- and `nativeLinkArgs` as plain `Array String` literals.
+-- library location hardcoded. Defines `libpqLinkArgs`, `zlibLinkArgs`,
+-- `keychainLinkArgs`, `duckdbLinkArgs` and `nativeLinkArgs` as plain
+-- `Array String` literals.
 open Lean Elab Command in
 run_cmd do
   let mkDef (n : Name) (flags : Array String) : CommandElabM Unit := do
     let lits : Array (TSyntax `term) := flags.map (fun s => quote s)
     elabCommand (← `(def $(mkIdent n) : Array String := #[$lits,*]))
-  let pq ← pkgLinkFlags "libpq"
-  let ssl ← pkgLinkFlags "openssl"
-  let zlib ← pkgLinkFlags "zlib"
+  -- libpq and zlib name their library file outright on Linux: a
+  -- `-L<multiarch>` there shadows the glibc Lean bundles and breaks every
+  -- executable link with an undefined `__libc_csu_init` (see `pkgLinkFlags`).
+  -- macOS keeps `pkgLinkFlags`: Homebrew is keg-only, its `-L` is the only way
+  -- `-lpq` resolves, and there is no system multiarch directory to shadow.
+  let pq ← if System.Platform.isOSX then pkgLinkFlags "libpq" else pkgAbsoluteLibs "libpq"
+  let zlib ← if System.Platform.isOSX then pkgLinkFlags "zlib" else pkgAbsoluteLibs "zlib"
   let macSdk ← macSdkLibArgs
+  -- OpenSSL link flags are deliberately absent on every platform, though
+  -- `jose.o`/`tls.o` reference it. Lean's own toolchain already ends every
+  -- link with `-lssl -lcrypto`, resolving against the *static*
+  -- `libssl.a`/`libcrypto.a` it bundles (`script/prepare-llvm-linux.sh`), so
+  -- those symbols are satisfied without any flag here. Naming the system
+  -- OpenSSL as well is not merely redundant on Linux, it is fatal: a current
+  -- `libssl.so` needs `__isoc23_strtol@GLIBC_2.38` and friends, which the
+  -- glibc Lean bundles predates, so `ld.lld` fails on symbols no code here can
+  -- reach. Dropping it also retires the macOS reason to point at Homebrew's
+  -- OpenSSL (a static archive cannot be re-bound to the system's incompatible
+  -- `libboringssl` at load time). `infra/lakefile.lean` reached the same
+  -- conclusion from the same failure; see the comment there.
   -- Keychain link flags are OS-conditional: frameworks on macOS and system
   -- libraries on Windows have no `pkg-config` file, so — unlike `libpq`/
-  -- `openssl`/`zlib` above — they're picked via the pure, compile-time
+  -- `zlib` above — they're picked via the pure, compile-time
   -- `System.Platform.isOSX`/`isWindows` constants (the same ones Lake's own
   -- config code, e.g. `Lake/Config/LeanLib.lean`, uses for this kind of
   -- per-platform link decision) rather than any `pkg-config` probe. Linux is
-  -- the one branch with a `.pc` file (`libsecret-1`), so it still goes
-  -- through `pkgLinkFlags`, which degrades to `#[]` if that package is
-  -- absent — matching every other optional native dependency in this file.
+  -- the one branch with a `.pc` file (`libsecret-1`), so it goes through
+  -- `pkgAbsoluteLibs` — the executable-safe form, for the same reason as
+  -- libpq above — which degrades to `#[]` if that package is absent, matching
+  -- every other optional native dependency in this file.
   let keychainLinkArgs : Array String ←
     if System.Platform.isOSX then
       macSdkFrameworkArgs.map (· ++ #["-framework", "Security", "-framework", "CoreFoundation"])
     else if System.Platform.isWindows then
       pure #["-ladvapi32", "-lcredui"]
     else
-      pkgLinkFlags "libsecret-1"
+      pkgAbsoluteLibs "libsecret-1"
   -- DuckDB: downloaded pinned prebuilt archive (see the block above), not
   -- pkg-config. `-rpath` (supported by Lean's bundled `ld.lld` on both
   -- platforms, same flag spelling) is baked into every linked
@@ -476,7 +540,6 @@ run_cmd do
     else
       duckdbDynamicLinkArgs
   mkDef `libpqLinkArgs pq
-  mkDef `opensslLinkArgs ssl
   mkDef `zlibLinkArgs (macSdk ++ zlib)
   mkDef `keychainLinkArgs keychainLinkArgs
   mkDef `duckdbIncludeArgs duckdbIncludeArgs
@@ -485,7 +548,7 @@ run_cmd do
   mkDef `duckdbSealedLinkArgs (sealedArchives.getD #[])
   elabCommand (← `(def $(mkIdent `duckdbUsesSealedLib) : Bool :=
     $(quote sealedArchives.isSome)))
-  mkDef `nativeLinkArgs (pq ++ ssl ++ macSdk ++ zlib ++ keychainLinkArgs ++ duckdbLinkArgs)
+  mkDef `nativeLinkArgs (pq ++ macSdk ++ zlib ++ keychainLinkArgs ++ duckdbLinkArgs)
   -- **Last**, after every `mkDef`. Throwing earlier aborts the rest of this
   -- block, so the definitions below it are never generated and the real message
   -- arrives buried under four `Unknown identifier nativeLinkArgs` errors that
@@ -494,9 +557,9 @@ run_cmd do
 
 -- `moreLinkArgs` here also flows into `ExternLib.linkArgs` (`self.pkg.moreLinkArgs`),
 -- so `linenffi`'s `:shared` dynlib — loaded directly by the interpreter for `#eval` —
--- is itself linked against Homebrew's OpenSSL. Without this, `tls.o`'s `SSL_CTX_new`
--- is left as an unbound symbol that dyld's flat-namespace fallback can resolve to
--- macOS's incompatible system `libboringssl.dylib` instead, crashing on the first call.
+-- is linked with the libpq/zlib/keychain flags too, not just Lean's own `Linen`
+-- targets. OpenSSL needs none of them: Lean's toolchain ends every link with
+-- `-lssl -lcrypto` against its bundled static archives (see `nativeLinkArgs`).
 package linen where
   version := v!"1.0.0"
   moreLinkArgs := nativeLinkArgs
@@ -712,6 +775,22 @@ lean_lib Tests where
   needs := #[linenffi]
   precompileModules := true
 
+-- **Not a default target, deliberately.** `lake build`/`lean-action` link only
+-- `lean_lib Linen`, and a *library* link produces `.olean`s and a `:shared`
+-- dynlib, never the executable startup object (`Scrt1.o`). That left the whole
+-- "does an executable link?" question untested here: the `-L<multiarch>` in
+-- `pkgLinkFlags` shadowed the bundled glibc and broke every consumer's
+-- `lean_exe` on Linux (`undefined symbol: __libc_csu_init`) while this repo's
+-- CI stayed green. `infra/lakefile.lean` documented exactly that gap; the
+-- `consumer-exe` job in `.github/workflows/lean_action_ci.yml` is what now
+-- closes it, by linking a consumer executable that names libpq's file outright.
+--
+-- This exe cannot be that test itself: it links `-lduckdb_sealed`, and the
+-- sealed DuckDB `.so` is built here by the host `g++`, so it references
+-- glibc-2.38 symbols (`__isoc23_strtoul`, `_dl_find_object`) that Lean's
+-- bundled glibc predates — `ld.lld` rejects it under
+-- `--no-allow-shlib-undefined`. That is a property of the sealed lib, not of
+-- the link-flag recipe the consumer job exists to pin.
 lean_exe linen where
   root := `Main
   needs := #[linenffi]
