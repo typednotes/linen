@@ -340,6 +340,117 @@ def duckdbSealedArchives (duckdbLibDir : FilePath) : IO (Option (Array String)) 
   let excludeArg := "-Wl,--exclude-libs," ++ String.intercalate ":" basenames.toList
   return some (group ++ #[excludeArg])
 
+/-- Parse `nm` output into `(symbol, isWeak)` pairs. `nm` prints one symbol
+    per line with two shapes — undefined: `                 U name` (letter,
+    name), defined: `0000000000000000 T name` (address, letter, name) — and
+    marks weak symbols with a lowercase/uppercase `w`/`v` letter. Weak
+    undefined references never break a link, so the audit below exempt them
+    (DuckDB's own *shared* library leaves its `ZSTD_trace_*` hooks and
+    `__gmon_start__` undefined the same way).
+
+    `tolerant := true` (used only when scanning the *toolchain's* libraries
+    for what they define) answers `#[]` if `nm` rejects a file — a toolchain
+    ships a few non-ELF `.so` files that are really linker scripts, whose
+    symbols the real library beside them contributes anyway. The scan of the
+    sealed library itself is strict: a failure there must not be swallowed. -/
+def nmSymbolPairs (args : Array String) (tolerant : Bool := false)
+    : IO (Array (String × Bool)) := do
+  let out ← IO.Process.output { cmd := "nm", args }
+  if out.exitCode != 0 then
+    if tolerant then
+      return #[]
+    throw <| IO.userError s!"nm {String.intercalate " " args.toList} failed: \
+      {out.stderr}"
+  let isWeakLetter (l : String) : Bool := l == "w" || l == "W" || l == "v" || l == "V"
+  let mut pairs : Array (String × Bool) := #[]
+  for line in out.stdout.splitOn "\n" do
+    let fields := (line.splitOn " ").filter (· != "")
+    match fields with
+    | [letter, name] => pairs := pairs.push (name, isWeakLetter letter)
+    | [_addr, letter, name] => pairs := pairs.push (name, isWeakLetter letter)
+    | _ => pure ()
+  return pairs
+
+/-- Audit the linked `libduckdb_sealed.so` for undefined symbols that no
+    executable link will be able to resolve.
+
+    The sealed library deliberately keeps undefined references that are fine
+    for the links it participates in: Lean's own symbols (`lean_*`, resolved
+    by `libleanshared.so`, which `leanc` puts on every link line) and the
+    glibc/pthread/libm set Lean's bundled glibc provides. It also —
+    *undeliberately*, inherited from the host `libstdc++`/`libgcc` archives —
+    keeps references to host-glibc symbols Lean's bundled glibc predates
+    (see `ffi/duckdb_glibc_compat.c`). A *shared library* link does not check
+    any of this, which is why every `lean_lib` and `Tests` build on Linux
+    stayed green; an *executable* link does, under `ld.lld`'s
+    `--no-allow-shlib-undefined`, and a consumer's `lean_exe` referencing
+    DuckDB failed with `undefined reference: __isoc23_strtoul` while this
+    repository's CI ran green — its consumer job kept DuckDB out of its test
+    executable for exactly this reason.
+
+    So this is not a warning-shaped gap. After every sealed-library link, the
+    audit collects every non-weak undefined dynamic symbol and checks it
+    against everything the toolchain itself can resolve: the `.so`/`.a`
+    exports under Lean's system library directory (`<toolchain>/lib`, plus
+    its `glibc/` and `lean/` subdirectories — the exact set `leanc` places on
+    every link line it performs). Anything left over is a hard build failure
+    naming the symbols and `ffi/duckdb_glibc_compat.c`, rather than a
+    consumer's `ld.lld` error three steps removed.
+
+    A versioned reference (`malloc@GLIBC_2.17`) must match a definition with
+    that exact version (`nm` renders a *default* version as `malloc@@…`,
+    normalized here); an unversioned one may bind to any definition of the
+    name. Measured on Ubuntu 24.04 (gcc 13) against the toolchain's ~2.28
+    glibc: exactly `__isoc23_strtoul`, `__libc_single_threaded` and
+    `_dl_find_object` fail the check — the three `duckdb_glibc_compat.c`
+    exists to define. -/
+def auditSealedDuckdbLib (soFile : FilePath) (toolchainLibDirs : Array FilePath)
+    : IO Unit := do
+  let undef ← nmSymbolPairs #["-D", "--undefined-only", soFile.toString]
+  let mut defs : Array String := #[]
+  for dir in toolchainLibDirs do
+    unless ← dir.pathExists do
+      continue
+    for entry in (← dir.readDir) do
+      let ext := entry.path.extension.getD ""
+      unless ext == "so" || ext == "a" do
+        continue
+      for (n, _) in (← nmSymbolPairs #["-D", "--defined-only", entry.path.toString] (tolerant := true)) do
+        defs := defs.push (n.replace "@@" "@")
+      for (n, _) in (← nmSymbolPairs #["--defined-only", entry.path.toString] (tolerant := true)) do
+        defs := defs.push (n.replace "@@" "@")
+  let stripVersion (n : String) : String := (n.splitOn "@").headD n
+  let defExact := defs
+  let defBase := defs.map stripVersion
+  let mut missing : Array String := #[]
+  for (n, weak) in undef do
+    if weak then
+      continue
+    let n := n.replace "@@" "@"
+    let ok :=
+      if n.contains "@" then
+        defExact.contains n
+      else
+        defBase.contains (stripVersion n)
+    unless ok do
+      missing := missing.push n
+  unless missing.isEmpty do
+    throw <| IO.userError s!"\
+[linen] libduckdb_sealed.so references symbols Lean's bundled glibc does not \
+provide:\n\
+{missing.foldl (fun a n => a ++ "    " ++ n ++ "\n") ""}\
+The host C++ runtime archives sealed in (libstdc++.a/libgcc*.a) were built \
+against a newer glibc than the toolchain's. Every *executable* link will \
+fail under ld.lld's --no-allow-shlib-undefined (library links will not, \
+which is why this builds green until a consumer's lean_exe hits it).\n\
+\n\
+  Extend ffi/duckdb_glibc_compat.c with a shim for each symbol above — \
+each must delegate to the older-glibc equivalent or answer the \
+conservative constant, never guess at real behaviour. See that file's \
+header for the three already covered and why each is safe.\n\
+\n\
+  Background: docs/linking.md section 4."
+
 /-- Refuse to continue when DuckDB cannot be sealed on Linux.
 
     `duckdbSealedArchives` warns and answers `none` when a piece is missing, and
@@ -561,7 +672,7 @@ run_cmd do
 -- targets. OpenSSL needs none of them: Lean's toolchain ends every link with
 -- `-lssl -lcrypto` against its bundled static archives (see `nativeLinkArgs`).
 package linen where
-  version := v!"1.1.0"
+  version := v!"1.2.0"
   moreLinkArgs := nativeLinkArgs
 
 -- ── Native FFI (POSIX sockets + kqueue/epoll, PostgreSQL libpq) ──
@@ -660,6 +771,23 @@ target duckdb.o pkg : FilePath := do
   let weakArgs := #["-I", (← getLeanIncludeDir).toString] ++ duckdbIncludeArgs
   buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
 
+/-- Compile `ffi/duckdb_glibc_compat.c` — the shims for the handful of
+    host-glibc symbols the sealed-in C++ runtime references but Lean's
+    bundled glibc predates (measured: `__isoc23_strtoul`,
+    `__libc_single_threaded`, `_dl_find_object`) — into an object file.
+    Only ever linked into `libduckdb_sealed.so` (see `duckdbSealedLib`),
+    never into `linenffi`, so a host whose runtime needs none of them pays
+    nothing.
+    `-fvisibility=hidden` is what keeps the shims private to that one
+    library: the references live inside it, resolve at its link time, and
+    export nothing that could interpose a real glibc symbol. See the C
+    file's header for what each shim does and why each is safe. -/
+target duckdb_compat.o pkg : FilePath := do
+  let oFile := pkg.buildDir / "ffi" / "duckdb_compat.o"
+  let srcJob ← inputTextFile <| pkg.dir / "ffi" / "duckdb_glibc_compat.c"
+  buildO oFile srcJob #[] (traceArgs := #["-O2", "-fPIC", "-fvisibility=hidden"])
+    (extraDepTrace := getLeanTrace)
+
 /-- Link `duckdb.o` plus DuckDB's static archive, a static libstdc++ and a
     static libgcc into one self-contained shared library, localizing every
     symbol that came from an archive.
@@ -683,10 +811,20 @@ target duckdb.o pkg : FilePath := do
     consumer, because `Tests` is `precompileModules`-enabled: a static DuckDB
     would be linked into each of the ~20 DuckDB test modules' `:dynlib`s
     separately. (`Linen` itself no longer precompiles — see its comment
-    below — but `Tests` still does, so the reason stands.) -/
+    below — but `Tests` still does, so the reason stands.)
+
+    The glibc-compat object (`duckdb_compat.o`) links in beside the shim so
+    the host C++ runtime's references to newer-glibc symbols — the ones that
+    made every consumer *executable* link on Linux fail under
+    `--no-allow-shlib-undefined` while library links stayed green — resolve
+    inside this library. `linenffi`'s action below then audits the linked
+    artifact for any the shim does not cover, so a future host runtime that
+    references some newer symbol again is a loud, named failure here rather
+    than a consumer's `ld.lld` error. -/
 target duckdbSealedLib pkg : Dynlib := do
   let soFile := pkg.buildDir / "ffi" / nameToSharedLib "duckdb_sealed"
   let objJob ← duckdb.o.fetch
+  let compatJob ← duckdb_compat.o.fetch
   -- `duckdbSealedLinkArgs` already carries the `--start-group`ed archives and
   -- the matching `--exclude-libs`; see `duckdbSealedArchives`.
   --
@@ -698,7 +836,7 @@ target duckdbSealedLib pkg : Dynlib := do
   -- core-only archive — which then failed at load with `undefined symbol:
   -- duckdb::ExtensionHelper::LoadAllExtensions`. The archive set is a real
   -- input to this artifact and has to be traced like one.
-  buildSharedLib "duckdb_sealed" soFile #[objJob] #[]
+  buildSharedLib "duckdb_sealed" soFile #[objJob, compatJob] #[]
     (traceArgs := duckdbSealedLinkArgs ++ #["-fPIC", "-lm", "-ldl", "-lpthread"])
     (linker := "leanc")
 
@@ -728,8 +866,23 @@ extern_lib linenffi pkg := do
     -- `let _ ← duckdbSealedLib.fetch` only *schedules* that build rather than
     -- waiting for it, which lost the race and failed the `:shared` link with
     -- `ld.lld: error: unable to find library -lduckdb_sealed`.
+    --
+    -- Once the sealed library is *linked*, `auditSealedDuckdbLib` checks its
+    -- undefined symbols against everything the toolchain can resolve, before
+    -- anything else builds on top of it. This is the one link shape where a
+    -- shared library's undefined references are checked downstream (`ld.lld`
+    -- `--no-allow-shlib-undefined` on every `lean_exe`), and the failure it
+    -- prevents is invisible to every build in this repository — a library
+    -- link simply keeps the reference. The audit is why
+    -- `ffi/duckdb_glibc_compat.c`'s shim list cannot silently drift out of
+    -- date with whatever host C++ runtime sealed in.
     let sealedJob ← duckdbSealedLib.fetch
-    sealedJob.bindM fun _ => buildStaticLib staticLibFile objs
+    let sysLibDir ← getLeanSystemLibDir
+    let sealedSoFile := pkg.buildDir / "ffi" / nameToSharedLib "duckdb_sealed"
+    sealedJob.bindM fun _ => do
+      liftM <| auditSealedDuckdbLib sealedSoFile
+        #[sysLibDir, sysLibDir / "glibc", sysLibDir / "lean"]
+      buildStaticLib staticLibFile objs
   else
     objs := objs.push (← duckdb.o.fetch)
     buildStaticLib staticLibFile objs
@@ -785,12 +938,15 @@ lean_lib Tests where
 -- `consumer-exe` job in `.github/workflows/lean_action_ci.yml` is what now
 -- closes it, by linking a consumer executable that names libpq's file outright.
 --
--- This exe cannot be that test itself: it links `-lduckdb_sealed`, and the
--- sealed DuckDB `.so` is built here by the host `g++`, so it references
--- glibc-2.38 symbols (`__isoc23_strtoul`, `_dl_find_object`) that Lean's
--- bundled glibc predates — `ld.lld` rejects it under
--- `--no-allow-shlib-undefined`. That is a property of the sealed lib, not of
--- the link-flag recipe the consumer job exists to pin.
+-- This exe no longer dodges the DuckDB leg of that test: since
+-- `ffi/duckdb_glibc_compat.c` shims the host-glibc symbols the sealed
+-- library used to reference (`__isoc23_strtoul`, `__libc_single_threaded`,
+-- `_dl_find_object` — each newer than the glibc Lean bundles, each
+-- previously fatal under `ld.lld`'s `--no-allow-shlib-undefined`), it
+-- links `-lduckdb_sealed` like any other consumer would. The consumer job
+-- remains the *pinned* regression test (a `lean_exe` in a *separate
+-- package*, which Lake gives different treatment) — but it now links DuckDB
+-- too instead of importing around it.
 lean_exe linen where
   root := `Main
   needs := #[linenffi]

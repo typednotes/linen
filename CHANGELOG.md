@@ -7,6 +7,37 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-23
+
+### Fixed
+
+- **Consumer executables importing DuckDB no longer fail to link on Linux.**
+  The sealed `libduckdb_sealed.so` absorbs the *host's* static
+  `libstdc++.a`/`libgcc_eh.a`, which are built against the host glibc and so
+  referenced symbols the glibc Lean bundles predates — on Ubuntu 24.04:
+  `__isoc23_strtoul` (glibc 2.38), `__libc_single_threaded` (2.32) and
+  `_dl_find_object` (2.35). A shared-library link permits undefined
+  symbols, so every `lean_lib`/`Tests` build stayed green; `ld.lld` checks
+  them only when linking an *executable* (`--no-allow-shlib-undefined`), and
+  a consumer's `lean_exe` importing DuckDB failed with `undefined reference:
+  __isoc23_strtoul` while this repository's consumer job deliberately kept
+  DuckDB out of its test executable. `ffi/duckdb_glibc_compat.c` now links
+  hidden-visibility shims into the sealed library — delegations to the
+  older-glibc equivalents or conservative constants — so the library behaves
+  identically on every host. The CI consumer job now links *and runs* a
+  DuckDB-importing executable, the one link shape that ever caught this.
+
+### Added
+
+- **The sealed library's undefined symbols are audited on every build**
+  (`auditSealedDuckdbLib` in `lakefile.lean`): every non-weak undefined
+  dynamic symbol must be defined by the toolchain's own libraries, else the
+  build fails naming the symbols and `ffi/duckdb_glibc_compat.c` — so a
+  future host C++ runtime referencing some newer glibc symbol is a loud,
+  local build failure, not a consumer's `ld.lld` error.
+  `ci/check-sealed-duckdb.sh` asserts the three measured symbols stay
+  resolved in the artifact.
+
 ## [1.1.0] - 2026-09-23
 
 ### Fixed

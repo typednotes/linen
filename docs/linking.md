@@ -289,6 +289,56 @@ included. The archive list determines the library's contents and therefore
 belongs in `traceArgs`; in `weakArgs`, changing which archives are sealed does
 not invalidate the cached library, and CI restores `.lake` from cache.
 
+### 4.6 The host glibc, and why executable links are the only honest witness
+
+The sealed library absorbs the *host's* `libstdc++.a`/`libgcc_eh.a`/`libgcc.a`
+(whatever `g++ -print-file-name` finds), and those archives are built against
+the *host's* glibc. Lean ships its own, older glibc — the ~2.28-era set under
+the toolchain's `lib/glibc/` — and `leanc` links every executable against that.
+Measured on Ubuntu 24.04 (gcc 13, glibc 2.39), the host archives reference
+exactly three symbols the bundled glibc predates:
+
+| symbol | added in glibc | referenced from |
+| --- | --- | --- |
+| `__isoc23_strtoul` | 2.38 | `libstdc++.a` |
+| `__libc_single_threaded` | 2.32 | `libstdc++.a` |
+| `_dl_find_object` | 2.35 | `libgcc_eh.a` |
+
+A shared-library link permits undefined symbols, so the sealed library's own
+link — and every `lean_lib`/`Tests`/dynlib link on top of it — sails through
+with those references dangling. `ld.lld` checks them in one place only:
+linking an *executable*, under `--no-allow-shlib-undefined`. So a consumer's
+`lean_exe` importing DuckDB failed with
+
+```
+ld.lld: error: undefined reference: __isoc23_strtoul
+>>> referenced by libduckdb_sealed.so (disallowed by --no-allow-shlib-undefined)
+```
+
+while every build in this repository stayed green — a `lean_lib` never links
+`Scrt1.o`, and the CI consumer job's executable deliberately imported no
+DuckDB (see `lean_exe linen`'s comment in lakefile.lean at the time).
+
+`ffi/duckdb_glibc_compat.c` closes the gap: one object, linked only into the
+sealed library, defining hidden-visibility shims for the family of such
+symbols — each a delegation to the older-glibc equivalent
+(`__isoc23_strtoul` → `strtoul`; pre-C23 semantics is precisely what a
+pre-2.38 glibc provides) or the conservative constant
+(`__libc_single_threaded = 0`, "possibly multi-threaded", callers only use it
+to skip locks; `_dl_find_object = -1`, "not found", libgcc then falls back to
+its `dl_iterate_phdr` walk — the pre-2.35 behaviour everywhere). Hidden
+visibility means the shims export nothing, so they neither interpose nor are
+interposable on a host whose glibc genuinely provides the symbols.
+
+The shim list cannot be allowed to drift, so `lakefile.lean`'s
+`auditSealedDuckdbLib` re-derives it from the artifact on every build: every
+non-weak undefined dynamic symbol of the sealed library must be defined by
+something the toolchain itself puts on the link line (the `.so`/`.a` exports
+under `lib/`, `lib/glibc/` and `lib/lean/`), else the build fails naming the
+symbols and that C file. `ci/check-sealed-duckdb.sh` asserts the three
+measured ones are resolved in CI, and the consumer job now links *and runs* a
+DuckDB-importing executable — the one link shape that ever caught this.
+
 ## 5. Lean toolchain details
 
 ### 5.1 The export set is stable across releases

@@ -112,10 +112,44 @@ fi
 # Localized, so it must be looked for among *all* symbols rather than the
 # dynamic ones. Its absence is the silent feature downgrade that made the
 # core-only archive unacceptable in the first place.
-if ! nm "$SO" 2>/dev/null | grep -q 'CoreFunctionsExtension'; then
+#
+# Not `grep -q`: it exits at the first match, closing the pipe mid-stream,
+# so `nm` — with tens of thousands of symbols still to write — dies of
+# SIGPIPE, and under `set -o pipefail` that turns a *pass* into a false
+# "no CoreFunctionsExtension". It raced green on some hosts and failed
+# reproducibly on others (observed in Docker: nm exits 141 every run).
+# Filtering to /dev/null reads the whole stream, so `nm` always finishes.
+if ! nm "$SO" 2>/dev/null | grep 'CoreFunctionsExtension' >/dev/null; then
   echo "ERROR: no CoreFunctionsExtension symbols in $SO." >&2
   echo "  => Linux would get a DuckDB missing much of the SQL function" >&2
   echo "     library while macOS gets the full one." >&2
+  fail=1
+fi
+
+# ── 4c. Nothing undefined that a host glibc has but the bundled one lacks ──
+#
+# The third way this library has broken downstream: the host C++ runtime
+# sealed in references symbols newer than the glibc Lean bundles, which no
+# *library* link ever notices (shared libraries may keep undefined
+# references) but every *executable* link rejects under
+# `--no-allow-shlib-undefined`. That is the one link shape this repository's
+# own targets never produce, so it shipped for a release and only a
+# consumer's `lean_exe` saw it. `ffi/duckdb_glibc_compat.c` defines the
+# measured set (`__isoc23_strtoul`, `__libc_single_threaded`,
+# `_dl_find_object`); this asserts they are really resolved in the artifact,
+# and lakefile.lean's `auditSealedDuckdbLib` does the complete per-host check
+# (any non-weak undefined symbol outside the toolchain's own libraries) at
+# build time, so a *future* host runtime naming new symbols fails the build
+# here rather than a consumer's link.
+glibc_undef="$(nm -D --undefined-only "$SO" | awk '{print $NF}' \
+  | grep -E '^(__isoc23_|__libc_single_threaded$|_dl_find_object$)' || true)"
+if [ -n "$glibc_undef" ]; then
+  echo "ERROR: host-glibc symbols left undefined in $SO:" >&2
+  echo "$glibc_undef" | sed 's/^/  /' >&2
+  echo "  => every consumer executable link fails on these under" >&2
+  echo "     --no-allow-shlib-undefined. ffi/duckdb_glibc_compat.c should" >&2
+  echo "     have resolved them — see its header, and lakefile.lean's" >&2
+  echo "     auditSealedDuckdbLib." >&2
   fail=1
 fi
 
@@ -131,3 +165,4 @@ echo "  - no libstdc++.so.6 in DT_NEEDED (runtime absorbed)"
 echo "  - no undefined DuckDB symbols (archive set complete)"
 echo "  - $entry_points exported linen_duckdb_* entry points"
 echo "  - core_functions extension present"
+echo "  - no host-glibc symbols left undefined (executable links survive)"

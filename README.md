@@ -392,7 +392,17 @@ package myapp where
 ```
 
 For `Database.PostgreSQL` add `pkgAbsoluteLibs "libpq"`, for `Crypto.Zlib`
-`pkgAbsoluteLibs "zlib"`, and DuckDB's `lib` directory for `Database.DuckDB`.
+`pkgAbsoluteLibs "zlib"`. For `Database.DuckDB` the flags point at where
+linen put DuckDB, so they are platform-conditional: on Linux it is
+`-L<linen>/.lake/build/ffi -lduckdb_sealed` plus the same as an `-rpath`
+(linen seals DuckDB, its C++ runtime and a glibc-compat layer into one
+self-contained `libduckdb_sealed.so`, so nothing DuckDB-shaped is needed at
+run time); on macOS it is `-L<workspace>/.lake/duckdb -lduckdb` plus its
+`-rpath` (the pinned `libduckdb.dylib` linen downloads when your package
+elaborates its lakefile). Both must be absolute — an `-rpath` is resolved
+relative to the *executable* at run time, not the caller's directory. The
+`consumer` job in `.github/workflows/lean_action_ci.yml` is a complete,
+working recipe, including the executable link.
 
 **Why the absolute-path form exists.** A `lean_lib` never links the executable
 startup object, but your `lean_exe` does — and `pkgLinkFlags`' `-L<libdir>` is
