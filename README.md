@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen Tests --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen Tests --include='*.lean' | wc -l -->
-  <strong>780 modules</strong> · <strong>489 compile-time theorems</strong> · <strong>11181 <code>#guard</code> checks</strong>
+  <strong>787 modules</strong> · <strong>490 compile-time theorems</strong> · <strong>11265 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -251,6 +251,12 @@ for the full per-module feature list and module table.
   representations, index-space operators, and stencil-based convolution.
 - **`System.Console.Ansi` / `System.Exit` / `System.Log.FastLogger`** —
   terminal styling, process exit codes, and buffered logging.
+- **`System.GitFn`** — run a Lean function identified by its git location
+  (repo, commit, project, name, declared type) securely: the remote sources
+  are checked before compilation (plain, kernel-checked Lean only, effects
+  only through a monad in the type), compiled with your own toolchain and
+  checked again, then called as a JSON worker over stdio or HTTP — or
+  vendored into your project.
 - **`Graphics.Graphviz`** — typed Graphviz DOT that cannot be malformed
   (no dangling edges, typed attributes, proven quoting), and offline HTML pages
   rendering it with Graphviz compiled to WebAssembly.

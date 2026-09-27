@@ -951,6 +951,17 @@ lean_exe linen where
   root := `Main
   needs := #[linenffi]
 
+-- The `System.GitFn` integration test: it creates a local fixture repository,
+-- fetches and checks it with the secure policy, builds workers with nested
+-- Lake builds and calls them over stdio and HTTP. It needs `git` and the
+-- pinned toolchain and takes minutes, so it is an executable CI runs
+-- (`lake exe gitfn-integration`), not a `#guard`. `supportInterpreter`:
+-- parsing imports library environments, whose initializers must be able to run.
+lean_exe «gitfn-integration» where
+  root := `Integration.GitFn
+  needs := #[linenffi]
+  supportInterpreter := true
+
 -- Example programs live under `Examples/` and share one entrypoint:
 -- `lake exe examples <name> [args...]`.
 lean_lib Examples where

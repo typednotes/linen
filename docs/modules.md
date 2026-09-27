@@ -668,6 +668,31 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   `<!--` — from `raw!` literals (checked by the kernel), `RawText.ofString?`,
   or `RawText.jsonString` (proven safe for any input, `safe_of_lt_not_mem`).
 
+### `System.GitFn` — functions from git, run securely
+
+- `System.GitFn.Descriptor` — `GitFn`: a function identified by its
+  repository, commit (`CommitSha`, a full SHA by construction), project
+  directory, fully qualified name and declared type; `validate` (no option
+  injection into `git`, no path escaping the checkout), JSON (Lean core),
+  `resolve` (a branch/tag/`HEAD` to a SHA via `git ls-remote`).
+- `System.GitFn.Policy` — secure mode's check before any compilation: remote
+  sources parsed with the host's parser (loading only trusted library
+  environments) against allowlists of imports, commands, attributes and
+  options, rejecting `unsafe`, `partial`, `opaque`, `axiom`, `sorry`,
+  `native_decide`/`+native`, `run_tac`, `by_elab`, `include_str`, `#eval`,
+  macros/syntax/elab, `initialize`, `extern`/`implemented_by`/`export`/`init`,
+  and side effects outside `IO` (`panic`, `dbgTrace`, `unsafeBaseIO`, …); the
+  admitted modules are a greatest fixpoint over project imports.
+- `System.GitFn.Build` — fetch at the SHA (no hooks, no submodules), compile
+  the admitted sources with the host's toolchain in a generated package whose
+  only dependencies are the selected libraries, with a generated semantic
+  check (declared type defeq without coercion; no unsafe/partial/extern/
+  implemented_by remote constant or `panic`/`dbgTrace` use; no initializer;
+  axioms ⊆ `propext`/`Choice`/`Quot.sound`) and a JSON worker (stdio, or REST
+  over core `Std.Http`); `vendor` for static use.
+- `System.GitFn.Worker` — calling a worker: stdio sessions, HTTP services
+  (local or remote endpoints), exact JSON (Lean core) on the wire.
+
 ### `Graphics.Graphviz` — DOT that cannot be malformed
 
 - `Graphics.Graphviz` — typed DOT: `Graph k` with edges `Edge nodes.size`
@@ -2721,6 +2746,13 @@ the secrets, never their values.
 | `Linen.CDP.Endpoints` | the browser's HTTP discovery endpoints (`/json/version`, `/json/list`, …), `connectToTab` |
 | `Linen.CDP.Runtime` | the client runtime: `runClient`, `sendCommand`/`sendCommandWait`, `subscribe`/`unsubscribe` |
 | `Linen.CDP` | the package aggregator: `CDP.Domains` + `CDP.Runtime` |
+| `Linen.System.GitFn` | functions defined by their git location, run securely: re-exports `Descriptor`, `Policy`, `Build`, `Worker` |
+| `Linen.System.GitFn.Descriptor` | `GitFn` (repo, `CommitSha`, project, name, type), validation, JSON, `resolve` |
+| `Linen.System.GitFn.Policy` | secure mode's pre-compilation source check with the host parser: allowlists and forbidden constructs |
+| `Linen.System.GitFn.Build` | fetch at SHA, compile with the host toolchain + selected libraries, semantic check, stdio/HTTP worker, `vendor` |
+| `Linen.System.GitFn.Worker` | calling a worker over stdio or HTTP with Lean core JSON |
+| `Linen.Data.Name` | total reader of `Lean.Name` dotted syntax (`parse`, `roundTrips`) |
+| `Linen.Data.Json.Bridge` | `Data.Json.Value` ↔ `Lean.Json` conversions, exact except numbers (documented) |
 | `Linen.Graphics.Graphviz` | typed Graphviz DOT: `Fin`-indexed edges, kind-fixed edge operator, target-typed attributes, proven quoting (`lex_quote`) |
 | `Linen.Graphics.Graphviz.Html` | offline HTML pages rendering typed DOT with vendored Graphviz WebAssembly; compile-time script-safety check |
 | `Linen.Graphics.Netpbm` | `netpbm`-style parser for the PBM/PGM/PPM "portable anymap" image formats (ASCII/binary `P1`–`P6`) over `ByteArray`, via `Std.Internal.Parsec` |

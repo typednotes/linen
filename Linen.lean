@@ -576,6 +576,13 @@ import Linen.Network.WebApp.Server.WebSockets
 import Linen.CDP
 import Linen.Graphics.Netpbm
 import Linen.Graphics.Graphviz
+import Linen.System.GitFn
+import Linen.System.GitFn.Descriptor
+import Linen.System.GitFn.Policy
+import Linen.System.GitFn.Build
+import Linen.System.GitFn.Worker
+import Linen.Data.Name
+import Linen.Data.Json.Bridge
 import Linen.Graphics.Graphviz.Html
 import Linen.Graphics.Image.Utils
 import Linen.Graphics.Image.Interface.Elevator

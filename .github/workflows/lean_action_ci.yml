@@ -59,6 +59,14 @@ jobs:
       - name: Verify the sealed DuckDB library is self-contained
         run: ./ci/check-sealed-duckdb.sh
 
+      # `System.GitFn` end to end: a local, partly hostile fixture repository
+      # is fetched, checked by the secure policy, compiled by nested Lake
+      # builds and called over stdio and HTTP, and the test asserts that none
+      # of the fixture's own code (lakefile, `#eval`) ever ran. Not a
+      # `#guard`: it needs git, spawns processes and runs builds.
+      - name: GitFn integration test
+        run: lake exe gitfn-integration
+
   # ── Can a consumer build against this? ──────────────────────────────────────
   #
   # The axis standalone CI cannot test. When `linen` is a dependency, Lake

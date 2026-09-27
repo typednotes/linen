@@ -590,6 +590,13 @@ import Tests.Linen.CDP.EndpointsTest
 import Tests.Linen.CDP.RuntimeTest
 import Tests.Linen.Graphics.NetpbmTest
 import Tests.Linen.Graphics.GraphvizTest
+import Tests.Linen.System.GitFnTest
+import Tests.Linen.System.GitFn.DescriptorTest
+import Tests.Linen.System.GitFn.PolicyTest
+import Tests.Linen.System.GitFn.BuildTest
+import Tests.Linen.System.GitFn.WorkerTest
+import Tests.Linen.Data.NameTest
+import Tests.Linen.Data.Json.BridgeTest
 import Tests.Linen.Graphics.Graphviz.HtmlTest
 import Tests.Linen.Graphics.Image.UtilsTest
 import Tests.Linen.Graphics.Image.Interface.ElevatorTest
