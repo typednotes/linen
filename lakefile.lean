@@ -962,6 +962,16 @@ lean_exe «gitfn-integration» where
   needs := #[linenffi]
   supportInterpreter := true
 
+-- `System.GitFn` against a real, private GitHub repository (`typednotes/test`
+-- at a pinned commit), which carries its own expectations (`gitfn.json`).
+-- Needs network access and a credential for it; CI runs it with the
+-- repository's deploy key, when the `GITFN_DEPLOY_KEY` secret is set
+-- (`lake exe gitfn-remote`).
+lean_exe «gitfn-remote» where
+  root := `Integration.GitFnRemote
+  needs := #[linenffi]
+  supportInterpreter := true
+
 -- Example programs live under `Examples/` and share one entrypoint:
 -- `lake exe examples <name> [args...]`.
 lean_lib Examples where

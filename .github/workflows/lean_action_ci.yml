@@ -38,6 +38,11 @@ jobs:
         #   macos-latest       Darwin arm64 — the dynamic dylib path, no sealing
         os: [ubuntu-24.04, ubuntu-24.04-arm, macos-latest]
     runs-on: ${{ matrix.os }}
+    # The private half of `typednotes/test`'s read-only deploy key, for
+    # `gitfn-remote` below. Empty where secrets are not available (forks'
+    # pull requests).
+    env:
+      GITFN_DEPLOY_KEY: ${{ secrets.GITFN_DEPLOY_KEY }}
 
     steps:
       - uses: actions/checkout@v5
@@ -69,6 +74,33 @@ jobs:
       # `#guard`: it needs git, spawns processes and runs builds.
       - name: GitFn integration test
         run: lake exe gitfn-integration
+
+      # `System.GitFn` against a real, private GitHub repository:
+      # `typednotes/test` at the commit pinned in `Integration/GitFnRemote.lean`,
+      # fetched by SHA and checked against the expectations it carries
+      # (`gitfn.json`). One leg: what it adds over `gitfn-integration` is the
+      # network fetch and more cases, not a platform axis.
+      #
+      # Access is the repository's read-only deploy key. The descriptor keeps
+      # its HTTPS URL; an `insteadOf` scoped to that one repository sends git
+      # there over SSH, with the key, so no other fetch of the job uses it.
+      # GitHub's SSH host keys come from its API, over HTTPS, not from the
+      # first connection.
+      - name: GitFn remote test (typednotes/test)
+        if: matrix.os == 'ubuntu-24.04' && env.GITFN_DEPLOY_KEY != ''
+        env:
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$GITFN_DEPLOY_KEY" > "$HOME/.ssh/gitfn_test"
+          chmod 600 "$HOME/.ssh/gitfn_test"
+          curl -fsSL https://api.github.com/meta | jq -r '.ssh_keys[] | "github.com " + .' > "$HOME/.ssh/gitfn_known_hosts"
+          git config --global url."git@github.com:typednotes/test".insteadOf https://github.com/typednotes/test
+          git config --global core.sshCommand "ssh -i $HOME/.ssh/gitfn_test -o IdentitiesOnly=yes -o UserKnownHostsFile=$HOME/.ssh/gitfn_known_hosts -o StrictHostKeyChecking=yes"
+          lake exe gitfn-remote
+      - name: GitFn remote test skipped
+        if: matrix.os == 'ubuntu-24.04' && env.GITFN_DEPLOY_KEY == ''
+        run: echo "::warning::GITFN_DEPLOY_KEY is not set; the GitFn remote test (typednotes/test) did not run"
 
   # ── Can a consumer build against this? ──────────────────────────────────────
   #

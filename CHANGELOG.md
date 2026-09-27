@@ -7,6 +7,19 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+### Added
+
+- **`lake exe gitfn-remote`**: `System.GitFn` against a real, private GitHub
+  repository, `typednotes/test`, at a pinned commit — an authenticated
+  `git fetch` of a SHA, as a real descriptor needs. The repository carries
+  its expectations (`gitfn.json`): the modules the policy must exclude and
+  why (one per reason), the functions that must build and their calls' results
+  (over stdio, and HTTP for some), the descriptors that must be rejected, and
+  markers its hostile lakefile and `#eval` would leave. CI runs it on the
+  Linux x86_64 leg with the repository's read-only deploy key, when the
+  `GITFN_DEPLOY_KEY` secret is set, and warns when it is not;
+  `GITFN_TEST_REPO`/`GITFN_TEST_COMMIT` point it elsewhere.
+
 ## [1.5.0] - 2026-09-27
 
 ### Added
