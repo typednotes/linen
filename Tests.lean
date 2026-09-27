@@ -25,6 +25,7 @@ import Tests.Linen.Control.Monad.ReaderTest
 import Tests.Linen.Control.Monad.StateTest
 import Tests.Linen.Control.Monad.STMTest
 import Tests.Linen.Control.Monad.EffectTest
+import Tests.Linen.Control.Monad.Effect.HandlerTest
 import Tests.Linen.Control.Monad.Effect.ReaderTest
 import Tests.Linen.Control.Monad.Effect.StateTest
 import Tests.Linen.Control.Monad.Effect.ErrorTest
@@ -61,6 +62,12 @@ import Tests.Linen.Control.Profunctor.CayleyTest
 import Tests.Linen.Control.Profunctor.RanTest
 import Tests.Linen.Control.Profunctor.YonedaTest
 import Tests.Linen.Control.ProfunctorTest
+import Tests.Linen.Control.ReactiveTest
+import Tests.Linen.Control.Reactive.GraphTest
+import Tests.Linen.Control.Reactive.BuilderTest
+import Tests.Linen.Control.Reactive.RunTest
+import Tests.Linen.Control.Reactive.JsonTest
+import Tests.Linen.Control.Reactive.GraphvizTest
 import Tests.Linen.Control.LensTest
 import Tests.Linen.Control.Lens.Internal.ProfunctorTest
 import Tests.Linen.Control.Lens.Internal.IndexedTest
@@ -240,7 +247,7 @@ import Tests.Linen.Text.Pandoc.Readers.HTMLTest
 import Tests.Linen.Text.Pandoc.Readers.MarkdownTest
 import Tests.Linen.Text.Pandoc.Readers.NativeTest
 import Tests.Linen.Text.Pandoc.TemplatesTest
-import Tests.Linen.Text.Pandoc.Writers.BlazeTest
+import Tests.Linen.Text.Pandoc.Writers.HtmlLayoutTest
 import Tests.Linen.Text.Pandoc.Writers.HTMLTest
 import Tests.Linen.Text.Pandoc.Writers.MarkdownTest
 import Tests.Linen.Text.Pandoc.Writers.MathTest
@@ -582,6 +589,8 @@ import Tests.Linen.CDP.Domains.BackgroundServiceTest
 import Tests.Linen.CDP.EndpointsTest
 import Tests.Linen.CDP.RuntimeTest
 import Tests.Linen.Graphics.NetpbmTest
+import Tests.Linen.Graphics.GraphvizTest
+import Tests.Linen.Graphics.Graphviz.HtmlTest
 import Tests.Linen.Graphics.Image.UtilsTest
 import Tests.Linen.Graphics.Image.Interface.ElevatorTest
 import Tests.Linen.Graphics.Image.InterfaceTest

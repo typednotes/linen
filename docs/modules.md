@@ -164,6 +164,28 @@ the project overview and quick start.
 - `Control.Arrow` / `ArrowChoice` — arrows over a `Category`: `arr`, `first`,
   `second`, `split`, and (over `Sum`) `left`, `right`, `fanin`, with `Fun`
   instances.
+- `Control.Reactive` — typed reactive graphs, `linen`-original: DAGs of
+  observables. Split into `Control.Reactive.Graph` (the data: operators `Op`,
+  nodes, function table, labels, with the proofs every `Graph` carries —
+  `WellFormed`: acyclic, arities right, functions registered; `Labelled`:
+  labels unique — plus `Codec`, `Callable`, `Signature`),
+  `Control.Reactive.Builder` (the `Reactive` monad: `subject`, the operators
+  `map`/`mapE`/`mapM`/`mapFn`, `filter`, `scan`/`scanFn`, `take`, `skip`,
+  `distinctUntilChanged`, `merge`, `mergeWith`, `combineLatest`,
+  `withLatestFrom`, `zip`, `throttleTime`, `debounceTime`, `delay`; `fn` and
+  `rebind`; `Operator.define` for graphs as operators, spliced into other
+  graphs; labels via `node x ← e` and `scope`) and `Control.Reactive.Run` (the
+  meaning: occurrences in, every node's stream out — `Trace` — or only
+  selected results; instants in topological order, at most one value per node
+  per instant, ReactiveX notifications, virtual time with a scheduler for the
+  timed operators whose termination is checked; `Session` for incremental
+  runs, `pushAll_append`). Names follow ReactiveX (RxJS, rxRust); semantics
+  follow reactive-banana; `Data.Stream` (streamly) stays the pull-based,
+  linear stream library, and `Control.Arrow` needs `proc` notation Lean lacks.
+- `Control.Reactive.Json` — reactive graphs (functions bound by label via a
+  `Registry`), logs of occurrences and traces as JSON; exact label round trip.
+- `Control.Reactive.Graphviz` — a reactive graph as typed DOT, optionally
+  showing a run.
 - `Control.Exception.bracket` / `onException` — the IO resource/cleanup patterns
   core lacks as functions (`try`/`catch`/`finally` map to `IO.toBaseIO`/`tryCatch`/
   `tryFinally`), built on `tryFinally` / `tryCatch`.
@@ -203,6 +225,18 @@ the project overview and quick start.
   guard against quadratic left-nested `>>=`; the direct Freer encoding is
   behaviour-identical) and `Control.Monad.Freer.TH` with it (no Template
   Haskell in Lean).
+- `Control.Monad.Effect.Handler` — canonical handlers and running a whole row
+  with them, `linen`-original: `Handler eff m` is an effect's canonical
+  handler into `m` (the function `interpretM` takes, as an instance),
+  `Handlers effs m` is derived for a row whose every effect has one, and
+  `Eff.handle` runs such a row in `m` — agreeing with each effect's own
+  `run…` on a single-effect row (`Eff.handle_singleton`). `Trace` (to
+  stderr), `Error ε` (as `IO.userError`), `HTTP cap` and `FileSystem cap`
+  have `Handler _ IO` instances; effects needing configuration
+  (`Reader`, `State`, `PostgreSQL`, …) deliberately do not. Not core's
+  `MonadLift`: its source is a `semiOutParam`, so it cannot be instantiated
+  for an effect indexed by a capability. `Handlers` is not a whitelist — a
+  runner that must refuse some rows inspects the row itself.
 - `Control.Monad.Effect.Reader` / `.State` — the reader and state effects
   expressed over `Eff`, illustrating the row mechanism and composing in a
   single computation. Not replacements for the mtl-style
@@ -228,8 +262,8 @@ the project overview and quick start.
 - `Control.Monad.Effect.Fresh` — hand out distinct `Nat`s: `fresh`/`runFresh`.
 - `Control.Monad.Effect.Trace` — diagnostics in the row, so `Eff [Trace] α`
   announces that a computation logs and a row without `Trace` provably does
-  not: `trace`, with `runTrace` printing to stdout and `runTracePure`
-  collecting purely.
+  not: `trace`, with `runTrace` printing to stdout, `runTracePure`
+  collecting purely, and a `Handler Trace IO` printing to stderr.
 - `Control.Monad.Effect.FileSystem` — a capability-restricted filesystem
   effect, `linen`-original, showing what an effect system gains from dependent
   types, at two strengths. **Permissions:** `FileSystem cap` is indexed by a
@@ -629,6 +663,25 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   `<img>` are all Lean type errors, not browser auto-corrections. Attributes
   go through the same `private`-constructor discipline as `Web.Css.Declaration`,
   and `elem!` macro sugar builds elements from a tag/attrs/children triple.
+  `<script>`/`<style>` bodies are `RawText`: text with a proof (`RawText.Safe`)
+  that it contains no `</script`/`</style` (any case) nor, for scripts,
+  `<!--` — from `raw!` literals (checked by the kernel), `RawText.ofString?`,
+  or `RawText.jsonString` (proven safe for any input, `safe_of_lt_not_mem`).
+
+### `Graphics.Graphviz` — DOT that cannot be malformed
+
+- `Graphics.Graphviz` — typed DOT: `Graph k` with edges `Edge nodes.size`
+  (endpoints are `Fin`s, so no dangling edge), the edge operator fixed by the
+  kind (`digraph`/`->`, `graph`/`--`), `Attr .graph/.node/.edge` with private
+  constructors and typed values (`Shape`, `Color`, `Arrow`, `RankDir`, `Nat`
+  sizes), and `quote`, for which `lex_quote` proves against a model of DOT's
+  lexer that no text can end its string early. Not modelled (so never
+  produced): subgraphs/clusters, ports, HTML-like labels, record shapes.
+- `Graphics.Graphviz.Html` — `page g`: a complete offline HTML document that
+  renders `g` with Graphviz compiled to WebAssembly (`@hpcc-js/wasm-graphviz`
+  1.29.1, vendored in `vendor/hpcc-js-wasm-graphviz/`, embedded with
+  `include_str`); `bundle_safe` checks at compile time that the bundle cannot
+  close its `<script>`.
 
 ### `Database.PostgreSQL` — libpq bindings
 
@@ -1951,7 +2004,7 @@ block-mapping/sequence/scalar subset over `Std.Internal.Parsec` inside
 `Readers/Markdown.lean` (indentation-nested mappings, `- item` sequences,
 quoted/unquoted scalars, `true`/`false` — no anchors/tags/flow-collections).
 `blaze-html`/`blaze-markup` substitute onto the existing `Linen.Web.Html` for
-`Writers.Blaze` (the same fixed-tag-set tradeoff `Writers.HTML` itself makes,
+`Writers.HtmlLayout` (the same fixed-tag-set tradeoff `Writers.HTML` itself makes,
 rendering tags as escaped strings directly rather than through `Web.Html`).
 
 Deferred, per the `dependencies.md`'s "Scope note": the long tail of exotic
@@ -2243,6 +2296,12 @@ the secrets, never their values.
 | `Linen.Control.Exception` | IO `bracket` / `onException` (resource safety & failure cleanup) |
 | `Linen.Control.Exception.Lens` | `lens`'s `Control.Exception.Lens`: one `Prism' IO.Error _` per `IO.Error` constructor (`_UserError`, `_NoFileOrDirectory`, `_AlreadyExists`, …), re-exporting `Control.Monad.Error.Lens`'s combinators |
 | `Linen.Control.AutoUpdate` | periodically cached values on a dedicated thread |
+| `Linen.Control.Reactive` | typed reactive graphs (DAGs of observables): re-exports `Graph`, `Builder`, `Run` |
+| `Linen.Control.Reactive.Graph` | reactive graph data: `Op` (ReactiveX operators), `Node`, proof-carrying `Graph` (`WellFormed`, `Labelled`), queries, `Codec`/`Callable`/`Signature` |
+| `Linen.Control.Reactive.Builder` | the `Reactive` monad: `Observable`/`Subject`/`FnRef`, `subject`, operators, `combineLatest`/`withLatestFrom`/`zip`, `Operator` (graphs as operators), `node x ← e`, `scope`, `rebind` |
+| `Linen.Control.Reactive.Run` | running reactive graphs over virtual time: `Occurrence`, `Notification`, `Trace`, `Session`, `Selection`, `run`/`runFor`/`valuesFor`/`runSelected` |
+| `Linen.Control.Reactive.Json` | reactive graphs, logs of occurrences and traces as JSON; `Registry`, exact label round trip |
+| `Linen.Control.Reactive.Graphviz` | reactive graphs (and runs) as typed Graphviz DOT |
 | `Linen.Control.Concurrent.MVar` | promise-based synchronisation variable (`take`/`put`/`swap`/…) |
 | `Linen.Control.Concurrent.Chan` | unbounded FIFO channel with `dup` (`write`/`read`/`tryRead`) |
 | `Linen.Control.Concurrent.QSem` | quantity semaphore (`wait`/`signal`/`withSem`) |
@@ -2252,6 +2311,7 @@ the secrets, never their values.
 | `Linen.Control.Monad.STM` | STM = `BaseIO (STMResult _)`, global-mutex-serialized: `atomically`/`retry`/`orElse`/`check` |
 | `Linen.Data.OpenUnion` | open union over an effect row: `Union` (`here`/`there`/`elim0`), `Member` (`inj`/`prj`) |
 | `Linen.Control.Monad.Effect` | the `Eff` monad over an effect row: `send`/`run`/`runM`/`interpret`/`interpretM`/`reinterpret`/`raise` |
+| `Linen.Control.Monad.Effect.Handler` | canonical handlers: `Handler eff m`, row-derived `Handlers effs m`, `Eff.handle`; `Handler _ IO` for `Trace`/`Error`/`HTTP`/`FileSystem` |
 | `Linen.Control.Monad.Effect.Reader` | reader effect over `Eff`: `ask`/`asks`/`runReader`/`withReader` |
 | `Linen.Control.Monad.Effect.State` | state effect over `Eff`: `get`/`put`/`modify`/`gets`/`runState`/`evalState`/`execState` |
 | `Linen.Control.Monad.Effect.FileSystem` | capability-restricted filesystem effect: `Capability`, `CanRead`/`CanWrite`/`CanDelete` proof obligations, `readFile`/`writeFile`/`deleteFile`, `runFileSystem` |
@@ -2316,7 +2376,7 @@ the secrets, never their values.
 | `Linen.Network.URI` | RFC 3986 URI parsing/rendering/resolution (`network-uri`): `parseURI`, percent-encoding, `relativeTo`/`relativeFrom` |
 | `Linen.Web.Cookie` | RFC 6265 cookie parse/render: `parseCookies`/`renderCookies`, `SetCookie` + `parseSetCookie`/`renderSetCookie` |
 | `Linen.Web.Css` | typed CSS: `private`-constructor `Declaration`/`FontWeight` (`by decide`-bounded), `Length`/`Color`/`Selector`/`Rule`/`Stylesheet`, `rule!` macro |
-| `Linen.Web.Html` | typed HTML5: `Category`-indexed `Html` encodes the content model at compile time; `private`-constructor `Attr`, `elem!` macro |
+| `Linen.Web.Html` | typed HTML5: `Category`-indexed `Html` encodes the content model at compile time; `private`-constructor `Attr`, `elem!` macro; `RawText` bodies for `script`/`styleSheet` that provably cannot close their element |
 | `Linen.DataFrame.Internal.Types` | typed tabular `DataFrame` with a proven rectangular invariant; `Value`/`Column`/`ColumnType` + smart constructors |
 | `Linen.DataFrame.IO.CSV` | RFC 4180 CSV `parseCsv`/`toCsv`/`readCsv`/`writeCsv` with type inference |
 | `Linen.DataFrame.Internal.Column` | column ops: `inferType`/`mk'`/`mapValues`/`filterByMask`/`toFloats`/`unique`/… |
@@ -2661,6 +2721,8 @@ the secrets, never their values.
 | `Linen.CDP.Endpoints` | the browser's HTTP discovery endpoints (`/json/version`, `/json/list`, …), `connectToTab` |
 | `Linen.CDP.Runtime` | the client runtime: `runClient`, `sendCommand`/`sendCommandWait`, `subscribe`/`unsubscribe` |
 | `Linen.CDP` | the package aggregator: `CDP.Domains` + `CDP.Runtime` |
+| `Linen.Graphics.Graphviz` | typed Graphviz DOT: `Fin`-indexed edges, kind-fixed edge operator, target-typed attributes, proven quoting (`lex_quote`) |
+| `Linen.Graphics.Graphviz.Html` | offline HTML pages rendering typed DOT with vendored Graphviz WebAssembly; compile-time script-safety check |
 | `Linen.Graphics.Netpbm` | `netpbm`-style parser for the PBM/PGM/PPM "portable anymap" image formats (ASCII/binary `P1`–`P6`) over `ByteArray`, via `Std.Internal.Parsec` |
 | `Linen.Codec.Picture.Types` | `Image`/`MutableImage`/`DynamicImage`, pixel classes, and every concrete pixel type |
 | `Linen.Codec.Picture.VectorByteConversion` | `Array UInt8` ↔ `ByteArray` conversion |
@@ -2789,7 +2851,7 @@ the secrets, never their values.
 | `Linen.Text.Pandoc.Templates` | `pandoc`'s `Text.Pandoc.Templates`: template-free `compileTemplate`/`renderTemplate`/`getDefaultTemplate` stand-ins (the full `doctemplates` grammar is out of scope) |
 | `Linen.Text.Pandoc.Writers.Shared` | `pandoc`'s `Text.Pandoc.Writers.Shared`: cross-writer helpers — template-context fields, metadata lookups, HTML attribute/CSS helpers, math/typographic helpers, `toLegacyTable`, and the ASCII `gridTable` layout engine |
 | `Linen.Text.Pandoc.Writers.Math` | `pandoc`'s `Text.Pandoc.Writers.Math`: math-conversion entry points, scoped to raw-TeX/MathML passthrough (`texmath` is out of scope) |
-| `Linen.Text.Pandoc.Writers.Blaze` | `pandoc`'s `Text.Pandoc.Writers.Blaze`: a `blaze-html`/`blaze-markup`-equivalent renderer retargeted onto `Linen.Web.Html`'s typed `Html Category` tree |
+| `Linen.Text.Pandoc.Writers.HtmlLayout` | `pandoc`'s `Text.Pandoc.Writers.Blaze`, renamed: lays `Linen.Web.Html`'s typed `Html Category` tree out as a breakable `Text.DocLayout` `Doc` (upstream walks `blaze-html` markup) |
 | `Linen.Text.Pandoc.Readers.Native` | `pandoc`'s `Text.Pandoc.Readers.Native`: parses the AST's own `Show`-shaped literal syntax via hand-written recursive descent (Lean has no derived `Read`) |
 | `Linen.Text.Pandoc.Writers.Native` | `pandoc`'s `Text.Pandoc.Writers.Native`: the inverse pretty-printer emitting that same unqualified-constructor value syntax |
 | `Linen.Text.Pandoc.Readers.HTML` | `pandoc`'s `Text.Pandoc.Readers.HTML` (+ tagsoup): HTML→AST, folding in a bounded `Tag`/`tokenize` HTML tokenizer as the `tagsoup` substitute |

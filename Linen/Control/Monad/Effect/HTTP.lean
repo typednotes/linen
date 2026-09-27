@@ -74,6 +74,7 @@
   through `Client.connect` / `Client.performRequest`. No new FFI.
 -/
 import Linen.Control.Monad.Effect
+import Linen.Control.Monad.Effect.Handler
 import Linen.Network.HTTP.Types.Method
 import Linen.Network.HTTP.Types.URI
 import Linen.Network.HTTP.Client.Types
@@ -507,6 +508,18 @@ def sendOnce (req : Request) : IO Response := do
 /-- Run an HTTP computation over the real network. -/
 def runHTTP (cap : Capability) {α : Type} : Eff [HTTP cap] α → IO α :=
   runHTTPWith cap sendOnce
+
+/-- HTTP's configuration-free meaning in `IO` is the real network, through
+    `sendOnce` — so an `HTTP` effect can sit in any row run by `Eff.handle`. -/
+instance instHandlerHTTPIO {cap : Capability} : Handler (HTTP cap) IO where
+  handle
+    | .request m _ url _ headers query body => sendOnce (toClientRequest m url headers query body)
+
+/-- On its own row, `Eff.handle` into `IO` is `runHTTP`. -/
+theorem handle_eq_runHTTP (cap : Capability) {α : Type} (m : Eff [HTTP cap] α) :
+    Eff.handle m = runHTTP cap m := by
+  rw [Eff.handle_singleton]
+  rfl
 
 -- ── Common capabilities ─────────────────────────────────────────────────────
 

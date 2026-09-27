@@ -8,7 +8,8 @@
 
   Upstream's `writeHtml5`/`writeHtml4` walk the AST, dispatching each `Block`
   and `Inline` constructor to a `blaze-html` markup fragment, then render the
-  markup through `Text.Pandoc.Writers.Blaze.layoutMarkup` into a `Doc` and
+  markup through `Text.Pandoc.Writers.HtmlLayout.layoutMarkup` (upstream
+  `Text.Pandoc.Writers.Blaze.layoutMarkup`) into a `Doc` and
   finally to `Text`.  Attributes flow through a shared `addAttrs` helper.
 
   ### Deviations from upstream (documented scope)
@@ -17,7 +18,7 @@
     `Web.Html` (the elected `blaze` replacement) models a *fixed* tag set that
     does not cover pandoc's full element range (`h4`–`h6`, `pre`, `code`,
     `em`/`strong`, `blockquote`, `sup`/`sub`, `dl`, `figure`, `table` internals,
-    …) — the same limitation noted in `Writers.Blaze`.  So this writer emits
+    …) — the same limitation noted in `Writers.HtmlLayout`.  So this writer emits
     tags **directly as escaped `String`s** (via `renderAttrs`/`escapeStringForXML`,
     the same shape `Writers.Shared.tagWithAttrs` produces), rather than routing
     through the typed `Web.Html` tree.  The element-dispatch table (which tag

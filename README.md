@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen Tests --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen Tests --include='*.lean' | wc -l -->
-  <strong>770 modules</strong> · <strong>468 compile-time theorems</strong> · <strong>10882 <code>#guard</code> checks</strong>
+  <strong>780 modules</strong> · <strong>489 compile-time theorems</strong> · <strong>11181 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -59,7 +59,9 @@ for the full per-module feature list and module table.
   an open union over an effect row (`Data.OpenUnion`), the `Eff` monad with
   `send`/`interpret`/`interpose`/`reinterpret`/`run`, and the
   `Reader`/`State`/`Error`/`Writer`/`NonDet`/`Coroutine`/`Fresh`/`Trace`
-  effects — so a signature *is* an effect whitelist. Its `FileSystem`, `HTTP`
+  effects — so a signature *is* an effect whitelist — plus canonical
+  `Handler`s so `Eff.handle` runs a whole row (e.g. `HTTP`, `FileSystem`,
+  `Trace`, `Error`) in `IO` at once. Its `FileSystem`, `HTTP`
   and `PostgreSQL` effects go past what Haskell's rows can say, indexing the
   effect on a `Capability` **value** and so constraining an effect's
   *arguments*, not just which effects are named:
@@ -83,6 +85,12 @@ for the full per-module feature list and module table.
     parameterised AST rather than strings, because a `String` of SQL cannot be
     checked by `decide` — and so the SQL sent cannot disagree with the SQL
     authorised.
+- **`Control.Reactive`** — typed reactive graphs, DAGs of observables with
+  ReactiveX's names (`Subject`, `map`, `scan`, `combineLatest`, `zip`,
+  `debounceTime`, …) and reactive-banana's glitch-free semantics over virtual
+  time; get every node's stream or just the results you select; graphs are
+  observables themselves and compose; acyclicity and arities are proven, and
+  graphs, logs and traces serialise to JSON and draw as DOT.
 - **`Control.Lens`** — a `lens`-style profunctor-optics library (plus its
   `profunctors`/`indexed-traversable` prerequisites): `Lens`/`Prism`/`Iso`/
   `Traversal`/`Fold`/`Getter`/`Setter`/`Review` and indexed variants, with
@@ -117,7 +125,8 @@ for the full per-module feature list and module table.
   interface plus an HTTP server implementing it.
 - **`Web.Html` / `Web.Css`** — typed HTML5/CSS construction where illegal
   nesting and property/value mismatches are compile-time errors, with `elem!`
-  and `rule!` macro sugar.
+  and `rule!` macro sugar; `<script>`/`<style>` bodies carry a proof that they
+  cannot close their element.
 - **`DataFrame`** — typed tabular data with a proven rectangular invariant,
   CSV I/O, joins, sorting, grouping/aggregation, and statistics.
 - **`Database.PostgreSQL` / `Database.SQL`** — libpq FFI bindings and a
@@ -242,6 +251,9 @@ for the full per-module feature list and module table.
   representations, index-space operators, and stencil-based convolution.
 - **`System.Console.Ansi` / `System.Exit` / `System.Log.FastLogger`** —
   terminal styling, process exit codes, and buffered logging.
+- **`Graphics.Graphviz`** — typed Graphviz DOT that cannot be malformed
+  (no dangling edges, typed attributes, proven quoting), and offline HTML pages
+  rendering it with Graphviz compiled to WebAssembly.
 - **`Graphics.Netpbm`** — a `netpbm`-style parser for the PBM/PGM/PPM
   "portable anymap" image formats (ASCII and binary variants, magic numbers
   `P1`–`P6`) over `ByteArray`.

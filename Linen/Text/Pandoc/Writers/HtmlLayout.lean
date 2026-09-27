@@ -1,5 +1,9 @@
 /-
-  `Linen.Text.Pandoc.Writers.Blaze` — the HTML→`Doc` layout shim.
+  `Linen.Text.Pandoc.Writers.HtmlLayout` — the HTML→`Doc` layout shim.
+
+  Named for what it does — laying typed `Web.Html` out as a breakable
+  `Text.DocLayout` document — rather than after the Haskell `blaze-html`
+  library its upstream walks (upstream module: `Text.Pandoc.Writers.Blaze`).
 
   ## Haskell source
 
@@ -41,7 +45,7 @@
 import Linen.Web.Html
 import Linen.Text.DocLayout
 
-namespace Linen.Text.Pandoc.Writers.Blaze
+namespace Linen.Text.Pandoc.Writers.HtmlLayout
 
 open _root_.Text.DocLayout
   (Doc literal space cr char flush hcatList)
@@ -136,7 +140,9 @@ def go {cat : Web.Html.Category} (wrap : Bool) : Web.Html.Html cat → Doc Strin
   | .table attrs rows => parent "table" attrs (hcatList (rows.map (go wrap)))
   | .tr attrs cells => parent "tr" attrs (hcatList (cells.map (go wrap)))
   | .td attrs children => parent "td" attrs (hcatList (children.map (go wrap)))
-  | .styleSheet css => flush (literal ("<style>" ++ css ++ "</style>"))
+  | .styleSheet css => flush (literal ("<style>" ++ css.text ++ "</style>"))
+  | .script attrs body => flush (parent "script" attrs (literal body.text))
+  | .meta_ attrs => leaf "meta" attrs
   | .fromPhrasing h => go wrap h
 
 /-- Render a `Web.Html.Html` node into a breakable layout `Doc` (upstream
@@ -144,4 +150,4 @@ def go {cat : Web.Html.Category} (wrap : Bool) : Web.Html.Html cat → Doc Strin
 def layoutMarkup {cat : Web.Html.Category} (h : Web.Html.Html cat) : Doc String :=
   go true h
 
-end Linen.Text.Pandoc.Writers.Blaze
+end Linen.Text.Pandoc.Writers.HtmlLayout

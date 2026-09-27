@@ -73,9 +73,12 @@ def renderItem (item : Item) : Html .listItem :=
 
 /-- The whole page: an add-item form and the `<ul>` of items. -/
 def renderPage (state : State) : String :=
+  -- A stylesheet is raw text: it must be checked not to close `<style>`
+  -- (typed CSS can still carry arbitrary strings, e.g. font names).
+  let css := Web.Css.Stylesheet.render
+    [rule! (.tag "body") { Web.Css.fontFamily ["system-ui", "sans-serif"], Web.Css.margin (.px 24) }]
   Html.renderDocument "TODO"
-    [styleSheet (Web.Css.Stylesheet.render
-      [rule! (.tag "body") { Web.Css.fontFamily ["system-ui", "sans-serif"], Web.Css.margin (.px 24) }])]
+    ((RawText.ofString? css).map styleSheet).toList
     [ h1 [] [text "TODO"]
     , form [action "/add", method_ "post"]
         [ input [name_ "text", placeholder "What needs doing?"]

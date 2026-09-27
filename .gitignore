@@ -9,3 +9,6 @@ out/
 
 # Claude
 .claude/
+
+# Playwright MCP
+.playwright-mcp

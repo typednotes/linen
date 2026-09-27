@@ -142,10 +142,12 @@ existing `linen` Haskell port > new Hackage import > raw port).
   already has a typed HTML-construction library (`Linen.Web.Html`, a blaze-like
   smart-constructor tree with escaping — read verbatim). Per the precedence
   rule (an existing `linen` module outranks a fresh package import),
-  `Writers.HTML`/`Writers.Blaze` target `Linen.Web.Html` rather than importing
+  `Writers.HTML`/`Writers.Blaze` (linen: `Writers.HtmlLayout`) target
+  `Linen.Web.Html` rather than importing
   `blaze-*`. Where pandoc needs Blaze features `Linen.Web.Html` lacks (raw
   custom leaves/parents, XHtml1-Transitional variant), a thin
-  `Writers.Blaze` shim adds them over the existing module.
+  `Writers.Blaze` shim (linen: `Writers.HtmlLayout`) adds them over the
+  existing module.
 - **`safe`** — used for a couple of total `head`/`read` helpers (`safeRead`,
   `headMay`); inlined as one-liners (same treatment `hedis`'s `errors` note).
 - **`split`** — `splitOn`/`chunksOf` list helpers; `Linen.Data.List` covers
@@ -301,7 +303,9 @@ Tiers are in build order; within a tier, order is not load-bearing.
 26. `Text.Pandoc.Writers.Math` → `Linen.Text.Pandoc.Writers.Math` — math
     rendering; **scoped to raw/MathML passthrough**, deferring the `texmath`
     TeX→MathML engine. Depends on #7, #18 (inferred).
-27. `Text.Pandoc.Writers.Blaze` → `Linen.Text.Pandoc.Writers.Blaze` — the
+27. `Text.Pandoc.Writers.Blaze` → `Linen.Text.Pandoc.Writers.HtmlLayout`
+    (renamed after what it does rather than the Haskell `blaze-html`
+    library it walks upstream) — the
     `Doc`↔HTML layout shim; retargeted onto `Linen.Web.Html` (see blaze
     substitution). Depends on #18 (inferred).
 

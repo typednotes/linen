@@ -144,6 +144,7 @@
   precedence the handler calls Lean core's `IO.FS` directly.
 -/
 import Linen.Control.Monad.Effect
+import Linen.Control.Monad.Effect.Handler
 
 namespace Control.Monad.Effect.FileSystem
 
@@ -504,6 +505,20 @@ def runFileSystem (cap : Capability) {α : Type} :
     | .readFile   _ path _      => IO.FS.readBinFile path.toFilePath
     | .writeFile  _ path _ data => IO.FS.writeBinFile path.toFilePath data
     | .deleteFile _ path _      => IO.FS.removeFile path.toFilePath
+
+/-- The filesystem's configuration-free meaning in `IO` is `IO.FS` — so a
+    `FileSystem` effect can sit in any row run by `Eff.handle`. -/
+instance instHandlerFileSystemIO {cap : Capability} : Handler (FileSystem cap) IO where
+  handle
+    | .readFile   _ path _      => IO.FS.readBinFile path.toFilePath
+    | .writeFile  _ path _ data => IO.FS.writeBinFile path.toFilePath data
+    | .deleteFile _ path _      => IO.FS.removeFile path.toFilePath
+
+/-- On its own row, `Eff.handle` into `IO` is `runFileSystem`. -/
+theorem handle_eq_runFileSystem (cap : Capability) {α : Type} (m : Eff [FileSystem cap] α) :
+    Eff.handle m = runFileSystem cap m := by
+  rw [Eff.handle_singleton]
+  rfl
 
 -- ── Common capabilities ─────────────────────────────────────────────────────
 

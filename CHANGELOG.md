@@ -7,6 +7,64 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-27
+
+### Added
+
+- **`Control.Reactive`** — typed reactive graphs: DAGs of **observables**.
+  Subjects (inputs) are streams of events; every node is a ReactiveX operator
+  over earlier nodes (`map`/`mapE`/`mapM`, `filter`, `scan`, `take`, `skip`,
+  `distinctUntilChanged`, `merge`, `mergeWith`, `combineLatest`,
+  `withLatestFrom`, `zip`, `throttleTime`, `debounceTime`, `delay`), taking
+  plain Lean functions (or `FnRef`s from `fn`, for sharing and `rebind`).
+  Names are ReactiveX's; semantics are reactive-banana's: instants visited in
+  topological order (no glitches), at most one value per node per instant then
+  an optional `error`/`complete`, explicit simultaneity, deterministic runs
+  over virtual time with a scheduler for the timed operators. A run returns
+  every node's stream (`Trace`) or only selected results (`Selection.only`,
+  `runFor`, `valuesFor`, `runSelected` — unneeded nodes are not computed), at
+  once or incrementally (`Session`, with `pushAll_append`). A graph is itself
+  an observable: `Operator.define` turns a builder over typed inputs into an
+  operator that splices into other graphs. Every `Graph` carries proofs that
+  it is acyclic with correct arities (`WellFormed`) and uniquely labelled
+  (`Labelled`); `node x ← e` labels after the source identifier, `scope`
+  qualifies reused sub-builders. Split into `Control.Reactive.Graph`,
+  `.Builder` and `.Run`.
+- **`Control.Reactive.Json`** — graphs (functions bound by label through a
+  `Registry`, invariants re-established on reading), logs of occurrences
+  (replayable against a newer version of a graph) and traces, as JSON; labels
+  round-trip exactly (`parseLabel`, `labelToJSON_string`).
+- **`Control.Reactive.Graphviz`** — a reactive graph as typed DOT, optionally
+  with a run (values, completion, errors); edges are built from the graph's
+  `WellFormed` proof.
+- **`Graphics.Graphviz`** — typed Graphviz DOT that cannot be malformed:
+  edges are `Fin nodes.size` (no dangling edge), the edge operator follows the
+  graph kind, attributes are typed by target with private constructors, and
+  `lex_quote` proves no text can escape its quotes.
+- **`Graphics.Graphviz.Html`** — self-contained, offline HTML pages rendering
+  DOT with Graphviz compiled to WebAssembly (`@hpcc-js/wasm-graphviz` 1.29.1,
+  vendored under `vendor/`, script-safety checked at compile time).
+- **`Web.Html`** — `script`, `meta_` and `charset`; `RawText tag`, a
+  `<script>`/`<style>` body with a proof that it cannot close its element,
+  built from `raw!` literals (kernel-checked), `RawText.ofString?`, or
+  `RawText.jsonString` (proven safe for any text).
+- **`Control.Monad.Effect.Handler`** — `Handler eff m` (an effect's canonical
+  handler into `m`), `Handlers effs m` (derived for rows) and `Eff.handle`,
+  which runs a whole row in `m`; `Eff.handle_singleton` proves it is
+  `interpretM` on a single-effect row. `Handler _ IO` instances for `Trace`
+  (stderr), `Error ε` (`IO.userError`, given `ToString ε`), `HTTP cap`
+  (`sendOnce`) and `FileSystem cap` (`IO.FS`), with
+  `handle_eq_runHTTP`/`handle_eq_runFileSystem`.
+
+### Changed
+
+- **Breaking: `Web.Html.styleSheet` takes a `RawText .style`**, not a
+  `String`: a stylesheet containing `</style>` could close its element and
+  inject markup. Wrap literals as `styleSheet (raw! "…")`.
+- **Breaking: `Linen.Text.Pandoc.Writers.Blaze` is renamed
+  `Linen.Text.Pandoc.Writers.HtmlLayout`** (namespace likewise), after what it
+  does rather than the Haskell library its upstream walks.
+
 ## [1.2.0] - 2026-09-23
 
 ### Fixed

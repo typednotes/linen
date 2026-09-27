@@ -1,12 +1,12 @@
 /-
-  Tests for `Linen.Text.Pandoc.Writers.Blaze` (the HTML→`Doc` layout shim,
+  Tests for `Linen.Text.Pandoc.Writers.HtmlLayout` (the HTML→`Doc` layout shim,
   retargeted onto `Linen.Web.Html`).
 -/
-import Linen.Text.Pandoc.Writers.Blaze
+import Linen.Text.Pandoc.Writers.HtmlLayout
 
-namespace Tests.Linen.Text.Pandoc.Writers.Blaze
+namespace Tests.Linen.Text.Pandoc.Writers.HtmlLayout
 
-open _root_.Linen.Text.Pandoc.Writers.Blaze
+open _root_.Linen.Text.Pandoc.Writers.HtmlLayout
 open _root_.Web.Html
 open _root_.Text.DocLayout (render)
 
@@ -52,4 +52,4 @@ open _root_.Text.DocLayout (render)
 #eval (render none (layoutMarkup (Html.p [] [Html.text "hello world"])) : String)
   == "<p>hello world</p>"
 
-end Tests.Linen.Text.Pandoc.Writers.Blaze
+end Tests.Linen.Text.Pandoc.Writers.HtmlLayout

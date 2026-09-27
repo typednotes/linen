@@ -17,6 +17,7 @@
   module's own tests be `#guard`s.
 -/
 import Linen.Control.Monad.Effect
+import Linen.Control.Monad.Effect.Handler
 
 namespace Control.Monad.Effect.Trace
 
@@ -43,6 +44,14 @@ def trace {effs : List (Type → Type)} [Member Trace effs] (msg : String) :
 def runTrace {α : Type} : Eff [Trace] α → IO α :=
   interpretM fun
     | .trace msg => IO.println msg
+
+/-- Tracing's configuration-free meaning in `IO`: the message, on **stderr**.
+    Unlike `runTrace` (stdout, upstream's choice), a row run by `Eff.handle` is
+    typically run by a program whose stdout is its own output — a service, a
+    command-line filter — which diagnostics must not interleave with. -/
+instance instHandlerTraceIO : Handler Trace IO where
+  handle
+    | .trace msg => IO.eprintln msg
 
 /-- Run a traced computation purely, collecting the messages in order instead of
     printing them, and removing the effect from the row.

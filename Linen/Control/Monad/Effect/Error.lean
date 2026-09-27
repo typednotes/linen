@@ -36,6 +36,7 @@
     device `Control.Monad.Effect.FileSystem` uses for its capability.
 -/
 import Linen.Control.Monad.Effect
+import Linen.Control.Monad.Effect.Handler
 
 namespace Control.Monad.Effect.Error
 
@@ -111,5 +112,12 @@ def orElseValue {ε : Type} {effs : List (Type → Type)} {α : Type}
     [HasError effs ε] [Member (Error ε) effs]
     (m : Eff effs α) (fallback : α) : Eff effs α :=
   catchError m (fun _ => .protect fallback)
+
+/-- An error's meaning in `IO` is an exception: the first throw aborts the run
+    with an `IO.userError` carrying the rendered error. Errors caught inside the
+    computation (`catchError`, `orElseValue`) never reach `IO`. -/
+instance instHandlerErrorIO {ε : Type} [ToString ε] : Handler (Error ε) IO where
+  handle
+    | .throw e => throw (IO.userError (toString e))
 
 end Control.Monad.Effect.Error
