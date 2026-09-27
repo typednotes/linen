@@ -15,9 +15,13 @@ def err? (e : Except String Lean.Name) (msg : String) : Bool :=
 #guard ok? (Data.Name.parse "double.1") (.num `double 1)
 #guard ok? (Data.Name.parse "«a.b».c") (.str (.str .anonymous "a.b") "c")
 #guard ok? (Data.Name.parse "«»") (.str .anonymous "")
-#guard err? (Data.Name.parse "a..b") "empty component"
-#guard err? (Data.Name.parse "a.1x") "label `a.1x`: component `1x` starts with a digit"
-#guard err? (Data.Name.parse "a.«b") "label `a.«b`: unterminated `«`"
+#guard ok? (Data.Name.parse "α.x'") (.str (.str .anonymous "α") "x'")
+-- Malformed input is an error, never a panic.
+#guard err? (Data.Name.parse "a..b") "`a..b` is not a name in Lean's dotted syntax"
+#guard (Data.Name.parse "a.1x") matches .error _     -- `String.toName` reaches `unreachable!`
+#guard (Data.Name.parse "a.«b") matches .error _     -- unterminated escape
+#guard (Data.Name.parse "a b") matches .error _      -- needs `«a b»`
+#guard (Data.Name.parse "") matches .error _
 
 -- `toString` round-trips for ordinary names, not for `anonymous`.
 #guard Data.Name.roundTrips `Foo.bar && Data.Name.roundTrips (.num `x 2)

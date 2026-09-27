@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen Tests --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen Tests --include='*.lean' | wc -l -->
-  <strong>788 modules</strong> · <strong>490 compile-time theorems</strong> · <strong>11270 <code>#guard</code> checks</strong>
+  <strong>788 modules</strong> · <strong>490 compile-time theorems</strong> · <strong>11280 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -255,8 +255,9 @@ for the full per-module feature list and module table.
   (repo, commit, project, name, declared type) securely: the remote sources
   are checked before compilation (plain, kernel-checked Lean only, effects
   only through a monad in the type), compiled with your own toolchain and
-  checked again, then called as a JSON worker over stdio or HTTP — also as a
-  node of a reactive graph — or vendored into your project.
+  checked again, then vendored into your project and compiled in as ordinary
+  functions, or called as a JSON-RPC worker over stdio or HTTP — either way
+  usable as the functions of a reactive graph.
 - **`Graphics.Graphviz`** — typed Graphviz DOT that cannot be malformed
   (no dangling edges, typed attributes, proven quoting), and offline HTML pages
   rendering it with Graphviz compiled to WebAssembly.
@@ -493,6 +494,7 @@ lake exe examples vault            # Data.Vault type-safe heterogeneous map: typ
 lake exe examples vector           # Data.Vector-derived Array combinators: generate/ifilter/folds/reductions/backpermute/slice — self-checking demo
 lake exe examples effects          # Control.Monad.Effect.{FileSystem,HTTP,PostgreSQL,Trace} capabilities over real files/socket/Postgres — self-checking demo
 lake exe examples effects no-db    # same, minus the Podman-started PostgreSQL section
+lake exe examples gitfn            # System.GitFn + Control.Reactive: functions from a git repo, vendored & compiled into a reactive graph — self-checking demo (needs git)
 lake exe examples todo             # Web.Html/Web.Css typed TODO list over Network.WebApp.Server — self-checks, then keeps serving; try:  curl localhost:<port>
 lake exe examples todo check       # same self-check round trip, but exits instead of staying up (for scripting)
 ```

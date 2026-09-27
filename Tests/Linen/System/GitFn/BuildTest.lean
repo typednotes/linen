@@ -31,18 +31,24 @@ def lf := lakefileSource "linen-gitfn" [Library.linen "/opt/linen"] mods true
 #guard !has (lakefileSource "p" [] mods false) "lean_exe"
 
 -- The check imports the admitted modules and checks the descriptor's claim.
-def ck := checkModuleSource fn mods
+def ck := checkModuleSource [fn, { fn with name := `Geo.origin, type := "Geo.Point" }] mods
 #guard has ck "import Geo.Basic\nimport «my-mod»\n"
-#guard has ck "abbrev LinenGitFnExpected := (Geo.Point → Nat → Geo.Point)"
-#guard has ck "let target : Name := `Geo.shift"
+#guard has ck "abbrev LinenGitFnExpected0 := (Geo.Point → Nat → Geo.Point)\n#eval linenGitFnCheck `Geo.shift ``LinenGitFnExpected0"
+#guard has ck "abbrev LinenGitFnExpected1 := (Geo.Point)\n#eval linenGitFnCheck `Geo.origin ``LinenGitFnExpected1"
 #guard has ck "Meta.isDefEq info.type e.value!"
 #guard has ck "collectAxioms target"
 #guard has ck "Lean.hasInitAttr env n"
+
+-- A vendored function is bound at its declared type in the importing project.
+#guard fn.definition `shift == "def shift : (Geo.Point → Nat → Geo.Point) := @Geo.shift"
 
 -- The worker binds the function at its declared type and serves both ways.
 def wk := workerSource fn mods
 #guard has wk "def linenGitFnEntry : (Geo.Point → Nat → Geo.Point) := @Geo.shift"
 #guard has wk "| [\"--http\", port] =>"
+#guard has wk "import Lean.Data.JsonRpc"
+#guard has wk "| .ok (.request id \"call\" params) =>"
+#guard has wk "| .ok (Message.notification \"exit\" _) => break"
 #guard has wk "req.line.method == Std.Http.Method.post && path == \"/call\""
 
 -- Cache keys depend on what determines the build, and only on that.

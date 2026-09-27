@@ -86,6 +86,12 @@ def main : IO UInt32 := do
     checks := checks ++ [("stdio call", r == .ok (Json.mkObj [("x", 11), ("y", 2)]))]
     let bad ← w.call [(1 : Nat)]
     checks := checks ++ [("stdio call with a bad argument is an error", bad matches .error _)]
+    -- The worker speaks JSON-RPC 2.0: any client can call it.
+    w.child.stdin.putStrLn "{\"jsonrpc\":\"2.0\",\"id\":\"q\",\"method\":\"nope\"}"
+    w.child.stdin.flush
+    let answer ← w.child.stdout.getLine
+    checks := checks ++ [("JSON-RPC: an unknown method is `methodNotFound`",
+      has answer "\"id\":\"q\"" && has answer "-32601")]
     let n ← w.stop
     checks := checks ++ [("stdio worker stops", n == 0)]
     match ← built.serve with
@@ -102,7 +108,19 @@ def main : IO UInt32 := do
     let w ← built.spawn
     let r : Except String String ← w.invoke ["world"]
     checks := checks ++ [("IO function", r == .ok "hello world")]
-    discard <| w.stop
+    -- Regression: with a second worker alive (which inherits the first's
+    -- input pipe), stopping the first must not wait for an EOF that never
+    -- comes. Bounded, so a regression fails instead of hanging CI.
+    let w₂ ← built.spawn
+    let stopping ← IO.asTask w.stop
+    let mut waited := 0
+    while !(← IO.hasFinished stopping) && waited < 100 do
+      IO.sleep 100
+      waited := waited + 1
+    let stopped ← IO.hasFinished stopping
+    unless stopped do w.child.kill
+    checks := checks ++ [("stdio worker stops while another is alive", stopped && stopping.get matches .ok 0)]
+    discard <| w₂.stop
 
   -- A worker as a node of a reactive graph, mixed with local operators —
   -- over stdio, then over HTTP.
@@ -153,15 +171,23 @@ def main : IO UInt32 := do
     [("function of an excluded module is rejected", has e "is not defined by the admitted modules")]
 
   -- Static mode: vendor the checked sources.
-  match ← vendor cfg (desc `Demo.add "Nat → Nat → Nat") (root / "vendored") with
+  match ← vendor cfg [desc `Demo.add "Nat → Nat → Nat", desc `Demo.shift "Demo.Point → Nat → Demo.Point"]
+      (root / "vendored") with
   | .error e => checks := checks ++ [(s!"vendor: {e}", false)]
   | .ok v =>
     checks := checks ++ [("vendored package builds", ← (root / "vendored" / ".lake").pathExists)]
-    checks := checks ++ [("vendored definition", v.definition `myAdd == "def myAdd : (Nat → Nat → Nat) := @Demo.add")]
+    checks := checks ++ [("vendored modules", v.modules.contains `Demo.Basic && !v.modules.contains `Demo.Evil)]
+    checks := checks ++ [("vendored definition", (desc `Demo.add "Nat → Nat → Nat").definition `myAdd == "def myAdd : (Nat → Nat → Nat) := @Demo.add")]
     checks := checks ++ [("vendored package excludes Demo.Evil",
       !(← (root / "vendored" / "remote" / "Demo" / "Evil.lean").pathExists))]
 
   -- Nothing from the repository ever ran.
+  -- Vendoring checks every function: one wrong declared type fails it all.
+  match ← vendor cfg [desc `Demo.add "Nat → Nat → Nat", desc `Demo.shift "Nat"] (root / "vendored-bad") with
+  | .ok _ => checks := checks ++ [("vendoring checks every function's type", false)]
+  | .error e => checks := checks ++
+    [("vendoring checks every function's type", has e "Demo.shift" && has e "but the descriptor declares")]
+
   let ran ← [repo / "lean", cfg.cache / "src" / sha.hex / "lean", root / "vendored"].anyM fun d => do
     pure ((← (d / "LAKEFILE_WAS_RUN").pathExists) || (← (d / "EVIL_WAS_RUN").pathExists))
   let ranElsewhere ← (System.FilePath.mk "LAKEFILE_WAS_RUN").pathExists

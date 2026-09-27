@@ -11,14 +11,19 @@ namespace Tests.System.GitFn.Worker
 
 deriving instance BEq for Except
 
-#guard request [(1 : Nat), "a"] == "{\"args\":[1,\"a\"]}"
-#guard request [] == "{\"args\":[]}"
-#guard reply "{\"ok\":{\"x\":11}}" == .ok (Json.mkObj [("x", (11 : Nat))])
-#guard reply "{\"error\":\"too big\"}" == .error "too big"
-#guard reply "{\"what\":1}" == .error "malformed reply: {\"what\":1}"
-#guard (reply "nope") matches .error _
+-- A call is a JSON-RPC 2.0 request `call`, arguments by position.
+#guard request 7 [(1 : Nat), "a"] ==
+  "{\"id\":7,\"jsonrpc\":\"2.0\",\"method\":\"call\",\"params\":[1,\"a\"]}"
+#guard (Json.parse (request 0 []) >>= (·.getObjValAs? (List Json) "params")) == .ok []
+#guard exitNotification == "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"
+-- A reply is a response to that request, or an error.
+#guard reply 3 "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"x\":11}}" == .ok (Json.mkObj [("x", (11 : Nat))])
+#guard reply 3 "{\"jsonrpc\":\"2.0\",\"id\":3,\"error\":{\"code\":-32602,\"message\":\"too big\"}}" == .error "too big"
+#guard (reply 3 "{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":1}") matches .error _
+#guard (reply 3 "{\"what\":1}") matches .error _
+#guard (reply 3 "nope") matches .error _
 -- Numbers stay exact on the wire (Lean core's JSON numbers are decimals).
-#guard reply "{\"ok\":123456789012345678901234567890}" ==
+#guard reply 0 "{\"jsonrpc\":\"2.0\",\"id\":0,\"result\":123456789012345678901234567890}" ==
   .ok (Json.num (123456789012345678901234567890 : Nat))
 #guard (decodeResult (.ok (Json.num 7)) : Except String Nat) == .ok 7
 #guard (decodeResult (.ok (Json.str "x")) : Except String Nat) matches .error _

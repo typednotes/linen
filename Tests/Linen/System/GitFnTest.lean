@@ -14,7 +14,11 @@ namespace Tests.System.GitFn
 #guard forbiddenAtoms.contains "unsafe" && forbiddenAtoms.contains "partial"
 #guard forbiddenIdents.contains "unsafeBaseIO"
 #guard !allowedCommands.contains ``Lean.Parser.Command.eval
--- The two transports.
-#guard Transport.stdio != Transport.http
+-- The facade reaches every part: a descriptor, its binding for a vendored
+-- import, and the JSON-RPC call a worker answers.
+def sha : CommitSha := (CommitSha.ofString? "0123456789abcdef0123456789abcdef01234567").get!
+#guard ({ repo := "r", commit := sha, name := `A.f, type := "Nat → Nat" } : GitFn).definition `f ==
+  "def f : (Nat → Nat) := @A.f"
+#guard (Json.parse (request 1 [(2 : Nat)]) >>= (·.getObjValAs? String "method")) == .ok "call"
 
 end Tests.System.GitFn

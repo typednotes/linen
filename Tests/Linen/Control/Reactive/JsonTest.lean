@@ -42,6 +42,10 @@ def ok? {α : Type} [BEq α] (e : Except String α) (a : α) : Bool :=
 def err? {α : Type} (e : Except String α) (msg : String) : Bool :=
   match e with | .error m => m == msg | .ok _ => false
 
+/-- An error whose message contains `part`, for guards. -/
+def errHas? {α : Type} (e : Except String α) (part : String) : Bool :=
+  match e with | .error m => (m.splitOn part).length > 1 | .ok _ => false
+
 -- ── Labels ──────────────────────────────────────────────────────────────────
 
 #guard ok? (parseLabel "sheet.x") `sheet.x
@@ -49,12 +53,12 @@ def err? {α : Type} (e : Except String α) (msg : String) : Bool :=
 #guard ok? (parseLabel "«a.b».c") (.str (.str .anonymous "a.b") "c")
 #guard ok? (parseLabel "«»") (.str .anonymous "")
 #guard ok? (parseLabel "7") (.num .anonymous 7)
-#guard err? (parseLabel "") "label ``: empty component"
-#guard err? (parseLabel "a..b") "empty component"
-#guard err? (parseLabel "a.") "label `a.`: empty component"
-#guard err? (parseLabel "a.1x") "label `a.1x`: component `1x` starts with a digit"
-#guard err? (parseLabel "a.«b") "label `a.«b`: unterminated `«`"
-#guard err? (parseLabel "«a»b") "text after `»`"
+#guard errHas? (parseLabel "") "is not a name in Lean's dotted syntax"
+#guard errHas? (parseLabel "a..b") "is not a name in Lean's dotted syntax"
+#guard errHas? (parseLabel "a.") "is not a name in Lean's dotted syntax"
+#guard errHas? (parseLabel "a.1x") "is not a name in Lean's dotted syntax"
+#guard errHas? (parseLabel "a.«b") "is not a name in Lean's dotted syntax"
+#guard errHas? (parseLabel "«a»b") "is not a name in Lean's dotted syntax"
 
 -- The dotted form is used when it reads back exactly …
 #guard labelToJSON `sheet.x == .string "sheet.x"
@@ -150,8 +154,8 @@ def fromDoc (v : Value) : Except String (Graph Id V) := Graph.fromJSON reg v
   "node `y`: `map` cannot take 2 sources"
 #guard err? (fromDoc (doc [] [[("label", .string "x"), ("op", .string "flatMap")]]))
   "node `x`: unknown operator `flatMap`"
-#guard err? (fromDoc (doc [] [[("label", .string "a..b"), ("op", .string "subject")]]))
-  "empty component"
+#guard errHas? (fromDoc (doc [] [[("label", .string "a..b"), ("op", .string "subject")]]))
+  "is not a name in Lean's dotted syntax"
 #guard err? (fromDoc (.object [("format", .string graphFormat)])) "key 'functions' not found"
 
 -- ── Logs of occurrences ─────────────────────────────────────────────────────

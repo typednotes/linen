@@ -688,14 +688,19 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   only dependencies are the selected libraries, with a generated semantic
   check (declared type defeq without coercion; no unsafe/partial/extern/
   implemented_by remote constant or `panic`/`dbgTrace` use; no initializer;
-  axioms ⊆ `propext`/`Choice`/`Quot.sound`) and a JSON worker (stdio, or REST
-  over core `Std.Http`); `vendor` for static use.
+  axioms ⊆ `propext`/`Choice`/`Quot.sound`) and a JSON-RPC 2.0 worker (stdio,
+  or HTTP over core `Std.Http`); `vendor` for static use — several functions
+  of one project in one checked package, imported and compiled into your
+  program (`GitFn.definition` binds one at its declared type).
 - `System.GitFn.Worker` — calling a worker: stdio sessions, HTTP services
-  (local or remote endpoints), exact JSON (Lean core) on the wire.
+  (local or remote endpoints); JSON-RPC 2.0 with Lean core's `Lean.JsonRpc`
+  types, exact JSON on the wire; stopping a stdio worker is an `exit`
+  notification (not EOF, which sibling processes would hold back).
 - `System.GitFn.Reactive` — workers as reactive-graph nodes: `Remote` (a
   stdio/HTTP worker or an endpoint), `Reactive.remote args β r` registering it
-  as an `FnRef`, `JsonValue` for the graph's value type (`Lean.Json`, or
-  linen's JSON via the bridge), and proven `Codec Lean.Json` instances.
+  as an `FnRef`; the graph's values travel through Lean core's
+  `ToJson`/`FromJson` (`Lean.Json`, or linen's JSON via the bridge). A
+  vendored function needs none of this: it is a plain `fn` node.
 
 ### `Graphics.Graphviz` — DOT that cannot be malformed
 
@@ -2326,7 +2331,7 @@ the secrets, never their values.
 | `Linen.Control.Exception.Lens` | `lens`'s `Control.Exception.Lens`: one `Prism' IO.Error _` per `IO.Error` constructor (`_UserError`, `_NoFileOrDirectory`, `_AlreadyExists`, …), re-exporting `Control.Monad.Error.Lens`'s combinators |
 | `Linen.Control.AutoUpdate` | periodically cached values on a dedicated thread |
 | `Linen.Control.Reactive` | typed reactive graphs (DAGs of observables): re-exports `Graph`, `Builder`, `Run` |
-| `Linen.Control.Reactive.Graph` | reactive graph data: `Op` (ReactiveX operators), `Node`, proof-carrying `Graph` (`WellFormed`, `Labelled`), queries, `Codec`/`Callable`/`Signature` |
+| `Linen.Control.Reactive.Graph` | reactive graph data: `Op` (ReactiveX operators), `Node`, proof-carrying `Graph` (`WellFormed`, `Labelled`), queries, `Codec`/`Callable`/`Signature`, proven `Codec Lean.Json` instances |
 | `Linen.Control.Reactive.Builder` | the `Reactive` monad: `Observable`/`Subject`/`FnRef`, `subject`, operators, `combineLatest`/`withLatestFrom`/`zip`, `Operator` (graphs as operators), `node x ← e`, `scope`, `rebind` |
 | `Linen.Control.Reactive.Run` | running reactive graphs over virtual time: `Occurrence`, `Notification`, `Trace`, `Session`, `Selection`, `run`/`runFor`/`valuesFor`/`runSelected` |
 | `Linen.Control.Reactive.Json` | reactive graphs, logs of occurrences and traces as JSON; `Registry`, exact label round trip |
@@ -2753,11 +2758,11 @@ the secrets, never their values.
 | `Linen.System.GitFn` | functions defined by their git location, run securely: re-exports `Descriptor`, `Policy`, `Build`, `Worker` |
 | `Linen.System.GitFn.Descriptor` | `GitFn` (repo, `CommitSha`, project, name, type), validation, JSON, `resolve` |
 | `Linen.System.GitFn.Policy` | secure mode's pre-compilation source check with the host parser: allowlists and forbidden constructs |
-| `Linen.System.GitFn.Build` | fetch at SHA, compile with the host toolchain + selected libraries, semantic check, stdio/HTTP worker, `vendor` |
-| `Linen.System.GitFn.Worker` | calling a worker over stdio or HTTP with Lean core JSON |
-| `Linen.System.GitFn.Reactive` | workers as reactive-graph nodes: `Remote`, `Reactive.remote`, `JsonValue`, proven `Codec Lean.Json` instances |
-| `Linen.Data.Name` | total reader of `Lean.Name` dotted syntax (`parse`, `roundTrips`) |
-| `Linen.Data.Json.Bridge` | `Data.Json.Value` ↔ `Lean.Json` conversions, exact except numbers (documented) |
+| `Linen.System.GitFn.Build` | fetch at SHA, compile with the host toolchain + selected libraries, semantic check, JSON-RPC stdio/HTTP worker, `vendor` (several functions, one package), `GitFn.definition` |
+| `Linen.System.GitFn.Worker` | calling a worker over stdio or HTTP: JSON-RPC 2.0 (`Lean.JsonRpc`) |
+| `Linen.System.GitFn.Reactive` | workers as reactive-graph nodes: `Remote`, `Reactive.remote` (values via core `ToJson`/`FromJson`) |
+| `Linen.Data.Name` | reading `Lean.Name` dotted syntax back (`parse`, over core's `Syntax.decodeNameLit`; `roundTrips`) |
+| `Linen.Data.Json.Bridge` | `Data.Json.Value` ↔ `Lean.Json` conversions and core `ToJson`/`FromJson` instances, exact except numbers (documented) |
 | `Linen.Graphics.Graphviz` | typed Graphviz DOT: `Fin`-indexed edges, kind-fixed edge operator, target-typed attributes, proven quoting (`lex_quote`) |
 | `Linen.Graphics.Graphviz.Html` | offline HTML pages rendering typed DOT with vendored Graphviz WebAssembly; compile-time script-safety check |
 | `Linen.Graphics.Netpbm` | `netpbm`-style parser for the PBM/PGM/PPM "portable anymap" image formats (ASCII/binary `P1`–`P6`) over `ByteArray`, via `Std.Internal.Parsec` |

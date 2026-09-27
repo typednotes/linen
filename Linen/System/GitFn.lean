@@ -26,8 +26,29 @@
   `ToJson`/`FromJson`), to a worker over stdio or HTTP (`Worker`); or the
   checked sources are vendored into a package you `require` (`vendor`).
 
-  A worker is also a function of a reactive graph: `Reactive.remote` registers
-  it as an `FnRef` (`System.GitFn.Reactive`).
+  **In a reactive graph, a GitFn is compiled in or remote.** Vendored, its
+  functions are ordinary Lean definitions of your program — `fn` registers
+  them like any other (see `Examples/GitFnGraph.lean`). Built into a worker,
+  `Reactive.remote` registers it as an `FnRef` of the same signature
+  (`System.GitFn.Reactive`), for a function to isolate in its own process or
+  to deploy apart. The graph is written the same way either way.
+
+  ## Prior art
+
+  - **Naming code by (repository, commit)** is how Cargo (`git = …, rev = …`),
+    Go modules and Nix flakes pin dependencies; `GitFn` adds the function's
+    name and declared type, which the build checks — closer to Unison, where
+    a definition is addressed by its content and type, than to a package
+    manager. `vendor` is Cargo's `cargo vendor`, with the check in front.
+  - **The policy** plays the role of Safe Haskell (`{-# LANGUAGE Safe #-}`:
+    no `unsafePerformIO`, no FFI, only safe imports) and of Rust's
+    `#![forbid(unsafe_code)]` with a `cargo-geiger`-style audit of what a
+    function reaches — decided here on the sources before anything is built,
+    and again on the compiled constants.
+  - **The worker protocol is JSON-RPC 2.0**, with Lean core's
+    `Lean.JsonRpc` types (those of its language server) rather than a bespoke
+    format — the protocol of Haskell's `json-rpc` and Rust's `jsonrpsee` — so
+    any client can call a worker.
 
   Modules: `System.GitFn.Descriptor` (the descriptor, `resolve`),
   `System.GitFn.Policy` (the source check), `System.GitFn.Build` (fetch,

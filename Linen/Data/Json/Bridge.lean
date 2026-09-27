@@ -35,4 +35,10 @@ def Value.toLeanJson (v : Value) : Except String Lean.Json :=
 def Value.ofLeanJson (j : Lean.Json) : Except String Value :=
   Decode.decode j.compress
 
+/-- linen's JSON through Lean core's classes, so it can be used wherever
+    `ToJson`/`FromJson` is expected. A non-finite number, which has no JSON
+    form, becomes `null` — as linen's own encoder writes it. -/
+instance : Lean.ToJson Value := ⟨fun v => v.toLeanJson.toOption.getD .null⟩
+instance : Lean.FromJson Value := ⟨Value.ofLeanJson⟩
+
 end Data.Json

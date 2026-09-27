@@ -7,6 +7,48 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+### Added
+
+- **`Examples/GitFnGraph.lean`** (`lake exe examples gitfn`): a reactive
+  pricing graph whose functions live in a (generated) git repository —
+  vendored after the secure check, imported by a program and compiled in as
+  ordinary functions, next to local operators; the program checks every
+  stream and draws the graph and its run as an offline HTML page.
+- `System.GitFn.vendor` takes **several functions** of one project and
+  checks each in the one package; `GitFn.definition` binds a vendored
+  function at its declared type.
+- `Data.Json.Bridge`: Lean core `ToJson`/`FromJson` instances for
+  `Data.Json.Value`.
+
+### Changed
+
+- **The worker protocol is JSON-RPC 2.0**, on Lean core's `Lean.JsonRpc`
+  types, instead of a bespoke `{"args"}`/`{"ok"}` format: any JSON-RPC client
+  can call a worker; argument errors are `invalidParams`, function failures
+  `internalError`, unknown methods `methodNotFound`. `request`/`reply` take a
+  request id.
+- `System.GitFn.JsonValue` is removed: remote calls use Lean core's
+  `ToJson`/`FromJson` of the graph's value type.
+- The `Codec Lean.Json` instances and `Codec.ofJson` move from
+  `System.GitFn.Reactive` to `Control.Reactive.Graph`: they are about graphs
+  over Lean core's JSON, not about workers.
+- `Data.Name.parse` is Lean core's `Syntax.decodeNameLit` (the elaborator's own
+  total name-literal reader) instead of a re-implementation; it is stricter
+  (an unescaped space is an error) and its errors are one message.
+- `vendor`/`build` cache keys include the generated sources, so a change to
+  the worker never reuses a worker built from an older generator.
+
+### Removed
+
+- `System.GitFn.Transport`, which nothing used.
+
+### Fixed
+
+- **Stopping a stdio worker hung while another worker was alive**: each
+  process spawned later inherits the write end of the earlier workers' input
+  pipes, so closing ours never delivered EOF. `StdioWorker.stop` now sends the
+  JSON-RPC notification `exit`; covered by `gitfn-integration`.
+
 ## [1.4.0] - 2026-09-27
 
 ### Added

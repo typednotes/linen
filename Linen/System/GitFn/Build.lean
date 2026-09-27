@@ -20,9 +20,9 @@
      `implemented_by`, or refers to `panic`/`dbgTrace`; no remote constant runs
      at load time (`[init]`); the function's axioms are only `propext`,
      `Classical.choice` and `Quot.sound`.
-  4. **Serve** it: a **worker** executable, speaking line-delimited JSON over
-     stdio, or a small REST service (`POST /call`, `GET /health`, core
-     `Std.Http`). Arguments and results are JSON (Lean core's
+  4. **Serve** it: a **worker** executable, speaking JSON-RPC 2.0 (Lean core's
+     `Lean.JsonRpc`) over stdio, or over HTTP (`POST /call`, `GET /health`,
+     core `Std.Http`). Arguments and results are JSON (Lean core's
      `ToJson`/`FromJson`): a function whose types lack them does not build.
 
   `vendor` is the static alternative: the admitted, checked sources in a
@@ -54,14 +54,6 @@ structure Library where
 
 /-- linen itself, at `path`, as a selectable library. -/
 def Library.linen (path : System.FilePath) : Library := ⟨`linen, path, [`Linen]⟩
-
-/-- How a worker talks. -/
-inductive Transport where
-  /-- Line-delimited JSON on stdin/stdout. -/
-  | stdio
-  /-- A REST service: `POST /call`, `GET /health`. -/
-  | http
-  deriving Repr, DecidableEq
 
 /-- Where and how to build. -/
 structure Config where
@@ -147,19 +139,26 @@ def lakefileSource (pkg : String) (libraries : List Library) (modules : List Nam
     "\n@[default_target] lean_exe «linen-gitfn-worker» where\n  root := `LinenGitFnWorker\n"
   else "")
 
-/-- The generated semantic check, run when the package is built. -/
-def checkModuleSource (fn : GitFn) (modules : List Name) : String :=
+/-- The generated semantic check, run when the package is built: each
+    function is defined by the admitted modules at its declared type, and
+    everything it reaches there is safe (no `unsafe`, `extern`,
+    `implemented_by`, `partial`, or side-effecting primitives), no admitted
+    module runs code when loaded, and it uses only the standard axioms. -/
+def checkModuleSource (fns : List GitFn) (modules : List Name) : String :=
   let imports := String.join (modules.map (s!"import {nameSource ·}\n"))
   let remote := ", ".intercalate (modules.map nameLiteral)
+  let claims := String.join <| fns.zipIdx.map fun (fn, i) =>
+    s!"\nabbrev LinenGitFnExpected{i} := ({fn.type})\n" ++
+    s!"#eval linenGitFnCheck {nameLiteral fn.name} ``LinenGitFnExpected{i}\n"
   s!"import Lean\n{imports}open Lean Meta Elab Command\n\n" ++
-  s!"abbrev LinenGitFnExpected := ({fn.type})\n\n" ++
-  "#eval show CommandElabM Unit from do\n" ++
+  "/-- Check that `target` is defined by the admitted modules at the type\n" ++
+  "    `expected` abbreviates, and is safe. -/\n" ++
+  "def linenGitFnCheck (target expected : Name) : CommandElabM Unit := do\n" ++
   "  let env ← getEnv\n" ++
-  s!"  let target : Name := {nameLiteral fn.name}\n" ++
   s!"  let remoteModules : List Name := [{remote}]\n" ++
   "  let some info := env.find? target\n" ++
   "    | throwError \"`{target}` is not defined by the admitted modules\"\n" ++
-  "  let some e := env.find? ``LinenGitFnExpected | throwError \"internal: no expected type\"\n" ++
+  "  let some e := env.find? expected | throwError \"internal: no expected type\"\n" ++
   "  unless ← liftTermElabM (Meta.isDefEq info.type e.value!) do\n" ++
   "    throwError m!\"`{target}` has type{indentExpr info.type}\\nbut the descriptor declares{indentExpr e.value!}\"\n" ++
   "  let isRemote (n : Name) : Bool := match env.getModuleIdxFor? n with\n" ++
@@ -190,48 +189,60 @@ def checkModuleSource (fn : GitFn) (modules : List Name) : String :=
   "      throwError \"`{n}` runs when its module is loaded\"\n" ++
   "  let axioms ← liftCoreM (collectAxioms target)\n" ++
   "  let bad := axioms.filter (!#[``propext, ``Classical.choice, ``Quot.sound].contains ·)\n" ++
-  "  unless bad.isEmpty do throwError \"`{target}` depends on the axioms {bad.toList}\"\n"
+  "  unless bad.isEmpty do throwError \"`{target}` depends on the axioms {bad.toList}\"\n" ++
+  claims
 
-/-- The generated worker: JSON in, the function applied, JSON out — over
-    stdio, or over HTTP with `--http PORT`. -/
+/-- The generated worker: JSON-RPC 2.0 requests `call` in, the function
+    applied, responses out — over stdio (one message per line; the
+    notification `exit` ends it), or over HTTP with `--http PORT`. -/
 def workerSource (fn : GitFn) (modules : List Name) : String :=
   let imports := String.join (modules.map (s!"import {nameSource ·}\n"))
-  s!"import Lean.Data.Json\nimport Std.Http\n{imports}open Lean\n\n" ++
+  s!"import Lean.Data.JsonRpc\nimport Std.Http\n{imports}open Lean JsonRpc\n\n" ++
   "/-- A function over JSON-convertible types, called with JSON arguments.\n" ++
   "    Arguments need `FromJson`; the result needs `ToJson`. -/\n" ++
   "class LinenGitFnCall (F : Type) where\n" ++
-  "  call : F → List Json → IO (Except String Json)\n\n" ++
+  "  call : F → List Json → IO (Except (ErrorCode × String) Json)\n\n" ++
+  "def linenGitFnArity {α : Type} : Except (ErrorCode × String) α :=\n" ++
+  "  .error (.invalidParams, \"wrong number of arguments\")\n\n" ++
   "instance (priority := low) {β : Type} [ToJson β] : LinenGitFnCall β where\n" ++
-  "  call b args := pure (if args.isEmpty then .ok (toJson b) else .error \"wrong number of arguments\")\n" ++
+  "  call b args := pure (if args.isEmpty then .ok (toJson b) else linenGitFnArity)\n" ++
   "instance {β : Type} [ToJson β] : LinenGitFnCall (Except String β) where\n" ++
-  "  call r args := pure (if args.isEmpty then r.map toJson else .error \"wrong number of arguments\")\n" ++
+  "  call r args := pure <| if !args.isEmpty then linenGitFnArity else match r with\n" ++
+  "    | .ok b => .ok (toJson b)\n" ++
+  "    | .error e => .error (.internalError, e)\n" ++
   "instance {β : Type} [ToJson β] : LinenGitFnCall (IO β) where\n" ++
-  "  call act args := if !args.isEmpty then pure (.error \"wrong number of arguments\") else\n" ++
-  "    try pure (.ok (toJson (← act))) catch e => pure (.error (toString e))\n" ++
+  "  call act args := if !args.isEmpty then pure linenGitFnArity else\n" ++
+  "    try pure (.ok (toJson (← act))) catch e => pure (.error (.internalError, toString e))\n" ++
   "instance {α F : Type} [FromJson α] [LinenGitFnCall F] : LinenGitFnCall (α → F) where\n" ++
   "  call f args := match args with\n" ++
   "    | a :: rest => match fromJson? a with\n" ++
   "      | .ok x => LinenGitFnCall.call (f x) rest\n" ++
-  "      | .error e => pure (.error e)\n" ++
-  "    | [] => pure (.error \"wrong number of arguments\")\n\n" ++
+  "      | .error e => pure (.error (.invalidParams, e))\n" ++
+  "    | [] => pure linenGitFnArity\n\n" ++
   s!"def linenGitFnEntry : ({fn.type}) := @{nameSource fn.name}\n\n" ++
-  "def linenGitFnHandle (line : String) : IO String := do\n" ++
-  "  let reply ← match Json.parse line with\n" ++
-  "    | .error e => pure (Json.mkObj [(\"error\", Json.str s!\"malformed request: {e}\")])\n" ++
-  "    | .ok req => match req.getObjValAs? (List Json) \"args\" with\n" ++
-  "      | .error e => pure (Json.mkObj [(\"error\", Json.str s!\"malformed request: {e}\")])\n" ++
-  "      | .ok args => do\n" ++
-  "        match ← LinenGitFnCall.call linenGitFnEntry args with\n" ++
-  "        | .ok v => pure (Json.mkObj [(\"ok\", v)])\n" ++
-  "        | .error e => pure (Json.mkObj [(\"error\", Json.str e)])\n" ++
-  "  pure reply.compress\n\n" ++
+  "/-- Answer one message: a response, or nothing (a notification). -/\n" ++
+  "def linenGitFnHandle (line : String) : IO (Option Message) := do\n" ++
+  "  match (Json.parse line >>= fromJson? : Except String Message) with\n" ++
+  "  | .error e => pure (some (.responseError .null .parseError e none))\n" ++
+  "  | .ok (.request id \"call\" params) =>\n" ++
+  "    let args := match params with\n" ++
+  "      | some (.arr a) => a.toList\n" ++
+  "      | _ => []\n" ++
+  "    match ← LinenGitFnCall.call linenGitFnEntry args with\n" ++
+  "    | .ok v => pure (some (.response id v))\n" ++
+  "    | .error (code, e) => pure (some (.responseError id code e none))\n" ++
+  "  | .ok (.request id m _) =>\n" ++
+  "    pure (some (.responseError id .methodNotFound s!\"no method `{m}`\" none))\n" ++
+  "  | .ok _ => pure none\n\n" ++
   "open Std Async Http Server in\nstructure LinenGitFnServer\n\n" ++
   "open Std Async Http Server in\ninstance : Handler LinenGitFnServer where\n" ++
   "  onRequest _ req := do\n" ++
   "    let path := toString req.line.uri\n" ++
   "    if req.line.method == Std.Http.Method.post && path == \"/call\" then\n" ++
   "      let body : String ← req.body.readAll (maximumSize := some (64 * 1024 * 1024))\n" ++
-  "      Response.ok |>.json (← linenGitFnHandle body)\n" ++
+  "      match ← linenGitFnHandle body with\n" ++
+  "      | some reply => Response.ok |>.json (toJson reply).compress\n" ++
+  "      | none => Response.new |>.status .noContent |>.text \"\"\n" ++
   "    else if path == \"/health\" then\n" ++
   "      Response.ok |>.json \"{\\\"ok\\\":true}\"\n" ++
   "    else\n" ++
@@ -253,9 +264,13 @@ def workerSource (fn : GitFn) (modules : List Name) : String :=
   "    let stdout ← IO.getStdout\n" ++
   "    repeat\n" ++
   "      let line ← stdin.getLine\n" ++
-  "      if line.isEmpty then break\n" ++
-  "      stdout.putStrLn (← linenGitFnHandle line.trimAscii.toString)\n" ++
-  "      stdout.flush\n"
+  "      if line.isEmpty then break                 -- end of input\n" ++
+  "      match (Json.parse line >>= fromJson? : Except String Message) with\n" ++
+  "      | .ok (Message.notification \"exit\" _) => break\n" ++
+  "      | _ =>\n" ++
+  "        if let some reply ← linenGitFnHandle line.trimAscii.toString then\n" ++
+  "          stdout.putStrLn (toJson reply).compress\n" ++
+  "          stdout.flush\n"
 
 -- ── Staging and building ────────────────────────────────────────────────────
 
@@ -287,8 +302,8 @@ def fetchAndCheck (cfg : Config) (fn : GitFn) : IO (Except String Checked) := do
 
 /-- Write a generated package: the admitted sources under `remote/`, the
     lakefile, the toolchain, the check and (for a worker) the worker. -/
-def writePackage (cfg : Config) (dir : System.FilePath) (pkg : String) (fn : GitFn)
-    (checked : Checked) (worker : Bool) : IO Unit := do
+def writePackage (cfg : Config) (dir : System.FilePath) (pkg : String) (fns : List GitFn)
+    (checked : Checked) (worker : Option GitFn) : IO Unit := do
   if ← dir.pathExists then IO.FS.removeDirAll dir
   IO.FS.createDirAll (dir / "remote")
   let rootComps := checked.project.normalize.components
@@ -299,12 +314,15 @@ def writePackage (cfg : Config) (dir : System.FilePath) (pkg : String) (fn : Git
     IO.FS.writeFile target (← IO.FS.readFile file)
   let modules := checked.admitted.map (·.1)
   IO.FS.writeFile (dir / "lean-toolchain") (cfg.toolchain ++ "\n")
-  IO.FS.writeFile (dir / "lakefile.lean") (lakefileSource pkg cfg.libraries modules worker)
-  IO.FS.writeFile (dir / "LinenGitFnCheck.lean") (checkModuleSource fn modules)
-  if worker then IO.FS.writeFile (dir / "LinenGitFnWorker.lean") (workerSource fn modules)
+  IO.FS.writeFile (dir / "lakefile.lean") (lakefileSource pkg cfg.libraries modules worker.isSome)
+  IO.FS.writeFile (dir / "LinenGitFnCheck.lean") (checkModuleSource fns modules)
+  if let some fn := worker then
+    IO.FS.writeFile (dir / "LinenGitFnWorker.lean") (workerSource fn modules)
 
 /-- A cache key for a build: everything that determines it. -/
 def buildKey (cfg : Config) (fn : GitFn) (what : String) : String :=
+  -- `what` includes the generated sources, so a change to the worker's
+  -- protocol never reuses a worker built from an older generator.
   let h := hash (reprStr fn ++ what ++ cfg.toolchain ++ reprStr cfg.effectivePolicy ++
     reprStr cfg.libraries)
   s!"{fn.commit.hex.take 12}-{h.toNat}"
@@ -328,13 +346,21 @@ def build (cfg : Config) (fn : GitFn) : IO (Except String Built) := do
   let checked ← match ← fetchAndCheck cfg fn with
     | .ok c => pure c
     | .error e => return .error e
-  let dir := cfg.cache / "build" / buildKey cfg fn "worker"
+  let modules := checked.admitted.map (·.1)
+  let dir := cfg.cache / "build" / buildKey cfg fn ("worker" ++ workerSource fn modules ++
+    checkModuleSource [fn] modules ++ lakefileSource "linen-gitfn" cfg.libraries modules true)
   let exe := dir / ".lake" / "build" / "bin" / "linen-gitfn-worker"
   unless ← exe.pathExists do
-    writePackage cfg dir "linen-gitfn" fn checked true
+    writePackage cfg dir "linen-gitfn" [fn] checked (some fn)
     if let .error e := ← run cfg.lake #["build"] dir then
       return .error s!"{e}\nexcluded modules: {reprStr checked.report.excluded}"
   pure (.ok ⟨fn, dir, exe, checked.report⟩)
+
+/-- A definition binding a function under `localName` at its declared type,
+    for a project that imports it (`vendor`): compiling it re-checks the type
+    there, so a changed upstream signature fails at your build. -/
+def GitFn.definition (fn : GitFn) (localName : Name) : String :=
+  s!"def {nameSource localName} : ({fn.type}) := @{nameSource fn.name}"
 
 /-- A vendored package: checked sources your project can `require`. -/
 structure Vendored where
@@ -348,28 +374,32 @@ structure Vendored where
   requireToml : String
   /-- The modules to import. -/
   modules : List Name
-  /-- A definition binding the function under `localName` at its declared
-      type: compiling it re-checks the type in your project. -/
-  definition : Name → String
 
-/-- Static mode: vendor the admitted, checked sources of a descriptor's project
-    into a package at `into`, and build it there (running the semantic check).
-    Your project then `require`s it by path; the remote lakefile never runs. -/
-def vendor (cfg : Config) (fn : GitFn) (into : System.FilePath) : IO (Except String Vendored) := do
+/-- Static mode: vendor the admitted, checked sources of a project into a
+    package at `into`, and build it there, running the semantic check of each
+    function (`fns` all name the same repository, commit and project). Your
+    project then `require`s it by path and imports its functions as ordinary
+    Lean definitions, compiled into your program; the remote lakefile never
+    runs. -/
+def vendor (cfg : Config) (fns : List GitFn) (into : System.FilePath) :
+    IO (Except String Vendored) := do
+  let some fn := fns.head? | return .error "nothing to vendor"
+  if let some other := fns.find? (fun g => g.repo != fn.repo || g.commit != fn.commit ||
+      g.project != fn.project) then
+    return .error s!"`{other.name}` is not from {fn.repo} at {fn.commit}, project `{fn.project}`"
+  for g in fns do
+    if let .error e := g.validate then return .error e
   let checked ← match ← fetchAndCheck cfg fn with
     | .ok c => pure c
     | .error e => return .error e
   let pkg := s!"gitfn-{fn.commit.hex.take 12}"
-  writePackage cfg into pkg fn checked false
+  writePackage cfg into pkg fns checked none
   if let .error e := ← run cfg.lake #["build"] into then
     return .error s!"{e}\nexcluded modules: {reprStr checked.report.excluded}"
   let dir ← IO.FS.realPath into
-  let modules := checked.admitted.map (·.1)
   pure <| .ok {
-    dir, package := pkg, modules
+    dir, package := pkg, modules := checked.admitted.map (·.1)
     requireLean := s!"require «{pkg}» from {repr dir.toString}"
-    requireToml := s!"[[require]]\nname = {repr pkg}\npath = {repr dir.toString}"
-    definition := fun localName =>
-      s!"def {nameSource localName} : ({fn.type}) := @{nameSource fn.name}" }
+    requireToml := s!"[[require]]\nname = {repr pkg}\npath = {repr dir.toString}" }
 
 end System.GitFn

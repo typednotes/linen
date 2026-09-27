@@ -29,6 +29,7 @@ import Examples.Vault
 import Examples.Vector
 import Examples.Todo
 import Examples.Effects
+import Examples.GitFnGraph
 
 /-- Registry of runnable examples: `name`, one-line description, entry point.
 
@@ -98,6 +99,9 @@ unsafe def examples : List (String × String × (List String → IO Unit)) :=
     ("effects",
        "Control.Monad.Effect.{FileSystem,HTTP,PostgreSQL,Trace}: capability-restricted effects over real scratch files, a loopback HTTP server and a Podman-started PostgreSQL — self-checking demo; `effects no-db` skips the container part",
        Examples.Effects.run),
+    ("gitfn",
+       "System.GitFn + Control.Reactive: a pricing pipeline whose functions live in a (generated) git repository — vendored after the secure check, imported and compiled into a program as ordinary functions of a reactive graph with local operators, run over virtual time, drawn as an offline HTML page — self-checking demo",
+       Examples.GitFnGraph.run),
     ("todo",
        "Web.Html/Web.Css (illegal nesting is a compile-time error) rendering an in-memory TODO list over Network.WebApp.Server — self-checks then keeps serving; `todo check` self-checks and exits",
        Examples.Todo.run) ]

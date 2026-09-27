@@ -149,7 +149,9 @@ termination_by cmd
 -- ── Checking a file ─────────────────────────────────────────────────────────
 
 /-- Parse every command of a file (after its header). Each command must
-    advance the parser; the recursion is on the input left. -/
+    advance the parser; the recursion is on the input left. (Lean core's
+    `Parser.testParseModule` is this loop, but `partial`, and it prints parse
+    errors and throws; this one is total and returns them.) -/
 def parseCommands (ictx : Parser.InputContext) (pmctx : Parser.ParserModuleContext)
     (st : Parser.ModuleParserState) (msgs : MessageLog) (acc : Array Syntax) :
     Array Syntax × MessageLog :=

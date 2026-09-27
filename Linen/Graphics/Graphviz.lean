@@ -31,6 +31,16 @@
   subgraphs and clusters, ports, HTML-like labels (`label=<…>`) and record
   shapes (whose labels have their own syntax) — so none of them can be
   produced malformed, because none of them can be produced at all.
+
+  ## Prior art
+
+  Haskell's `graphviz` package (`Data.GraphViz`) renders graph values to DOT
+  with attributes as one sum type (`Attribute`), usable on nodes, edges and
+  graphs alike — which targets accept which attribute is documented, not
+  typed; Rust's `dot` crate and `petgraph::dot` likewise write generated node
+  ids, as here, with attributes as strings. This module keeps their shape — a
+  graph value rendered to DOT — and moves the remaining checks into types:
+  attributes indexed by target, `Fin` endpoints, and a proven quoting.
 -/
 
 namespace Graphics.Graphviz

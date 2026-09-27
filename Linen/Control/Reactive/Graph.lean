@@ -33,6 +33,7 @@
   the class, so a lossy encoding cannot be declared. `Callable` reads a plain
   Lean function's signature off its type.
 -/
+import Lean.Data.Json
 import Std.Data.HashMap
 import Std.Data.HashSet
 
@@ -289,6 +290,22 @@ class Codec (V : Type) (α : Type) where
 
 /-- The value type encodes itself. -/
 instance {V : Type} : Codec V V := ⟨id, .ok, fun _ => rfl⟩
+
+/-- A `Codec` into Lean core's `Lean.Json` from `ToJson`/`FromJson`, given
+    their round-trip law. `Lean.Json` is the natural value type of a graph
+    whose values leave the process (a store, a `System.GitFn` worker): its
+    numbers are exact decimals, so integers of any size round-trip. -/
+@[reducible] def Codec.ofJson {α : Type} [Lean.ToJson α] [Lean.FromJson α]
+    (h : ∀ a : α, (Lean.FromJson.fromJson? (Lean.ToJson.toJson a) : Except String α) = .ok a) :
+    Codec Lean.Json α :=
+  ⟨Lean.ToJson.toJson, Lean.FromJson.fromJson?, h⟩
+
+instance : Codec Lean.Json String := Codec.ofJson fun _ => rfl
+instance : Codec Lean.Json Bool := Codec.ofJson fun _ => rfl
+instance : Codec Lean.Json Nat := Codec.ofJson fun n => by
+  simp [Lean.ToJson.toJson, Lean.FromJson.fromJson?, Lean.Json.getNat?, Lean.JsonNumber.fromNat]; rfl
+instance : Codec Lean.Json Int := Codec.ofJson fun n => by
+  simp [Lean.ToJson.toJson, Lean.FromJson.fromJson?, Lean.Json.getInt?, Lean.JsonNumber.fromInt]; rfl
 
 /-- An erased function called with the wrong number of arguments. -/
 def arityError {m : Type → Type} [Monad m] {V : Type} : m (Except String (Option V)) :=
