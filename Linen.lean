@@ -581,6 +581,7 @@ import Linen.System.GitFn.Descriptor
 import Linen.System.GitFn.Policy
 import Linen.System.GitFn.Build
 import Linen.System.GitFn.Worker
+import Linen.System.GitFn.Reactive
 import Linen.Data.Name
 import Linen.Data.Json.Bridge
 import Linen.Graphics.Graphviz.Html

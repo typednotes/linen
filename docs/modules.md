@@ -692,6 +692,10 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   over core `Std.Http`); `vendor` for static use.
 - `System.GitFn.Worker` — calling a worker: stdio sessions, HTTP services
   (local or remote endpoints), exact JSON (Lean core) on the wire.
+- `System.GitFn.Reactive` — workers as reactive-graph nodes: `Remote` (a
+  stdio/HTTP worker or an endpoint), `Reactive.remote args β r` registering it
+  as an `FnRef`, `JsonValue` for the graph's value type (`Lean.Json`, or
+  linen's JSON via the bridge), and proven `Codec Lean.Json` instances.
 
 ### `Graphics.Graphviz` — DOT that cannot be malformed
 
@@ -2751,6 +2755,7 @@ the secrets, never their values.
 | `Linen.System.GitFn.Policy` | secure mode's pre-compilation source check with the host parser: allowlists and forbidden constructs |
 | `Linen.System.GitFn.Build` | fetch at SHA, compile with the host toolchain + selected libraries, semantic check, stdio/HTTP worker, `vendor` |
 | `Linen.System.GitFn.Worker` | calling a worker over stdio or HTTP with Lean core JSON |
+| `Linen.System.GitFn.Reactive` | workers as reactive-graph nodes: `Remote`, `Reactive.remote`, `JsonValue`, proven `Codec Lean.Json` instances |
 | `Linen.Data.Name` | total reader of `Lean.Name` dotted syntax (`parse`, `roundTrips`) |
 | `Linen.Data.Json.Bridge` | `Data.Json.Value` ↔ `Lean.Json` conversions, exact except numbers (documented) |
 | `Linen.Graphics.Graphviz` | typed Graphviz DOT: `Fin`-indexed edges, kind-fixed edge operator, target-typed attributes, proven quoting (`lex_quote`) |

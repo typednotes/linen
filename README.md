@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen Tests --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen Tests --include='*.lean' | wc -l -->
-  <strong>787 modules</strong> · <strong>490 compile-time theorems</strong> · <strong>11265 <code>#guard</code> checks</strong>
+  <strong>788 modules</strong> · <strong>490 compile-time theorems</strong> · <strong>11270 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -255,8 +255,8 @@ for the full per-module feature list and module table.
   (repo, commit, project, name, declared type) securely: the remote sources
   are checked before compilation (plain, kernel-checked Lean only, effects
   only through a monad in the type), compiled with your own toolchain and
-  checked again, then called as a JSON worker over stdio or HTTP — or
-  vendored into your project.
+  checked again, then called as a JSON worker over stdio or HTTP — also as a
+  node of a reactive graph — or vendored into your project.
 - **`Graphics.Graphviz`** — typed Graphviz DOT that cannot be malformed
   (no dangling edges, typed attributes, proven quoting), and offline HTML pages
   rendering it with Graphviz compiled to WebAssembly.

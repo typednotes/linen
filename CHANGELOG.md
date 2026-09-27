@@ -7,6 +7,8 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-27
+
 ### Added
 
 - **`System.GitFn`** — Lean functions defined by their git location (a
@@ -25,20 +27,24 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
   `ToJson`/`FromJson`) over stdio or as a REST service
   (`System.GitFn.Worker`), or the checked sources are vendored into a package
   you `require` (`System.GitFn.Build.vendor`). `resolve` pins a branch or tag
-  to a SHA. Covered end to end by `lake exe gitfn-integration`, now run by CI
-  on every platform leg.
+  to a SHA. A worker is also a node of a reactive graph:
+  `Reactive.remote args β r` registers it as an ordinary `FnRef`
+  (`System.GitFn.Reactive`, with proven `Codec Lean.Json` instances for
+  `Nat`/`Int`/`String`/`Bool` and `Codec.ofJson`). Covered end to end by
+  `lake exe gitfn-integration` (including graphs around real stdio and HTTP
+  workers), now run by CI on every platform leg.
+- **`Control.Reactive.Reactive.fnImpl`** — register an already-erased
+  implementation under a declared signature (how remote functions enter a
+  graph).
 - **`Data.Name`** — a total reader of `Lean.Name`'s dotted syntax
   (`Data.Name.parse`, `Data.Name.roundTrips`), where `String.toName` can reach
   `unreachable!`; `Control.Reactive.Json`'s `parseLabel` now uses it.
 - **`Data.Json.Bridge`** — conversions between linen's `Data.Json.Value` and
-  Lean core's `Lean.Json`, exact except for numbers, as documented.
-
-### Known issues
-
-- **`Data.Json.Encode` writes non-integer numbers with 6 significant digits**
-  (`0.123456789` ↦ `0.123457`), so linen's JSON output loses precision on
-  such numbers. Found while writing `Data.Json.Bridge`; not changed here,
-  since fixing it changes the exact output other code may depend on.
+  Lean core's `Lean.Json`, exact except for numbers, as documented. Writing it
+  surfaced an existing limitation, left unchanged in this release because
+  fixing it changes output other code may depend on: `Data.Json.Encode`
+  writes non-integer numbers with 6 significant digits (`0.123456789` ↦
+  `0.123457`), so linen's JSON output loses precision on such numbers.
 
 ## [1.3.0] - 2026-09-27
 

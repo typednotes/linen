@@ -26,11 +26,16 @@
   `ToJson`/`FromJson`), to a worker over stdio or HTTP (`Worker`); or the
   checked sources are vendored into a package you `require` (`vendor`).
 
+  A worker is also a function of a reactive graph: `Reactive.remote` registers
+  it as an `FnRef` (`System.GitFn.Reactive`).
+
   Modules: `System.GitFn.Descriptor` (the descriptor, `resolve`),
   `System.GitFn.Policy` (the source check), `System.GitFn.Build` (fetch,
-  compile, vendor), `System.GitFn.Worker` (calling a worker).
+  compile, vendor), `System.GitFn.Worker` (calling a worker),
+  `System.GitFn.Reactive` (workers as graph nodes).
 -/
 import Linen.System.GitFn.Descriptor
 import Linen.System.GitFn.Policy
 import Linen.System.GitFn.Build
 import Linen.System.GitFn.Worker
+import Linen.System.GitFn.Reactive

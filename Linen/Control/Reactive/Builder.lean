@@ -152,6 +152,14 @@ def fn {F : Type} {args : List Type} {β : Type} [Callable m V F args β] (f : F
     Reactive m V (FnRef args β) :=
   (⟨·⟩) <$> register (Callable.erase f)
 
+/-- Register an already-erased implementation under a declared signature —
+    for functions that are not Lean functions of this process, such as a
+    remote `System.GitFn` worker. The signature is the caller's claim: values
+    that do not match it are rejected when decoded, as an `error`
+    notification of the node, not trusted. -/
+def fnImpl (args : List Type) (β : Type) (impl : Impl m V) : Reactive m V (FnRef args β) :=
+  (⟨·⟩) <$> register impl
+
 /-- Run `r` and label what it returns `l`, under the current scope. -/
 def label {α : Type} [Labelable α] (l : Lean.Name) (r : Reactive m V α) : Reactive m V α :=
   fun b => let (a, b') := r b; (a, Labelable.relabel a (b'.scope ++ l) b')

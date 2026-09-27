@@ -595,6 +595,7 @@ import Tests.Linen.System.GitFn.DescriptorTest
 import Tests.Linen.System.GitFn.PolicyTest
 import Tests.Linen.System.GitFn.BuildTest
 import Tests.Linen.System.GitFn.WorkerTest
+import Tests.Linen.System.GitFn.ReactiveTest
 import Tests.Linen.Data.NameTest
 import Tests.Linen.Data.Json.BridgeTest
 import Tests.Linen.Graphics.Graphviz.HtmlTest

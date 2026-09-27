@@ -104,6 +104,36 @@ def main : IO UInt32 := do
     checks := checks ++ [("IO function", r == .ok "hello world")]
     discard <| w.stop
 
+  -- A worker as a node of a reactive graph, mixed with local operators —
+  -- over stdio, then over HTTP.
+  match ← build cfg (desc `Demo.add "Nat → Nat → Nat") with
+  | .error e => checks := checks ++ [(s!"build Demo.add: {e}", false)]
+  | .ok built =>
+    let graphWith (r : Remote) : Control.Reactive.Reactive IO Json
+        (Control.Reactive.Subject Nat × Control.Reactive.Subject Nat × Control.Reactive.Observable Nat) := do
+      let x ← Control.Reactive.subject Nat
+      let y ← Control.Reactive.subject Nat
+      let addFn ← Control.Reactive.Reactive.remote [Nat, Nat] Nat r
+      let sum ← addFn x y
+      let scaled ← sum.map (· * 10)
+      pure (x, y, scaled)
+    let occurrences (x y : Control.Reactive.Subject Nat) : List (Control.Reactive.Occurrence Json) :=
+      [.next x 1 (2 : Nat), .next y 2 (3 : Nat), .next x 3 (10 : Nat)]
+    let w ← built.spawn
+    let b := graphWith w.remote
+    let (x, y, scaled) := b.result
+    let tr ← b.graph!.runM (occurrences x y)
+    checks := checks ++ [("graph with a stdio worker", tr.values scaled == [(2, 50), (3, 130)])]
+    discard <| w.stop
+    match ← built.serve with
+    | .error e => checks := checks ++ [(s!"http serve for the graph: {e}", false)]
+    | .ok h =>
+      let b := graphWith h.remote
+      let (x, y, scaled) := b.result
+      let tr ← b.graph!.runM (occurrences x y)
+      checks := checks ++ [("graph with an HTTP worker", tr.values scaled == [(2, 50), (3, 130)])]
+      h.stop
+
   -- A declared type that is not the function's: rejected by the semantic check.
   match ← build cfg (desc `Demo.add "Nat → Nat") with
   | .ok _ => checks := checks ++ [("wrong declared type is rejected", false)]
