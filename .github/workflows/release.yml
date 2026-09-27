@@ -35,7 +35,7 @@ jobs:
   # not after two platforms have each built the whole library.
   verify:
     name: Verify tag and notes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       tag: ${{ steps.check.outputs.tag }}
       version: ${{ steps.check.outputs.version }}
@@ -63,7 +63,7 @@ jobs:
           ./ci/check-release.sh "$TAG" > release-notes.md
 
       - name: Upload the release notes
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-notes
           path: release-notes.md
@@ -80,7 +80,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -102,7 +102,7 @@ jobs:
   publish:
     name: Publish the release
     needs: [verify, test]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       # The only write this workflow needs.
       contents: write
@@ -112,7 +112,7 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Download the release notes
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: release-notes
 

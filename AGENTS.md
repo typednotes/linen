@@ -125,7 +125,7 @@ suffix (`v0.17.0-rc1`) publishes as a prerelease, so it does not become
 "latest".
 
 **`release.yml` is narrower than `lean_action_ci.yml`, deliberately or not —
-know which.** Its `test` job runs `[ubuntu-latest, macos-latest]` only: it does
+know which.** Its `test` job runs `[ubuntu-24.04, macos-latest]` only: it does
 **not** cover the arm64 Linux leg, the consumer build, or the unsealable host.
 So a tag is gated on two of the four axes above. Two of those three uncovered
 axes have each already caught a bug that reached a release (0.19.1 and the

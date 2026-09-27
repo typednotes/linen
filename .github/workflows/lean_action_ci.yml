@@ -28,12 +28,15 @@ jobs:
         # commit, so adding distros would re-test identical `.olean` semantics.
         # Everything that varies lives at the FFI boundary:
         #
-        #   ubuntu-latest      Linux x86_64 — the sealed-DuckDB path, amd64 asset
+        #   ubuntu-24.04       Linux x86_64 — the sealed-DuckDB path, amd64 asset
+        #                      (pinned, like the arm leg: a new Ubuntu is a new
+        #                      glibc/g++ for the FFI link, so moving to it is a
+        #                      deliberate change, not a runner-label migration)
         #   ubuntu-24.04-arm   Linux arm64  — the `static-libs-linux-arm64.zip`
         #                      branch of `duckdbArchiveName`, which no CI run had
         #                      ever executed, plus arm64 static-libstdc++ discovery
         #   macos-latest       Darwin arm64 — the dynamic dylib path, no sealing
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -83,7 +86,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -272,7 +275,7 @@ jobs:
   # failure happens and says something useful.
   unsealable:
     name: A host that cannot seal DuckDB fails loudly
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container: debian:bookworm-slim
     steps:
       # `debian:bookworm-slim` ships no bash, so GitHub runs steps with `sh -e`
