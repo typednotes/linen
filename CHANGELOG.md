@@ -7,6 +7,8 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-09-28
+
 ### Fixed
 
 - **`raw!` made the kernel use gigabytes for a few hundred characters.** It
