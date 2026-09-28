@@ -72,7 +72,15 @@ jobs:
       # builds and called over stdio and HTTP, and the test asserts that none
       # of the fixture's own code (lakefile, `#eval`) ever ran. Not a
       # `#guard`: it needs git, spawns processes and runs builds.
+      #
+      # Both GitFn steps are bounded: they spawn processes and nested builds,
+      # and each prints its results only at the end, so an unbounded hang
+      # shows nothing and holds the job for hours. (`gitfn-remote` once
+      # swapped for 30 silent minutes before being cancelled: every build
+      # leaked a Lean environment, and 24 of them outgrew the runner.) Both
+      # take a few minutes.
       - name: GitFn integration test
+        timeout-minutes: 15
         run: lake exe gitfn-integration
 
       # `System.GitFn` against a real, private GitHub repository:
@@ -88,6 +96,7 @@ jobs:
       # first connection.
       - name: GitFn remote test (typednotes/test)
         if: matrix.os == 'ubuntu-24.04' && env.GITFN_DEPLOY_KEY != ''
+        timeout-minutes: 20
         env:
           GIT_TERMINAL_PROMPT: '0'
         run: |

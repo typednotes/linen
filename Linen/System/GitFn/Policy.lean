@@ -34,6 +34,7 @@
   an OS sandbox.
 -/
 import Lean
+import Std.Sync.Mutex
 
 namespace System.GitFn
 
@@ -250,28 +251,55 @@ private unsafe def libraryEnvironmentImpl (searchPath : List System.FilePath)
   enableInitializersExecution
   importModules (loadExts := true) (imports.map ({ module := · })) {}
 
-/-- Load the environment imports need, for parsing (their syntax extensions).
+/-- Import the environment imports need, for parsing (their syntax
+    extensions) — every call imports afresh and leaks it, so go through the
+    cached `libraryEnvironment` instead.
     Only **trusted library** modules are ever imported here — the imports a
     file may have besides project modules, which the policy allows — never a
     project module, so no remote code runs. (Implemented with Lean's `unsafe`
     `enableInitializersExecution`, as Lean's own frontend is.) -/
 @[implemented_by libraryEnvironmentImpl]
-opaque libraryEnvironment (searchPath : List System.FilePath) (imports : Array Name) :
+opaque importLibraryEnvironment (searchPath : List System.FilePath) (imports : Array Name) :
     IO Environment
+
+/-- The library environments loaded so far by this process, by search path
+    and imports.
+
+    Loaded **once per process**, not once per check: `importModules` maps the
+    `.olean` files into memory regions that Lean never releases when the
+    `Environment` is dropped (only the `unsafe` `Environment.freeRegions`
+    does, and only if nothing from the environment is still referenced). A
+    per-check cache therefore leaked a whole environment — about 860 MB for
+    `Init` — on every `checkProject`, i.e. on every `build`; the 24 checks of
+    `gitfn-remote` outgrew a 16 GB CI runner, which swapped until the job was
+    cancelled. Environments are immutable, so sharing one is safe; the mutex
+    keeps concurrent checks from importing the same set twice. -/
+initialize libraryEnvironments :
+    Std.Mutex (Std.HashMap (List String × List Name) Environment) ← Std.Mutex.new {}
+
+/-- Load the environment imports need, for parsing — loaded once per process
+    for each search path and set of imports (see `libraryEnvironments`). -/
+def libraryEnvironment (searchPath : List System.FilePath) (imports : Array Name) :
+    IO Environment :=
+  libraryEnvironments.atomically do
+    let key := (searchPath.map (·.toString), imports.toList)
+    if let some env := (← get)[key]? then return env
+    let env ← importLibraryEnvironment searchPath imports
+    modify (·.insert key env)
+    pure env
+
+/-- How many library environments this process has loaded: one per distinct
+    search path and set of imports, however many projects were checked. -/
+def libraryEnvironmentsLoaded : IO Nat :=
+  libraryEnvironments.atomically do return (← get).size
 
 /-- Check every source of the project rooted at `root`. -/
 def checkProject (p : Policy) (searchPath : List System.FilePath) (root : System.FilePath) :
     IO ProjectReport := do
   let sources ← projectSources root
   let project := sources.toList.map (·.1)
-  let cache ← IO.mkRef (∅ : Std.HashMap (List Name) Environment)
-  let envFor (imports : Array Name) : IO Environment := do
-    let key := imports.toList
-    if let some env := (← cache.get)[key]? then return env
-    let env ← libraryEnvironment searchPath imports
-    cache.modify (·.insert key env)
-    pure env
-  let files ← sources.mapM fun (m, f) => do checkSource p project envFor m (← IO.FS.readFile f)
+  let files ← sources.mapM fun (m, f) => do
+    checkSource p project (libraryEnvironment searchPath) m (← IO.FS.readFile f)
   pure ⟨files, admit project files⟩
 
 end System.GitFn

@@ -20,6 +20,24 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
   `GITFN_DEPLOY_KEY` secret is set, and warns when it is not;
   `GITFN_TEST_REPO`/`GITFN_TEST_COMMIT` point it elsewhere.
 
+### Fixed
+
+- **`System.GitFn` leaked a Lean environment on every build.** The secure
+  check parses remote sources with the allowed libraries' environment, and
+  `checkProject` imported it afresh on every call — once per `build`,
+  `fetchAndCheck` and `vendor`. `importModules` memory is never released when
+  an `Environment` is dropped, so each call leaked ~860 MB (`Init`): a host
+  building many functions grew without bound. `gitfn-remote`'s 24 checks
+  reached over 10 GB, and the 16 GB Linux runner swapped silently for 30
+  minutes until the job was cancelled. Library environments are now loaded
+  once per process per search path and set of imports
+  (`libraryEnvironments`, guarded by a mutex); `libraryEnvironmentsLoaded`
+  reports how many. Peak memory of `gitfn-integration` fell from 7.1 GB to
+  1.4 GB and of `gitfn-remote` from over 10 GB to 1.4 GB, which is also
+  faster. Both integration tests now assert that the count does not grow
+  after the first check, and CI bounds both GitFn steps
+  (`timeout-minutes`), so a hang fails in minutes rather than hours.
+
 ## [1.5.0] - 2026-09-27
 
 ### Added

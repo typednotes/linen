@@ -154,7 +154,10 @@ def main : IO UInt32 := do
   let desc (c : Case) : GitFn := { repo, commit, project := m.project, name := c.name, type := c.type }
 
   -- The policy: exactly the expected modules are excluded, each for its reason.
-  match ← fetchAndCheck cfg { probe with project := m.project } with
+  let checkedFirst ← fetchAndCheck cfg { probe with project := m.project }
+  -- Every later build checks the project again; it must reuse these.
+  let envsAfterFirst ← libraryEnvironmentsLoaded
+  match checkedFirst with
   | .error e => checks := checks.push (failWith "check the project" e)
   | .ok checked =>
     let excluded := checked.report.excluded
@@ -211,6 +214,13 @@ def main : IO UInt32 := do
   let found ← dirs.flatMap (fun d => m.markers.map (d / ·)) |>.filterM (·.pathExists)
   checks := checks.push <| expect s!"no remote code ran ({", ".intercalate m.markers})" found.isEmpty
     s!"{found}"
+
+  -- An import is never released, so a per-build import leaked ~860 MB per
+  -- build: this test's builds outgrew a 16 GB runner (see
+  -- `System.GitFn.libraryEnvironments`).
+  let envs ← libraryEnvironmentsLoaded
+  checks := checks.push <| expect s!"library environments are loaded once per process ({envs})"
+    (envsAfterFirst > 0 && envs == envsAfterFirst) s!"{envsAfterFirst} after the first check"
 
   let code ← report checks
   -- Keep everything for inspection when something failed.

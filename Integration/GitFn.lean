@@ -71,6 +71,14 @@ def main : IO UInt32 := do
   let desc (name : Name) (type : String) : GitFn :=
     { repo := repo.toString, commit := sha, project := "lean", name, type }
   let mut checks : List Check := []
+  -- Regression: every check of a project needs the library environments, and
+  -- an import is never released, so they must be loaded once per process —
+  -- not once per build (which leaked ~860 MB per build; see
+  -- `System.GitFn.libraryEnvironments`). Checked against the count after the
+  -- first project check, at the end.
+  let envsAfterFirst ← do
+    discard <| fetchAndCheck cfg (desc `Demo.add "Nat → Nat → Nat")
+    libraryEnvironmentsLoaded
 
   -- Resolving a revision gives the commit.
   checks := checks ++ [("resolve HEAD", (← resolve repo.toString "HEAD") == .ok sha)]
@@ -192,6 +200,10 @@ def main : IO UInt32 := do
     pure ((← (d / "LAKEFILE_WAS_RUN").pathExists) || (← (d / "EVIL_WAS_RUN").pathExists))
   let ranElsewhere ← (System.FilePath.mk "LAKEFILE_WAS_RUN").pathExists
   checks := checks ++ [("no remote code ran (lakefile, #eval)", !ran && !ranElsewhere)]
+
+  let envs ← libraryEnvironmentsLoaded
+  checks := checks ++ [(s!"library environments are loaded once per process ({envs})",
+    envsAfterFirst > 0 && envs == envsAfterFirst)]
 
   let code ← report checks
   -- Keep the fixture for inspection when something failed.
