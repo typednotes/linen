@@ -33,7 +33,7 @@
     driver either: a coroutine may yield forever, so any loop that runs one to
     completion is potentially non-terminating. Rather than smuggle in `partial`,
     this module exposes `Status` and leaves stepping to the caller, who can bound
-    it (see `Tests/…/CoroutineTest.lean`'s step-bounded driver, which recurses on
+    it (see `LinenTest/…/CoroutineTest.lean`'s step-bounded driver, which recurses on
     a `Nat` budget).
 -/
 import Linen.Control.Monad.Effect

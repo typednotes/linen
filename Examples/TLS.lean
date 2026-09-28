@@ -5,7 +5,7 @@
   locally-generated, 100-year-validity self-signed certificate for
   `CN=localhost` (embedded below as string literals — a throwaway demo
   fixture, not a production secret; the same fixture backs
-  `Tests/Linen/Network/TLS/ContextTest.lean`).
+  `LinenTest/Linen/Network/TLS/ContextTest.lean`).
 
   * the server side uses `createContext`/`setAlpn`/`acceptSocket`;
   * the client side uses `createClientContextWithCA`, trusting the

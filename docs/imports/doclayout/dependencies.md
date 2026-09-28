@@ -10,7 +10,7 @@ memory), planned for import into `linen` per [AGENTS.md](../../AGENTS.md)'s
 Hackage-import convention.
 
 **Status: done.** All 4 in-scope modules have been ported to `Linen/Text/DocLayout*`
-with `Tests/Linen/Text/DocLayout*` counterparts registered in `Tests.lean`. The
+with `LinenTest/Linen/Text/DocLayout*` counterparts registered in `Tests.lean`. The
 `render`/`offset`/`height` engine and its transitive callers are `unsafe`
 (structural but non-well-founded reassociation), per the `Data.Conduit`/
 `StreamK`/`Stream` precedent; everything else is total. The multi-thousand-entry

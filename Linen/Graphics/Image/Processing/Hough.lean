@@ -162,7 +162,7 @@
 
   ## Fixture/test naming
 
-  Tests in `Tests/Linen/Graphics/Image/Processing/HoughTest.lean` use a
+  Tests in `LinenTest/Linen/Graphics/Image/Processing/HoughTest.lean` use a
   `hough`-prefix on every fixture, to avoid cross-file `Tests` namespace
   collisions.
 -/

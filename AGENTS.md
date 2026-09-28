@@ -7,20 +7,20 @@ Guidance for working in the **linen** Lean library.
 - Library sources live under `Linen/`, mirroring their module path
   (e.g. `Linen/Data/Functor.lean` is module `Linen.Data.Functor`).
 - Every source module must be imported from the library root `Linen.lean`.
-- Tests live under `Tests/`, mirroring the source tree with a `Test` suffix
+- Tests live under `LinenTest/`, mirroring the source tree with a `Test` suffix
   on the file name (e.g. `Linen/Data/Functor.lean` →
-  `Tests/Linen/Data/FunctorTest.lean`), and are imported from `Tests.lean`.
+  `LinenTest/Linen/Data/FunctorTest.lean`), and are imported from `LinenTest.lean`.
 
 ## Testing
 
-- **Every module in `Linen/` must have a counterpart under `Tests/` with
+- **Every module in `Linen/` must have a counterpart under `LinenTest/` with
   illustrative tests.** The test module mirrors the source path (with a `Test`
-  suffix) and is added to the import list in `Tests.lean`.
-- Tests assert correctness with `#guard`, so building the `Tests` library runs
+  suffix) and is added to the import list in `LinenTest.lean`.
+- Tests assert correctness with `#guard`, so building the `LinenTest` library runs
   every check:
 
   ```
-  lake build Tests
+  lake test          # the package's test driver: builds `LinenTest`
   ```
 
 - Prefer small, illustrative `#guard` examples that document intended behaviour.

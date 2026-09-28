@@ -36,7 +36,7 @@ def pkgConfig (args : Array String) : IO (Array String) := do
     prefix on macOS), so no library path is ever hardcoded.
 
     **Adding that `-L` back is only safe when nothing links an executable.**
-    This library's own `Linen`/`Tests` targets never do (see the `lean_exe`
+    This library's own `Linen`/`LinenTest` targets never do (see the `lean_exe`
     note below), but every consumer that links a `lean_exe` does, and on Linux
     the directory is fatal there: `/usr/lib/<multiarch>` holds the *system*
     `libc.so`, so `-lc` resolves to it while Lean's vendored `Scrt1.o` still
@@ -381,7 +381,7 @@ def nmSymbolPairs (args : Array String) (tolerant : Bool := false)
     *undeliberately*, inherited from the host `libstdc++`/`libgcc` archives —
     keeps references to host-glibc symbols Lean's bundled glibc predates
     (see `ffi/duckdb_glibc_compat.c`). A *shared library* link does not check
-    any of this, which is why every `lean_lib` and `Tests` build on Linux
+    any of this, which is why every `lean_lib` and `LinenTest` build on Linux
     stayed green; an *executable* link does, under `ld.lld`'s
     `--no-allow-shlib-undefined`, and a consumer's `lean_exe` referencing
     DuckDB failed with `undefined reference: __isoc23_strtoul` while this
@@ -569,7 +569,7 @@ run_cmd do
   -- `libduckdb.{dylib,so}` at its unpacked/`DUCKDB_PREFIX` location without
   -- `DYLD_LIBRARY_PATH`/`LD_LIBRARY_PATH`. Chosen over copying the shared
   -- library next to every build output because rpath is a one-time link-time
-  -- flag applying uniformly to `lean_exe`, `Tests`' `#eval`s, and `Examples`
+  -- flag applying uniformly to `lean_exe`, `LinenTest`' `#eval`s, and `Examples`
   -- alike, whereas copying would need repeating (and re-syncing on upgrade)
   -- for every one of those separate output locations.
   --
@@ -593,7 +593,7 @@ run_cmd do
   -- `catch (...)` sits in the very frame being unwound. Every DuckDB error
   -- path therefore aborted the process with SIGABRT (`terminate called after
   -- throwing an instance of 'duckdb::…Exception'` / `terminate called
-  -- recursively`), which is what nine `Tests/Linen/Database/DuckDB/**` modules
+  -- recursively`), which is what nine `LinenTest/Linen/Database/DuckDB/**` modules
   -- hit on Linux and none hit on macOS.
   --
   -- Measured, not guessed: from plain C with no Lean in the process the
@@ -672,7 +672,9 @@ run_cmd do
 -- targets. OpenSSL needs none of them: Lean's toolchain ends every link with
 -- `-lssl -lcrypto` against its bundled static archives (see `nativeLinkArgs`).
 package linen where
-  version := v!"1.6.2"
+  version := v!"1.7.0"
+  -- `lake test` builds `LinenTest`, whose `#guard`s run as it elaborates.
+  testDriver := "LinenTest"
   moreLinkArgs := nativeLinkArgs
 
 -- ── Native FFI (POSIX sockets + kqueue/epoll, PostgreSQL libpq) ──
@@ -808,10 +810,10 @@ target duckdb_compat.o pkg : FilePath := do
       `libleanshared.so` at `dlopen` time.
 
     This is one shared library, not a static archive folded into every
-    consumer, because `Tests` is `precompileModules`-enabled: a static DuckDB
+    consumer, because `LinenTest` is `precompileModules`-enabled: a static DuckDB
     would be linked into each of the ~20 DuckDB test modules' `:dynlib`s
     separately. (`Linen` itself no longer precompiles — see its comment
-    below — but `Tests` still does, so the reason stands.)
+    below — but `LinenTest` still does, so the reason stands.)
 
     The glibc-compat object (`duckdb_compat.o`) links in beside the shim so
     the host C++ runtime's references to newer-glibc symbols — the ones that
@@ -906,7 +908,7 @@ lean_lib Linen where
   -- here. README's "linking against linen" section warns consumers off
   -- `precompileModules` for this same reason.
   --
-  -- `Tests` below still precompiles, which is what keeps `Linen:shared` built
+  -- `LinenTest` below still precompiles, which is what keeps `Linen:shared` built
   -- for the `#eval`s that call `@[extern]` bindings through the interpreter.
   -- A consumer needing that sets it on its own library, as the consumer job
   -- in `lean_action_ci.yml` does.
@@ -919,8 +921,8 @@ lean_lib Linen where
   -- `needs`.
   precompileModules := false
 
-lean_lib Tests where
-  -- `Tests.Linen.Database.DuckDB.FFI.TestSupport` (a `Tests`-tree module, not
+lean_lib LinenTest where
+  -- `LinenTest.Linen.Database.DuckDB.FFI.TestSupport` (a `LinenTest`-tree module, not
   -- a `Linen` one) declares its own `@[extern]` bindings for later test
   -- files' `#eval`s to call through the interpreter — same reason `Linen`
   -- itself precompiles, just one level down. See `Linen`'s comment above for

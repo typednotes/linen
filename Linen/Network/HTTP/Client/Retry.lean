@@ -74,6 +74,13 @@ def backoffMillis (p : RetryPolicy) (attempt : Nat) : Nat :=
 def jitterMillis (p : RetryPolicy) (delay : Nat) : BaseIO Nat :=
   if p.jitter && delay > 1 then IO.rand (delay / 2) delay else pure delay
 
+/-- The milliseconds a `Retry-After` header *value* asks for, when it is a
+    plain number of seconds (the HTTP-date form is not handled: see
+    `retryAfterMillis`). For responses that are not a `Client.Response` — a
+    relayed one, say — whose headers the caller reads itself. -/
+def parseRetryAfterMillis (value : String) : Option Nat :=
+  (String.toNat? value.trimAscii.toString).map (· * 1000)
+
 /-- The number of seconds a `Retry-After` header asks for, when it gives a
     plain delay.
 
@@ -81,22 +88,24 @@ def jitterMillis (p : RetryPolicy) (delay : Nat) : BaseIO Nat :=
     trusted clock and correct skew handling, and getting that wrong is worse
     than falling back to backoff. An unparseable value is simply ignored. -/
 def retryAfterMillis (resp : Response) : Option Nat :=
-  match resp.findHeader Network.HTTP.Types.hRetryAfter with
-  | some v => (String.toNat? v.trimAscii.toString).map (· * 1000)
-  | none   => none
+  (resp.findHeader Network.HTTP.Types.hRetryAfter).bind parseRetryAfterMillis
+
+/-- How long to wait before `attempt`, given the server's advice in
+    milliseconds (`advised`, e.g. from `parseRetryAfterMillis`), if any: the
+    advice when the policy honours it and it is not absurd (at most
+    `maxDelayMillis`), else jittered backoff. The response-type-independent
+    core of `delayBefore`, for callers running their own loop — over a
+    response type of their own, or checking a cancellation flag between
+    attempts. -/
+def delayFor (p : RetryPolicy) (attempt : Nat) (advised : Option Nat) : BaseIO Nat :=
+  match (if p.honourRetryAfter then advised.filter (· ≤ p.maxDelayMillis) else none) with
+  | some ms => pure ms                            -- the server said; believe it
+  | none    => jitterMillis p (backoffMillis p attempt)
 
 /-- How long to wait before `attempt`, taking the server's advice when it gave
     any and it is not absurd. -/
-def delayBefore (p : RetryPolicy) (attempt : Nat) (resp : Option Response) : BaseIO Nat := do
-  let advised :=
-    if p.honourRetryAfter then
-      match resp with
-      | some r => (retryAfterMillis r).filter (· ≤ p.maxDelayMillis)
-      | none   => none
-    else none
-  match advised with
-  | some ms => pure ms                            -- the server said; believe it
-  | none    => jitterMillis p (backoffMillis p attempt)
+def delayBefore (p : RetryPolicy) (attempt : Nat) (resp : Option Response) : BaseIO Nat :=
+  delayFor p attempt (resp.bind retryAfterMillis)
 
 -- ── Running ──
 

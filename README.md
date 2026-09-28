@@ -21,9 +21,9 @@
 <p align="center">
   <!-- Counts are produced by, and should be refreshed with:
          modules:  find Linen -name '*.lean' | wc -l
-         theorems: grep -rhE '^theorem ' Linen Tests --include='*.lean' | wc -l
-         guards:   grep -rhE '^#guard'    Linen Tests --include='*.lean' | wc -l -->
-  <strong>788 modules</strong> · <strong>491 compile-time theorems</strong> · <strong>11295 <code>#guard</code> checks</strong>
+         theorems: grep -rhE '^theorem ' Linen LinenTest --include='*.lean' | wc -l
+         guards:   grep -rhE '^#guard'    Linen LinenTest --include='*.lean' | wc -l -->
+  <strong>792 modules</strong> · <strong>491 compile-time theorems</strong> · <strong>11383 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -43,7 +43,7 @@ Three rules hold across the whole library:
   Kleisli combinator, `List.foldlM` over `foldM`).
 - **No `partial`, no `sorry`** — all recursion is structural or has a proven
   termination argument, and proofs are complete.
-- **Everything is tested** — each module has a `Tests/` counterpart whose
+- **Everything is tested** — each module has a `LinenTest/` counterpart whose
   `#guard` examples run on every build.
 
 ## Features
@@ -228,6 +228,8 @@ for the full per-module feature list and module table.
   inflate, RFC 1321 MD5, the RC4 stream cipher, and AES-128 CBC decryption
   + PKCS5 unpadding — the primitives behind the PDF Standard Security
   Handler.
+- **`Crypto.ConstantTime`** — comparing secrets (MAC tags, tokens) without
+  a timing oracle; used by `Crypto.JOSE`'s HMAC verification.
 - **`System.Keychain`** — OS credential-store access (macOS Keychain,
   Linux Secret Service, Windows Credential Manager).
 - **`Data.PDF.Stream` / `Data.PDF.Core` / `Data.PDF.Content` /
@@ -251,6 +253,10 @@ for the full per-module feature list and module table.
   representations, index-space operators, and stencil-based convolution.
 - **`System.Console.Ansi` / `System.Exit` / `System.Log.FastLogger`** —
   terminal styling, process exit codes, and buffered logging.
+- **`System.Process`** — run a command with a deadline and an abort flag,
+  killing its whole process group; **`System.LakeLog`** — `lake build`'s
+  output as diagnostics; **`System.Git.Remote`** — branch names and
+  repository URLs checked before they reach `git` or a hosting API.
 - **`System.GitFn`** — run a Lean function identified by its git location
   (repo, commit, project, name, declared type) securely: the remote sources
   are checked before compilation (plain, kernel-checked Lean only, effects
@@ -463,7 +469,7 @@ See **[docs/modules.md](docs/modules.md)** for the full module table (all 770 mo
 
 ```bash
 lake build          # build the library
-lake build Tests    # run every #guard / #eval check
+lake test    # builds LinenTest: runs every #guard / #eval check
 ```
 
 ## Examples
@@ -580,7 +586,7 @@ Haskell's `Data.Vector` offers already exists verbatim on `Array`.
 The `todo` example is a small in-memory TODO list whose every page is built
 from `Web.Html`/`Web.Css` typed constructors — the `<ul>`/`<li>` nesting, each
 item's `<form>`s, and its inline `style` all go through the same
-illegal-construct-is-a-compile-error discipline as `Tests.Linen.Web.HtmlTest`/
+illegal-construct-is-a-compile-error discipline as `LinenTest.Linen.Web.HtmlTest`/
 `CssTest` (e.g. a `<div>` inside a `<p>`, or a `color` declaration given a
 `Display` value, simply fails to compile). Routing and state reuse
 `Network.WebApp`'s `Application`/`AppM`, driven by the real

@@ -120,7 +120,7 @@
 
   Following this whole sub-tree's own convention (`jp`/`pnm` prefixes in
   `IO.Formats.JuicyPixels`/`.Netpbm`'s own test files), tests in
-  `Tests/Linen/Graphics/Image/IOTest.lean` use an `io`-prefix on every
+  `LinenTest/Linen/Graphics/Image/IOTest.lean` use an `io`-prefix on every
   fixture, to avoid cross-file `Tests` namespace collisions.
 -/
 

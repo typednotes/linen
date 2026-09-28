@@ -191,7 +191,7 @@
   ## Fixture/test naming
 
   Following `Linen.Codec.Picture`'s own convention, tests in
-  `Tests/Linen/Graphics/Image/IO/Formats/JuicyPixelsTest.lean` use a `jp`
+  `LinenTest/Linen/Graphics/Image/IO/Formats/JuicyPixelsTest.lean` use a `jp`
   prefix on every fixture, to avoid cross-file `Tests` namespace collisions.
 -/
 

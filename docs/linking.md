@@ -277,7 +277,7 @@ What sealing changes:
 
 ### 4.5 Build-time verification
 
-`ci/check-sealed-duckdb.sh` runs in both workflows after `lake build Tests` and
+`ci/check-sealed-duckdb.sh` runs in both workflows after `lake test` and
 asserts the properties tabulated in §4.1 against the linked library. A symbol
 table is not observable from a `#guard`, and the two failure modes seen in
 practice — a missing archive (§4.3) and a stale artifact (below) — produce a
@@ -305,7 +305,7 @@ exactly three symbols the bundled glibc predates:
 | `_dl_find_object` | 2.35 | `libgcc_eh.a` |
 
 A shared-library link permits undefined symbols, so the sealed library's own
-link — and every `lean_lib`/`Tests`/dynlib link on top of it — sails through
+link — and every `lean_lib`/`LinenTest`/dynlib link on top of it — sails through
 with those references dangling. `ld.lld` checks them in one place only:
 linking an *executable*, under `--no-allow-shlib-undefined`. So a consumer's
 `lean_exe` importing DuckDB failed with

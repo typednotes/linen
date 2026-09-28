@@ -8,7 +8,7 @@
   Base16 is RFC 4648 §8, the same document `Linen.Data.Base64` implements.
   Added because nothing in the library exposed hex encoding: the only such
   code was a private `toHex` helper duplicated inside
-  `Tests/Linen/Crypto/SHA256Test.lean`, and
+  `LinenTest/Linen/Crypto/SHA256Test.lean`, and
   `Linen.Data.ByteString.Builder.wordHex` renders a *number* without
   per-byte zero padding (`10 ↦ "a"`, not `"0a"`), so it cannot encode a
   digest. Digest-to-hex is required by anything that prints or compares a

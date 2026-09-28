@@ -163,7 +163,7 @@
 
   ## Fixture/test naming
 
-  Tests in `Tests/Linen/Graphics/ImageTest.lean` use an `img`-prefix on every
+  Tests in `LinenTest/Linen/Graphics/ImageTest.lean` use an `img`-prefix on every
   fixture, to avoid cross-file `Tests` namespace collisions.
 -/
 

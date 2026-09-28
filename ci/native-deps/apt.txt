@@ -1,0 +1,38 @@
+# The Debian/Ubuntu packages needed to build linen — standalone or, more to the
+# point, as a dependency of another package (`require linen …`), whose `lake
+# build` compiles linen's C shims and links its native libraries.
+#
+# One package per line; `#` starts a comment. Install with
+#
+#   sed 's/#.*//' apt.txt | xargs apt-get install -y --no-install-recommends
+#
+# Read by `.github/actions/setup-native-deps` (so linen's CI builds with
+# exactly this list) and meant to be read by consumers too — a workflow step
+# or a Dockerfile — at the linen tag they require, instead of a hand copy:
+#
+#   ADD https://raw.githubusercontent.com/typednotes/linen/vX.Y.Z/ci/native-deps/apt.txt /tmp/linen-apt.txt
+#
+# The `unsealable` CI job deliberately installs a smaller set (no g++).
+
+# C/C++ toolchain: gcc for the shims in `ffi/`, g++ for the static libstdc++
+# the sealed DuckDB link needs (docs/linking.md).
+build-essential
+pkg-config
+
+# The DuckDB release archive `lakefile.lean` downloads on first build.
+curl
+unzip
+ca-certificates
+
+# Lake fetches linen and its dependencies with git.
+git
+
+# Libraries the lakefile resolves through pkg-config.
+#  - libpq      ffi/postgres.c   Database.PostgreSQL
+#  - OpenSSL    ffi/jose.c, ffi/tls.c   Crypto.*, Network.TLS, the HTTP client
+#  - zlib       ffi/zlib.c       Crypto.Zlib
+#  - libsecret  ffi/keychain.c   System.Keychain (Linux only)
+libpq-dev
+libssl-dev
+zlib1g-dev
+libsecret-1-dev

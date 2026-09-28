@@ -107,7 +107,7 @@
 
   ## Fixture/test naming
 
-  Tests in `Tests/Linen/Graphics/Image/Processing/NoiseTest.lean` use a
+  Tests in `LinenTest/Linen/Graphics/Image/Processing/NoiseTest.lean` use a
   `noise`-prefix on every fixture, to avoid cross-file `Tests` namespace
   collisions.
 -/

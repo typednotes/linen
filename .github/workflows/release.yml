@@ -88,10 +88,12 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
       - uses: ./.github/actions/setup-native-deps
       - uses: leanprover/lean-action@v1
+        with:
+          test: false
       # Every `#guard` and `#guard_msgs` check runs at elaboration time, so
-      # building `Tests` *is* running the tests.
+      # `lake test` (which builds `LinenTest`) *is* running the tests.
       - name: Build the test suite (runs every #guard check)
-        run: lake build Tests
+        run: lake test
 
       # Same check as the CI workflow, via the same script — a release must not
       # ship a Linux build whose DuckDB aborts on its first error path.

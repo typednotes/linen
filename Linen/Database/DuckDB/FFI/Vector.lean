@@ -32,7 +32,7 @@
   `getDataBytes` (to copy out the 16-byte `duckdb_string_t` image at
   `idx*16`) with `Database.DuckDB.FFI.Helpers.stringTData` — both modules
   depend only on `Types`, so that composition happens in consumer code
-  (e.g. this batch's own `Tests/`), not inside either module.
+  (e.g. this batch's own `LinenTest/`), not inside either module.
 
   **Excluded.** `duckdb_slice_vector`/`duckdb_vector_copy_sel` need a
   `duckdb_selection_vector` (`SelectionVector`, explicitly excluded by

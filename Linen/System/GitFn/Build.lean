@@ -29,11 +29,14 @@
   generated package your project `require`s by path — the remote lakefile
   still never runs.
 
-  Timeouts and OS sandboxing are not provided here: a trusted elaborator
-  that runs forever makes `build` wait forever.
+  Every `git` and `lake` step runs under a deadline (`Config.timeoutMs`,
+  `System.Process.run`): a step that outlives it is killed with its process
+  group (an elaborator that loops, a fetch that hangs) and the build fails
+  with that reason. OS sandboxing is not provided here.
 -/
 import Linen.System.GitFn.Descriptor
 import Linen.System.GitFn.Policy
+import Linen.System.Process
 
 namespace System.GitFn
 
@@ -55,6 +58,10 @@ structure Library where
 /-- linen itself, at `path`, as a selectable library. -/
 def Library.linen (path : System.FilePath) : Library := ⟨`linen, path, [`Linen]⟩
 
+/-- The default deadline of one `git` or `lake` step: an hour, enough for a
+    cold build of a project and its libraries. -/
+def defaultTimeoutMs : Nat := 3600 * 1000
+
 /-- Where and how to build. -/
 structure Config where
   /-- Where checkouts and generated packages are kept. -/
@@ -72,6 +79,9 @@ structure Config where
   searchPath : List System.FilePath := []
   /-- The toolchain the generated packages pin: the host's. -/
   toolchain : String := s!"leanprover/lean4:v{Lean.versionString}"
+  /-- How long one `git` or `lake` step may run, in milliseconds, before it
+      is killed (with its process group) and the build fails. -/
+  timeoutMs : Nat := defaultTimeoutMs
 
 /-- The policy in force: the configured one, allowing the libraries' prefixes. -/
 def Config.effectivePolicy (cfg : Config) : Policy :=
@@ -85,11 +95,17 @@ def cleanEnv : Array (String × Option String) :=
     ("LEAN_SYSROOT", none), ("LEAN_GITHASH", none), ("LAKE_PKG_URL_MAP", none),
     ("ELAN_TOOLCHAIN", none)]
 
-/-- Run a command; its output, or why it failed. -/
-def run (cmd : String) (args : Array String) (cwd : System.FilePath) : IO (Except String String) := do
-  let out ← IO.Process.output { cmd, args, cwd, env := cleanEnv }
-  if out.exitCode == 0 then return .ok out.stdout
-  return .error s!"`{cmd} {" ".intercalate args.toList}` failed ({out.exitCode}):\n{out.stdout}{out.stderr}"
+/-- Run a command, killing it (and its process group) after `timeoutMs`
+    milliseconds; its output, or why it failed. -/
+def run (cmd : String) (args : Array String) (cwd : System.FilePath)
+    (timeoutMs : Nat := defaultTimeoutMs) : IO (Except String String) := do
+  let what := s!"`{cmd} {" ".intercalate args.toList}`"
+  let out ← try System.Process.run cmd args timeoutMs (cwd := cwd) (env := cleanEnv)
+    catch e => return .error s!"{what} could not be started: {e}"
+  match out.exitCode with
+  | some 0 => return .ok out.stdout
+  | some c => return .error s!"{what} failed ({c}):\n{out.stdout}{out.stderr}"
+  | none => return .error s!"{what} was killed after {timeoutMs / 1000} s:\n{out.stdout}{out.stderr}"
 
 -- ── Fetching ────────────────────────────────────────────────────────────────
 
@@ -100,7 +116,7 @@ def gitSafety : Array String := #["-c", "core.hooksPath=/dev/null", "-c", "advic
 def fetch (cfg : Config) (fn : GitFn) : IO (Except String System.FilePath) := do
   let dir := cfg.cache / "src" / fn.commit.hex
   if ← (dir / ".git").pathExists then
-    if let .ok head := ← run cfg.git (gitSafety ++ #["rev-parse", "HEAD"]) dir then
+    if let .ok head := ← run cfg.git (gitSafety ++ #["rev-parse", "HEAD"]) dir cfg.timeoutMs then
       if head.trimAscii.toString == fn.commit.hex then return .ok dir
   if ← dir.pathExists then IO.FS.removeDirAll dir
   IO.FS.createDirAll dir
@@ -109,8 +125,8 @@ def fetch (cfg : Config) (fn : GitFn) : IO (Except String System.FilePath) := do
      gitSafety ++ #["fetch", "-q", "--depth", "1", "--no-recurse-submodules", fn.repo, fn.commit.hex],
      gitSafety ++ #["checkout", "-q", "--detach", "FETCH_HEAD"]]
   for args in steps do
-    if let .error e := ← run cfg.git args dir then return .error e
-  match ← run cfg.git (gitSafety ++ #["rev-parse", "HEAD"]) dir with
+    if let .error e := ← run cfg.git args dir cfg.timeoutMs then return .error e
+  match ← run cfg.git (gitSafety ++ #["rev-parse", "HEAD"]) dir cfg.timeoutMs with
   | .ok head =>
     if head.trimAscii.toString == fn.commit.hex then return .ok dir
     return .error s!"the checkout is at {head.trimAscii}, not {fn.commit}"
@@ -352,7 +368,7 @@ def build (cfg : Config) (fn : GitFn) : IO (Except String Built) := do
   let exe := dir / ".lake" / "build" / "bin" / "linen-gitfn-worker"
   unless ← exe.pathExists do
     writePackage cfg dir "linen-gitfn" [fn] checked (some fn)
-    if let .error e := ← run cfg.lake #["build"] dir then
+    if let .error e := ← run cfg.lake #["build"] dir cfg.timeoutMs then
       return .error s!"{e}\nexcluded modules: {reprStr checked.report.excluded}"
   pure (.ok ⟨fn, dir, exe, checked.report⟩)
 
@@ -394,7 +410,7 @@ def vendor (cfg : Config) (fns : List GitFn) (into : System.FilePath) :
     | .error e => return .error e
   let pkg := s!"gitfn-{fn.commit.hex.take 12}"
   writePackage cfg into pkg fns checked none
-  if let .error e := ← run cfg.lake #["build"] into then
+  if let .error e := ← run cfg.lake #["build"] into cfg.timeoutMs then
     return .error s!"{e}\nexcluded modules: {reprStr checked.report.excluded}"
   let dir ← IO.FS.realPath into
   pure <| .ok {

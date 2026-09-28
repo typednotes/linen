@@ -49,15 +49,18 @@ jobs:
       # Installs libpq, OpenSSL and (on Linux) libsecret. Shared with the
       # release workflow, so the two cannot drift.
       - uses: ./.github/actions/setup-native-deps
+      # `test: false`: the suite runs in the named step below instead.
       - uses: leanprover/lean-action@v1
-      # `Tests` is not a default target, so `lean-action`'s `lake build` does
-      # not reach it. Build it explicitly on every matrix leg: AGENTS.md
+        with:
+          test: false
+      # `LinenTest` is not a default target, so `lean-action`'s `lake build` does
+      # not reach it. Run it explicitly on every matrix leg: AGENTS.md
       # requires the full test suite to run on each platform axis whenever an
       # FFI target is in the build graph, and every `#guard`/`#guard_msgs`
-      # check in the suite runs at elaboration time — so building `Tests` *is*
-      # running the tests.
+      # check in the suite runs at elaboration time — so `lake test` (the
+      # package's test driver, which builds `LinenTest`) *is* running the tests.
       - name: Build the test suite (runs every #guard check)
-        run: lake build Tests
+        run: lake test
 
       # A symbol table is not observable from a `#guard`, and getting this
       # wrong aborts the process on every DuckDB error path rather than failing

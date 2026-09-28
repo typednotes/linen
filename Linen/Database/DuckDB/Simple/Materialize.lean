@@ -23,7 +23,7 @@
     `LogicalTypes` accessors, never anything result-specific), so the port
     is otherwise complete and faithful; only this batch's *tests* are
     affected, and exercise it against manually-built chunks/vectors
-    populated via `Vector`'s own setters — see `Tests/…MaterializeTest.lean`.
+    populated via `Vector`'s own setters — see `LinenTest/…MaterializeTest.lean`.
   - **No BIGNUM/VARINT `FieldValue` constructor.** `FromField.FieldValue` (as
     already ported) has no constructor for DuckDB's `VARINT` type — upstream
     itself doesn't materialize `VARINT` into anything but a raw byte blob

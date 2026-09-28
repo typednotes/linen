@@ -92,7 +92,7 @@
   ## Fixture/test naming
 
   Following `IO.Formats.JuicyPixels`'s own convention, tests in
-  `Tests/Linen/Graphics/Image/IO/Formats/NetpbmTest.lean` use a `pnm` prefix
+  `LinenTest/Linen/Graphics/Image/IO/Formats/NetpbmTest.lean` use a `pnm` prefix
   on every fixture, to avoid cross-file `Tests` namespace collisions.
 -/
 

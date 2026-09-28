@@ -6,7 +6,7 @@
   Every page is assembled from typed `Web.Html`/`Web.Css` constructors —
   the list `<ul>`/`<li>` nesting, the `<form>`s, and each item's inline
   `style` all go through the same illegal-construct-is-a-compile-error
-  discipline demonstrated in `Tests.Linen.Web.HtmlTest`/`CssTest`, there is
+  discipline demonstrated in `LinenTest.Linen.Web.HtmlTest`/`CssTest`, there is
   no hand-written HTML string anywhere in this file. Routing and the
   in-memory `IO.mkRef` state reuse `Network.WebApp`'s `Application`, driven
   by the real `Network.WebApp.Server` engine via `withApplication`, exactly

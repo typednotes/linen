@@ -130,7 +130,7 @@
 
   ## Fixture/test naming
 
-  Tests in `Tests/Linen/Graphics/Image/Processing/AheTest.lean` use an
+  Tests in `LinenTest/Linen/Graphics/Image/Processing/AheTest.lean` use an
   `ahe`-prefix on every fixture, to avoid cross-file `Tests` namespace
   collisions.
 -/

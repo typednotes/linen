@@ -14,7 +14,7 @@
  *
  * Leaving them undefined does not fail the *sealed library's own* link —
  * shared libraries may keep undefined symbols — and it does not fail
- * library-shaped links either, which is why every `lean_lib`/`Tests` build
+ * library-shaped links either, which is why every `lean_lib`/`LinenTest` build
  * on Linux stayed green. It fails one link shape only: an *executable*
  * (`lean_exe`), because `ld.lld` checks shared-library references there
  * under `--no-allow-shlib-undefined` — so every consumer that links a

@@ -7,6 +7,68 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-09-28
+
+Building blocks moved from the sibling services `lode` and `lun`, which
+carried identical copies (and `liaison`, whose warrant-tag check needed the
+constant-time comparison neither linen nor it had).
+
+### Added
+
+- **`System.Process`** — run a command to completion with a deadline and an
+  abort flag (`IO.Ref Bool`), killing the child's whole process group; stdout
+  and stderr read concurrently, optional stdin; `runBytes` for binary output;
+  `Result.describe`; `hermeticGit`.
+- **`System.LakeLog`** — `lake build`'s text output as `Diagnostic`s
+  (`parse`, `splitLocation`, `render`, `isSummary`, `ToJson`).
+- **`System.Git.Remote`** — `isBranchName` (what `git check-ref-format
+  --branch` accepts) and `Repository.parse` (GitHub, GitLab, other `https`
+  hosts, `file://` on request; one canonical clone URL).
+- **`Crypto.ConstantTime`** — `eq`/`eqString`, comparisons that read every
+  byte whatever they find.
+- **`Network.HTTP.Client.parseRetryAfterMillis` and `delayFor`** — the
+  `Retry-After` parsing and delay choice of `delayBefore`, usable without a
+  `Client.Response` (a relayed response, a loop of one's own that checks a
+  cancellation flag between attempts). `retryAfterMillis` and `delayBefore`
+  are now defined on top of them, unchanged.
+- **`ci/native-deps/apt.txt`** — the Debian/Ubuntu packages linen needs to
+  build as a dependency, read by `.github/actions/setup-native-deps` and
+  readable by consumers at a tag (a Dockerfile's `ADD`). The action takes a
+  `keyring` input (default `true`); a consumer passes `false` to skip the
+  Secret Service daemon linen's own tests need.
+
+### Changed
+
+- **The test library is `LinenTest`** (module tree `LinenTest.*`, directory
+  `LinenTest/`), no longer `Tests`, following mathlib's `MathlibTest`,
+  batteries' `BatteriesTest` and aesop's `AesopTest`; it is the package's
+  `testDriver`, so the suite runs with `lake test`. A dependency owning the
+  generic top-level module name `Tests` confused Lake's module lookup in every
+  consumer that named its own tests `Tests`. Test namespaces are unchanged.
+- **`System.GitFn.Build` runs every `git` and `lake` step under a deadline**
+  (`Config.timeoutMs`, an hour by default), through `System.Process`: a step
+  that outlives it is killed with its process group and the build fails
+  saying so. A command that cannot be started is now an `.error`, not an
+  exception.
+
+### Security
+
+- **`Crypto.JOSE.JWS.verifySignature` compares HMAC signatures in constant
+  time** (`Crypto.ConstantTime.eq`); it used `ByteArray`'s `==`, which returns
+  at the first differing byte and so tells an attacker how much of a forged
+  MAC is right.
+
+### Fixed
+
+- **Killing a command reaches its descendants.** Lean's runtime (4.34) drops
+  the `setsid` flag from the `Child` that `Child.takeStdin` returns, so
+  `Child.kill` on it signals the leader only. lode's and lun's runners (now
+  `System.Process`) relied on it: at a deadline or an abort, a `lake build`'s
+  `lean` workers or a shell's background jobs kept running — and kept the
+  output pipes open, so the runner waited for them past its deadline.
+  `System.Process` signals the group explicitly (`killGroup`); a test checks
+  that a grandchild dies and that the runner returns at the deadline.
+
 ## [1.6.2] - 2026-09-28
 
 ### Fixed

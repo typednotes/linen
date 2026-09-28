@@ -400,6 +400,23 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   buffer, auto-flush on full / on close) to stdout/stderr/file/callback:
   `newLoggerSet`/`pushLogStr`/`flushLogStr`/`withFastLogger`.
 
+### `System.Process` — commands with a deadline
+
+- `System.Process` — `run`: a command to completion with stdout and stderr
+  read concurrently, optional stdin, and a deadline and an abort flag
+  (`IO.Ref Bool`) after which the child's whole process group is killed
+  (signalled explicitly: Lean 4.34's `Child.kill` misses the group after
+  `takeStdin`); `runBytes` for binary output; `Result.describe`;
+  `hermeticGit` (git without the host's configuration or prompts). Moved from
+  lode and lun; `System.GitFn.Build` runs its steps through it.
+- `System.LakeLog` — `lake build`'s text output as `Diagnostic`s (severity,
+  file, line, column, multi-line message), `render`, `isSummary`. Moved from
+  lode and lun.
+- `System.Git.Remote` — `isBranchName` (`git check-ref-format --branch`) and
+  `Repository.parse` (GitHub, GitLab, other `https` hosts, `file://` on
+  request; no userinfo, port, query, fragment or dot segment; one canonical
+  clone URL). Moved from lode and lun, which must agree on both.
+
 ### `System.Keychain` — OS credential-store access
 
 - Ports the Rust [`keyring`](https://crates.io/crates/keyring) crate
@@ -548,7 +565,7 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   (macOS) / epoll (Linux)**. The shim is compiled and linked by `lakefile.lean`
   (`extern_lib linenffi`). The `Linen` library is deliberately *not*
   `precompileModules`-enabled, so importing one module does not build all of
-  them; `Tests` is, which is what makes the bindings callable from `#eval`.
+  them; `LinenTest` is, which is what makes the bindings callable from `#eval`.
   A consumer that needs the same sets it on its own library.
 - `Network.Socket` — the safe, high-level API over the FFI: `socket → bind →
   listen → accept` (and `connect`/`connectFinish`, `send`/`recv`, `sendAll`,
@@ -683,7 +700,8 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   macros/syntax/elab, `initialize`, `extern`/`implemented_by`/`export`/`init`,
   and side effects outside `IO` (`panic`, `dbgTrace`, `unsafeBaseIO`, …); the
   admitted modules are a greatest fixpoint over project imports.
-- `System.GitFn.Build` — fetch at the SHA (no hooks, no submodules), compile
+- `System.GitFn.Build` — every `git`/`lake` step under a deadline
+  (`Config.timeoutMs`, an hour by default; `System.Process`); fetch at the SHA (no hooks, no submodules), compile
   the admitted sources with the host's toolchain in a generated package whose
   only dependencies are the selected libraries, with a generated semantic
   check (declared type defeq without coercion; no unsafe/partial/extern/
@@ -982,7 +1000,11 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   symmetric key) and `toDerPublicKey` (RSA/EC JWK → DER public key via OpenSSL).
 - `Crypto.JOSE.JWS` — JWS compact-serialization verification (RFC 7515):
   `splitCompact` and `verifySignature`, dispatching HMAC / RSA (PKCS1+PSS) / EC
-  to the OpenSSL FFI.
+  to the OpenSSL FFI; HMAC signatures are compared in constant time
+  (`Crypto.ConstantTime.eq`).
+- `Crypto.ConstantTime` — `eq`/`eqString`: equality that reads every byte
+  whatever it finds (an `|||` of `^^^`, no early exit), for MAC tags and
+  bearer tokens; lengths are not hidden. Moved from lode and lun.
 - `Crypto.JOSE.JWT` — JWT verification (RFC 7519): pure `validateClaims`
   (`exp`/`nbf` with bounded skew, `aud`/`iss` matching) and IO `verifyJWT`
   (parse compact form, verify the signature over the candidate JWK set, then
@@ -2532,6 +2554,7 @@ the secrets, never their values.
 | `Linen.Crypto.Zlib.FFI` | `@[extern]` zlib inflate-only FFI (`ffi/zlib.c`): opaque `Inflate` handle, `initInflate`/`feedInflate`/`finishInflate`, one-shot `decompress` |
 | `Linen.Crypto.MD5` | RFC 1321 MD5 digest: pure, structurally-recursive `hash` (64-round compression over fixed 64-byte blocks) |
 | `Linen.Crypto.RC4` | RC4 stream cipher: `initCtx` (KSA, 256-byte S-box) + `combine` (PRGA keystream XOR), both structurally recursive |
+| `Linen.Crypto.ConstantTime` | `eq`/`eqString`: byte comparison that reads every byte (lengths not hidden) |
 | `Linen.Crypto.AES` | AES-128 block cipher: Rijndael key schedule (`initAES`), CBC `decryptCBC`, PKCS5 `unpadPKCS5` |
 | `Linen.Data.PDF.Stream` | buffer-resident `io-streams` port: `InputStream`/`OutputStream` over `ByteArray`, `fromByteString`/`makeInputStream`/`countInput`/`takeBytes`/`decompress` |
 | `Linen.Data.PDF.Core.Name` | atomic PDF name objects (§7.3.5): byte-string wrapper `Name`, `make`/`toByteString` |
@@ -2755,6 +2778,9 @@ the secrets, never their values.
 | `Linen.CDP.Endpoints` | the browser's HTTP discovery endpoints (`/json/version`, `/json/list`, …), `connectToTab` |
 | `Linen.CDP.Runtime` | the client runtime: `runClient`, `sendCommand`/`sendCommandWait`, `subscribe`/`unsubscribe` |
 | `Linen.CDP` | the package aggregator: `CDP.Domains` + `CDP.Runtime` |
+| `Linen.System.Process` | commands with a deadline and an abort flag, the process group killed; `runBytes`, `Result.describe`, `hermeticGit` |
+| `Linen.System.LakeLog` | `lake build` output → `Diagnostic`s (`parse`, `splitLocation`, `render`, `isSummary`) |
+| `Linen.System.Git.Remote` | `isBranchName`; `Repository.parse` (`Host`, segments, canonical clone URL) |
 | `Linen.System.GitFn` | functions defined by their git location, run securely: re-exports `Descriptor`, `Policy`, `Build`, `Worker` |
 | `Linen.System.GitFn.Descriptor` | `GitFn` (repo, `CommitSha`, project, name, type), validation, JSON, `resolve` |
 | `Linen.System.GitFn.Policy` | secure mode's pre-compilation source check with the host parser: allowlists and forbidden constructs |

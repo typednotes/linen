@@ -8,7 +8,7 @@
 
   - **Tests with no network.** A stub transport answers from a table, so every
     protocol dialect and every service client is exercised end to end in
-    `lake build Tests`, with no credentials and no sockets. This is the same
+    `lake test`, with no credentials and no sockets. This is the same
     seam `Control.Monad.Effect.HTTP`'s `runHTTPWith` opens for the same reason.
   - **A place for policy.** Retries, timeouts, logging and request recording
     are decorators on a `Transport`, not conditionals inside every client.

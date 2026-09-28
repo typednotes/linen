@@ -11,6 +11,7 @@
 import Linen.Crypto.JOSE.Types
 import Linen.Crypto.JOSE.FFI
 import Linen.Crypto.JOSE.JWK
+import Linen.Crypto.ConstantTime
 
 namespace Crypto.JOSE.JWS
 
@@ -60,7 +61,8 @@ def signCompact (alg : JWSAlgorithm) (privkeyDer : ByteArray)
 -- ── Verification ──
 
 /-- Verify a JWS signature using the given key.
-    Returns `true` if the signature is valid. -/
+    Returns `true` if the signature is valid. HMAC signatures are compared in
+    constant time (`Crypto.ConstantTime.eq`). -/
 def verifySignature (alg : JWSAlgorithm) (jwk : JWK)
     (signingInput : ByteArray) (signature : ByteArray) : IO Bool := do
   match alg with
@@ -70,7 +72,8 @@ def verifySignature (alg : JWSAlgorithm) (jwk : JWK)
       let algCode : UInt8 := match alg with
         | .HS256 => 0 | .HS384 => 1 | .HS512 => 2 | _ => 0
       let expected ← FFI.hmac key signingInput algCode
-      return expected == signature
+      -- Constant time: a plain `==` would leak how much of a forged MAC is right.
+      return Crypto.ConstantTime.eq expected signature
     | _ => return false
   | .RS256 | .RS384 | .RS512 =>
     match ← JWK.toDerPublicKey jwk with

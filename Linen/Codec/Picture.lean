@@ -190,8 +190,8 @@ import Linen.Codec.Picture.Saving
   ## Fixture/test naming
 
   Test fixtures use a `pic`-prefix, matching this package's established
-  per-module convention (`Tests/Linen/Codec/Picture/PngTest.lean`'s `png`
-  prefix, `Tests/Linen/Codec/Picture/SavingTest.lean`'s `saving` prefix) to
+  per-module convention (`LinenTest/Linen/Codec/Picture/PngTest.lean`'s `png`
+  prefix, `LinenTest/Linen/Codec/Picture/SavingTest.lean`'s `saving` prefix) to
   avoid cross-file `Tests` namespace collisions.
 -/
 

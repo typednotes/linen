@@ -6,35 +6,61 @@ description: >-
   build logic elsewhere, and two copies of a dependency list is exactly the
   kind of duplication that goes stale silently.
 
+inputs:
+  keyring:
+    description: >-
+      Also start a D-Bus session with an unlocked Secret Service keyring, which
+      linen's own `System.Keychain` tests need. A consumer that only builds
+      against linen passes `false`.
+    required: false
+    default: 'true'
+
+# Usable from another repository, at the linen version it requires:
+#
+#   - uses: typednotes/linen/.github/actions/setup-native-deps@vX.Y.Z
+#     with:
+#       keyring: false
+#
+# The Linux package list is `ci/native-deps/apt.txt`, which a Dockerfile can
+# read too.
+
 runs:
   using: composite
   steps:
-    # The libraries the lakefile probes for:
-    #  - libpq     (ffi/postgres.c) for Database.PostgreSQL
-    #  - OpenSSL   (ffi/jose.c)     for Crypto.JOSE, and so for Crypto.SigV4
-    #                               and Cloud.Credentials.Gcp above it
-    #  - libsecret (ffi/keychain.c) for System.Keychain, and so for
-    #                               Cloud.Credentials.Keychain (Linux only;
-    #                               macOS uses the Security and CoreFoundation
-    #                               frameworks instead)
+    # The packages are listed, with what each is for, in
+    # `ci/native-deps/apt.txt` (libpq, OpenSSL, zlib and libsecret through
+    # pkg-config; the C toolchain; curl/unzip for DuckDB). On macOS libsecret
+    # is not used: System.Keychain uses the Security and CoreFoundation
+    # frameworks instead.
     #
     # `gnome-keyring` and `dbus-x11` are not lakefile dependencies but test
     # ones: libsecret is only a *client* of the D-Bus Secret Service, so
-    # `Tests/Linen/System/KeychainTest.lean` needs an actual keyring daemon
+    # `LinenTest/Linen/System/KeychainTest.lean` needs an actual keyring daemon
     # to talk to. A headless runner has none, and without one every
     # `System.Keychain` call fails with "org.freedesktop.secrets was not
     # provided by any .service files".
     - name: Install native FFI dependencies (Linux)
       if: runner.os == 'Linux'
       shell: bash
-      run: sudo apt-get update && sudo apt-get install -y libpq-dev libssl-dev libsecret-1-dev pkg-config gnome-keyring dbus-x11
+      env:
+        KEYRING: ${{ inputs.keyring }}
+      run: |
+        set -euo pipefail
+        # `GITHUB_ACTION_PATH` is this action's directory, in whichever
+        # checkout of linen it was taken from (this one, or the tag a
+        # consumer names).
+        pkgs="$(sed 's/#.*//' "$GITHUB_ACTION_PATH/../../../ci/native-deps/apt.txt" | xargs)"
+        if [ "$KEYRING" = "true" ]; then pkgs="$pkgs gnome-keyring dbus-x11"; fi
+        sudo apt-get update
+        # shellcheck disable=SC2086
+        sudo apt-get install -y --no-install-recommends $pkgs
 
     # Bring up the Secret Service the Keychain tests exercise. This has to be
     # a separate step from the build: the session bus and the daemon must
     # outlive it, which they do because the bus address is exported through
     # `$GITHUB_ENV` for every later step in the job.
     - name: Start a D-Bus session and unlock a keyring (Linux)
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && inputs.keyring == 'true'
       shell: bash
       run: |
         set -euo pipefail

@@ -45,7 +45,7 @@
  * own `xFunc`/`xDestroy` pair for `sqlite3_create_function_v2`.
  *
  * A handful of `TEST SUPPORT` entry points near the end of this file back
- * small helpers used only by this batch's own `Tests/` — `duckdb_query`
+ * small helpers used only by this batch's own `LinenTest/` — `duckdb_query`
  * (for DDL/DML setup, e.g. `CREATE TABLE`/`ATTACH`) and `duckdb_prepare`/
  * `duckdb_destroy_prepare` (to obtain a real `PreparedStatement` to bind
  * against) — neither of which belongs to any of the five modules above.
@@ -4431,11 +4431,11 @@ LEAN_EXPORT lean_obj_res linen_duckdb_vector_reference_vector(
 /* ================================================================
  * TEST SUPPORT
  *
- * Small helpers used only by this batch's own `Tests/` (see the file
+ * Small helpers used only by this batch's own `LinenTest/` (see the file
  * header comment for why): `duckdb_query` (for DDL/DML setup, e.g.
  * `CREATE TABLE`) and `duckdb_prepare`/`duckdb_destroy_prepare` (to obtain
  * a real `PreparedStatement` to bind against). None of these back a
- * `Linen/` module — they exist purely so `Tests/` can exercise real
+ * `Linen/` module — they exist purely so `LinenTest/` can exercise real
  * DuckDB behavior end-to-end without prematurely porting
  * `Database.DuckDB.FFI.QueryExecution`/`PreparedStatements`.
  * ================================================================ */
@@ -4487,7 +4487,7 @@ LEAN_EXPORT lean_obj_res linen_duckdb_test_destroy_prepare(b_lean_obj_arg stmt_o
 /*
  * Test-only: the row count of a `duckdb_result` obtained from
  * `Database.DuckDB.FFI.ExecutePrepared.execute`, used only by
- * `Tests/Linen/Database/DuckDB/FFI/ExecutePreparedTest.lean` to check that
+ * `LinenTest/Linen/Database/DuckDB/FFI/ExecutePreparedTest.lean` to check that
  * executing a bound prepared statement really produced the expected rows
  * (as opposed to merely reporting `duckdb_state.success`).
  */
