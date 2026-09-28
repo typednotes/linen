@@ -7,6 +7,24 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+### Fixed
+
+- **`System.GitFn` could still load the same library environment more than
+  once.** 1.6.0 cached them per process, but keyed on the request as
+  spelled: `import Std` then `import Init` and the reverse, a repeated
+  import, or a search-path entry written through `..`, `.`, a duplicate or a
+  symbolic link each loaded — and kept, since an import is never released —
+  another full environment. The key, and what is imported, is now canonical:
+  imports sorted and deduplicated (`canonicalImports`: they load the same
+  closure, so the same syntax to parse with); search-path entries made
+  absolute and resolved with `realPath` (`lexicalNormalize` for one that does
+  not exist) and deduplicated — but **kept in order**, since the first entry
+  holding a module wins. Distinct import sets still get one environment
+  each, for the life of the process. Tested in `PolicyTest` (the key) and in
+  `gitfn-integration`, which requests one environment four ways and asserts a
+  single load; with the canonicalisation disabled, three of those four
+  checks fail.
+
 ## [1.6.0] - 2026-09-28
 
 ### Added

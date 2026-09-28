@@ -205,6 +205,28 @@ def main : IO UInt32 := do
   checks := checks ++ [(s!"library environments are loaded once per process ({envs})",
     envsAfterFirst > 0 && envs == envsAfterFirst)]
 
+  -- The same request spelled four ways loads one environment: imports in
+  -- another order or repeated, and search-path entries through `..`, `.`, a
+  -- duplicate and a symbolic link. The search path is this run's own
+  -- directory, so the first request is new whatever ran before.
+  let linkDir := root / "link"
+  discard <| sh "ln" #["-s", root.toString, linkDir.toString] root
+  IO.FS.createDirAll (root / "a")
+  let before ← libraryEnvironmentsLoaded
+  let env ← libraryEnvironment [root / "a" / ".."] #[`Std.Data.HashMap, `Init]
+  let loaded ← libraryEnvironmentsLoaded
+  checks := checks ++ [("a new search path and set of imports loads one environment",
+    loaded == before + 1 && env.contains `Std.HashMap.insert)]
+  discard <| libraryEnvironment [root] #[`Init, `Std.Data.HashMap]
+  checks := checks ++ [("…the same imports in another order reuse it",
+    (← libraryEnvironmentsLoaded) == loaded)]
+  discard <| libraryEnvironment [root, root / "."] #[`Init, `Std.Data.HashMap, `Init]
+  checks := checks ++ [("…repeated imports and search-path entries reuse it",
+    (← libraryEnvironmentsLoaded) == loaded)]
+  discard <| libraryEnvironment [linkDir] #[`Std.Data.HashMap, `Init]
+  checks := checks ++ [("…a search path through a symbolic link reuses it",
+    (← libraryEnvironmentsLoaded) == loaded)]
+
   let code ← report checks
   -- Keep the fixture for inspection when something failed.
   if code == 0 then IO.FS.removeDirAll root else IO.println s!"fixture kept in {root}"

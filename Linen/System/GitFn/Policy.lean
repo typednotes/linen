@@ -262,8 +262,46 @@ private unsafe def libraryEnvironmentImpl (searchPath : List System.FilePath)
 opaque importLibraryEnvironment (searchPath : List System.FilePath) (imports : Array Name) :
     IO Environment
 
-/-- The library environments loaded so far by this process, by search path
-    and imports.
+-- ── Loading library environments, once ─────────────────────────────────────
+
+/-- A set of imports in one canonical form: sorted by name, without
+    duplicates. `import A` then `import B` and the reverse load the same
+    modules (their closure) and so the same syntax to parse with — only the
+    order modules are registered in differs — so they share one environment. -/
+def canonicalImports (imports : Array Name) : Array Name :=
+  (imports.qsort Name.lt).toList.eraseDups.toArray
+
+/-- `p` with `.` and empty components dropped and each `..` cancelling the
+    component before it — lexically: symbolic links are not followed (see
+    `canonicalSearchPath`, which prefers the file system's answer). A `..`
+    above the root is the root; a relative path keeps its leading `..`s. -/
+def lexicalNormalize (p : System.FilePath) : System.FilePath :=
+  let absolute := p.isAbsolute
+  let comps := p.normalize.components.foldl (init := ([] : List String)) fun acc c =>
+    if c.isEmpty || c == "." then acc
+    else if c == ".." then
+      match acc with
+      | last :: rest => if last == ".." then c :: acc else rest
+      | [] => if absolute then [] else [c]
+    else c :: acc
+  let body := "/".intercalate comps.reverse
+  if absolute then ⟨"/" ++ body⟩ else if body.isEmpty then "." else ⟨body⟩
+
+/-- A search path in one canonical form: every entry absolute and resolved
+    (`realPath`: symbolic links, `.` and `..`; `lexicalNormalize` for an entry
+    that does not exist, which holds no modules anyway), later duplicates
+    dropped. **Order is kept**: the first entry that has a module wins, so
+    reordering a search path can change what is imported. -/
+def canonicalSearchPath (searchPath : List System.FilePath) : IO (List System.FilePath) := do
+  let cwd ← IO.currentDir
+  let resolved ← searchPath.mapM fun (p : System.FilePath) => do
+    let p := if p.isAbsolute then p else cwd / p
+    try IO.FS.realPath p catch _ => pure (lexicalNormalize p)
+  pure <| (resolved.map (·.toString)).eraseDups.map System.FilePath.mk
+
+/-- The library environments loaded so far by this process, by canonical
+    search path and imports (`canonicalSearchPath`, `canonicalImports`), so
+    that two spellings of the same request share one environment.
 
     Loaded **once per process**, not once per check: `importModules` maps the
     `.olean` files into memory regions that Lean never releases when the
@@ -278,9 +316,15 @@ initialize libraryEnvironments :
     Std.Mutex (Std.HashMap (List String × List Name) Environment) ← Std.Mutex.new {}
 
 /-- Load the environment imports need, for parsing — loaded once per process
-    for each search path and set of imports (see `libraryEnvironments`). -/
+    for each search path and set of imports, however they are spelled or
+    ordered (see `libraryEnvironments`). The canonical forms are also what is
+    imported, so an environment never depends on which spelling came first.
+    (Imports run under the mutex, which also serialises `initSearchPath`'s
+    process-wide search path between concurrent checks.) -/
 def libraryEnvironment (searchPath : List System.FilePath) (imports : Array Name) :
-    IO Environment :=
+    IO Environment := do
+  let searchPath ← canonicalSearchPath searchPath
+  let imports := canonicalImports imports
   libraryEnvironments.atomically do
     let key := (searchPath.map (·.toString), imports.toList)
     if let some env := (← get)[key]? then return env
@@ -289,7 +333,8 @@ def libraryEnvironment (searchPath : List System.FilePath) (imports : Array Name
     pure env
 
 /-- How many library environments this process has loaded: one per distinct
-    search path and set of imports, however many projects were checked. -/
+    canonical search path and set of imports, however many projects were
+    checked. -/
 def libraryEnvironmentsLoaded : IO Nat :=
   libraryEnvironments.atomically do return (← get).size
 

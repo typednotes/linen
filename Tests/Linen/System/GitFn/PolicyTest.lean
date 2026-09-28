@@ -96,4 +96,41 @@ def files : Array FileReport :=
   [(`B, ["imports a module that is not admitted"]), (`C, ["`unsafe` is not allowed"]),
    (`D, ["imports a module that is not admitted"])]
 
+-- ── The library-environment cache key ───────────────────────────────────────
+
+-- Imports are a set: order and repetition do not make a new key.
+#guard canonicalImports #[`Std.Data.HashMap, `Init] == #[`Init, `Std.Data.HashMap]
+#guard canonicalImports #[`Init, `Std.Data.HashMap] == canonicalImports #[`Std.Data.HashMap, `Init]
+#guard canonicalImports #[`Init, `Lean.Data.Json, `Init, `Lean.Data.Json] ==
+  #[`Init, `Lean.Data.Json]
+#guard canonicalImports #[] == #[]
+
+-- Paths, lexically: `.`, empty components and `..` go.
+#guard lexicalNormalize "/a/./b/../c" == "/a/c"
+#guard lexicalNormalize "/a//b/" == "/a/b"
+#guard lexicalNormalize "/../a" == "/a"
+#guard lexicalNormalize "/" == "/"
+#guard lexicalNormalize "a/../../b" == "../b"
+#guard lexicalNormalize "a/.." == "."
+#guard lexicalNormalize "../../a" == "../../a"
+
+-- A search path: absolute, resolved, deduplicated — and still in order, since
+-- the first entry holding a module wins.
+#eval show IO Unit from do
+  -- Resolved, as `canonicalSearchPath` resolves (`/tmp` is `/private/tmp` on macOS).
+  let dir ← IO.FS.realPath (← IO.FS.createTempDir)
+  IO.FS.createDirAll (dir / "a" / "b")
+  try
+    let a := dir / "a"
+    let got ← canonicalSearchPath [a / "b" / "..", dir / ".", a, dir, dir / "missing" / ".." / "a"]
+    unless got == [a, dir] do throw (IO.userError s!"expected {[a, dir]}, got {got}")
+    -- The order is kept, not sorted.
+    let got ← canonicalSearchPath [dir, a]
+    unless got == [dir, a] do throw (IO.userError s!"expected {[dir, a]}, got {got}")
+    -- An entry that does not exist is normalised lexically.
+    let got ← canonicalSearchPath [dir / "nope" / "." / "x" / ".."]
+    unless got == [dir / "nope"] do throw (IO.userError s!"expected {dir / "nope"}, got {got}")
+  finally
+    IO.FS.removeDirAll dir
+
 end Tests.System.GitFn.Policy
