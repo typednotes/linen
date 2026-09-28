@@ -7,6 +7,8 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-09-28
+
 ### Fixed
 
 - **`System.GitFn` could still load the same library environment more than
