@@ -7,6 +7,36 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+### Fixed
+
+- **`raw!` made the kernel use gigabytes for a few hundred characters.** It
+  proved `RawText.Safe tag "…"` by `decide +kernel` on the string literal, and
+  the kernel checks that by expanding the literal to `String.ofList`,
+  encoding it to UTF-8 bytes, and decoding them back with
+  `ByteArray.utf8Decode?` — well-founded recursion, run by reducing its
+  termination proofs, reading each byte by walking the list under the array,
+  with every intermediate term kept until the declaration is checked. The cost
+  grew faster than quadratically (200 characters: 0.25 GB; 400: 1.8 GB; 620:
+  5.5 GB and 15 s). `Graphics.Graphviz.Html`'s 620-character loader alone
+  peaked at 6.1 GB, so on GitHub's 7 GB macOS runners it swapped for 18–25
+  minutes in the consumer job, which is the one job that compiles it from
+  scratch (`precompileModules` builds the whole library there). `raw!` now
+  expands the literal to its characters and proves
+  `breaksOut tag ['…', …] = false` (new `RawText.safe_ofList`), which the
+  kernel checks by comparing `Char` literals: linear, and too small to
+  measure — `Graphviz.Html` compiles in 1.6 s at 0.70 GB (its imports' cost),
+  down from 19 s and 6.1 GB, and a 1750-character literal in `HtmlTest` is
+  free. Still `decide +kernel`, so no new axiom; unsafe literals are still
+  refused, with the offending characters in the message. The one cost is at
+  run time: a `raw!` value is built from its character list (once, for a
+  top-level constant) instead of being a string literal.
+- A scan for the same pattern — kernel reduction over string contents
+  (`raw!`, `decide`/`rfl` proofs on string functions) — found no other
+  instance: no reducing proof in `Linen/` or `Tests/` involves a literal of 80
+  or more characters. The slowest remaining modules are large, not
+  pathological (`CDP.Domains.DOMPageNetworkEmulationSecurity`: 7644 generated
+  lines, 15 s, 1.6 GB).
+
 ## [1.6.1] - 2026-09-28
 
 ### Fixed

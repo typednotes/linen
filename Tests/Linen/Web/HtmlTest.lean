@@ -70,6 +70,34 @@ example : breaksOut .script "no angle brackets here".toList = false :=
 -- `raw!` literals are checked by the kernel at compile time.
 #guard (raw! "body{}" : RawText .style).text == "body{}"
 
+-- The text is the literal's, character for character — escapes, non-ASCII
+-- and the empty literal included (`raw!` expands it to its characters).
+#guard (raw! "é → ∀ \"q\"\n\t\\" : RawText .script).text == "é → ∀ \"q\"\n\t\\"
+#guard (raw! "" : RawText .style).text == ""
+#guard (raw! "if (a < b) { '<scrip' }" : RawText .script).text == "if (a < b) { '<scrip' }"
+
+-- Text that would close its element is refused at compile time, in any case.
+/--
+error: Tactic `decide` proved that the proposition
+  breaksOut RawTag.script ['a', '<', '/', 'S', 'c', 'R', 'i', 'p', 'T', 'b'] = false
+is false
+-/
+#guard_msgs in
+example : RawText .script := raw! "a</ScRipTb"
+
+/--
+error: Tactic `decide` proved that the proposition
+  breaksOut RawTag.style ['<', '/', 's', 't', 'y', 'l', 'e', '>'] = false
+is false
+-/
+#guard_msgs in
+example : RawText .style := raw! "</style>"
+
+-- A literal far beyond what the old expansion could afford (620 characters
+-- took the kernel 15 s and 5.5 GB; this is 1750) is checked in linear time.
+def longRaw : RawText .script := raw! "let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // < but never a closing tag. "
+#guard longRaw.text.length == 1750
+
 /-! ### `<script>` and `<meta>` -/
 
 #guard (script [type_ "module"] (raw! "go();")).render == "<script type=\"module\">go();</script>"

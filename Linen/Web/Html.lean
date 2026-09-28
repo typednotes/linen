@@ -154,6 +154,13 @@ theorem RawText.safe_of_lt_not_mem {tag : RawTag} {s : String} (h : '<' ∉ s.to
     RawText.Safe tag s :=
   breaksOut_of_lt_not_mem tag _ h
 
+/-- Text given as its characters is safe when they do not break out — the
+    statement `raw!` proves, so the kernel checks a list of `Char` literals
+    instead of decoding a string literal's UTF-8 (see `raw!`). -/
+theorem RawText.safe_ofList {tag : RawTag} {l : List Char} (h : breaksOut tag l = false) :
+    RawText.Safe tag (String.ofList l) := by
+  simpa [RawText.Safe, String.toList_ofList] using h
+
 namespace RawText
 
 /-- Check text at run time. -/
@@ -218,11 +225,30 @@ def jsonString {tag : RawTag} (s : String) : RawText tag :=
 end RawText
 
 /-- `raw! "…"`: a `RawText` literal, proven safe by the kernel when it is
-    compiled (`decide +kernel`, so no axiom beyond Lean's own). The kernel
-    decodes the literal's UTF-8 by well-founded recursion, which is slow: a few
-    hundred characters take seconds. For large text, check it once at run time
-    with `RawText.ofString?` instead. -/
-macro "raw! " s:str : term => `((⟨$s, by decide +kernel⟩ : RawText _))
+    compiled (`decide +kernel`, so no axiom beyond Lean's own).
+
+    The literal is expanded to its characters, `String.ofList ['a', 'b', …]`,
+    and the proof is `safe_ofList` of `breaksOut tag ['a', 'b', …] = false`:
+    the kernel compares `Char` literals, in time and memory linear in the text.
+    Proving `Safe tag "ab…"` of the string literal itself instead makes the
+    kernel expand the literal to `String.ofList`, encode it to UTF-8 bytes, and
+    decode those back with `ByteArray.utf8Decode?` — well-founded recursion,
+    which the kernel runs by reducing its termination proofs, reading each
+    byte by walking the list under the array — keeping every intermediate
+    term until the declaration is checked. That grew faster than quadratically:
+    620 characters took 15 s and 5.5 GB, enough to push a 7 GB CI runner into
+    swap for 25 minutes. For very large text, check it once at run time with
+    `RawText.ofString?`, or decide it natively (see `Graphviz.Html`).
+
+    The price is at run time, and small: the text is built from the list of
+    characters rather than being a string literal (once, for a top-level
+    constant). Keeping the literal as the value and proving
+    `String.ofList […] = "…"` by `rfl` would avoid that, but checking that
+    equation recurses once per character and exceeds `maxRecDepth` at a few
+    hundred characters. -/
+macro "raw! " s:str : term => do
+  let chars : Array Lean.Term := s.getString.toList.toArray.map Lean.quote
+  `((⟨String.ofList [$chars,*], RawText.safe_ofList (by decide +kernel)⟩ : RawText _))
 
 -- ── Content model ──
 
