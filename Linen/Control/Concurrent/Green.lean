@@ -31,6 +31,7 @@ import Linen.Control.Concurrent.Chan
 import Linen.Control.Concurrent.QSem
 import Linen.Control.Concurrent.QSemN
 import Std.Sync.CancellationToken
+import Std.Internal.UV.Timer
 
 namespace Control.Concurrent.Green
 
@@ -208,6 +209,18 @@ def checkCancelled : Green Unit := fun token => ⟨do
     pure (Greenlet.now (.error (IO.Error.userError "green thread cancelled")))
   else
     pure (Greenlet.now (.ok ()))⟩
+
+/-! ### Timers -/
+
+/-- Suspend the green thread for `ms` milliseconds without holding a pool
+    thread (unlike `IO.sleep`, which blocks the worker running it): a libuv
+    timer (`Std.Internal.UV.Timer`, millisecond resolution) resolves the
+    promise it awaits.
+    $$\text{sleep} : \mathbb{N} \to \text{Green Unit}$$ -/
+def sleep (ms : Nat) : Green Unit := do
+  let timer ← (Std.Internal.UV.Timer.mk ms.toUInt64 false : IO _)
+  let fired ← (timer.next : IO _)
+  let _ ← await fired.result?
 
 /-! ### MVar integration -/
 

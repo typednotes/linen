@@ -161,7 +161,7 @@ private def cpuSeconds : IO Float := do
   let t0 ← IO.monoMsNow
   let ready ← Green.block (disp.waitReadableFor conn 300) tok
   let waited := (← IO.monoMsNow) - t0
-  unless !ready && waited ≥ 300 && waited < 300 + 5 * EventDispatcher.sweepIntervalMillis do
+  unless !ready && waited ≥ 300 && waited < 300 + 50 do
     throw (IO.userError s!"waitReadableFor: ready={ready} after {waited} ms")
   -- The IO form, likewise; then with data, it is ready at once.
   unless !(← disp.awaitReadableFor conn 200) do throw (IO.userError "awaitReadableFor timed out?")
@@ -190,5 +190,80 @@ private def cpuSeconds : IO Float := do
   for s in [client, conn] do let _ ← close s
   let _ ← close server
   unless allReady do throw (IO.userError "some IO waiters were not woken")
+
+/-! ### Timer precision (libuv timers, no sweep) -/
+
+-- Timeouts are honoured to within a few milliseconds, at several scales;
+-- the old periodic sweep was only as good as its 100 ms interval.
+#eval show IO Unit from do
+  let (client, conn, server) ← socketPair
+  let disp ← EventDispatcher.create
+  let tok ← Std.CancellationToken.new
+  for ms in [5, 20, 120] do
+    let t0 ← IO.monoNanosNow
+    let ready ← Green.block (disp.waitReadableFor conn ms) tok
+    let waited := ((← IO.monoNanosNow) - t0) / 1000000
+    unless !ready && waited ≥ ms && waited < ms + 25 do
+      throw (IO.userError s!"a {ms} ms wait timed out after {waited} ms (ready={ready})")
+  disp.shutdown
+  for s in [client, conn] do let _ ← close s
+  let _ ← close server
+
+-- Readiness beats the timer: the wait returns `true` at once, and the timer
+-- it armed is stopped — a later expiry does not disturb a new waiter on the
+-- same socket.
+#eval show IO Unit from do
+  let (client, conn, server) ← socketPair
+  let disp ← EventDispatcher.create
+  let tok ← Std.CancellationToken.new
+  Blocking.sendAll client "x".toUTF8
+  let t0 ← IO.monoMsNow
+  let ready ← Green.block (disp.waitReadableFor conn 200) tok
+  let quick := decide ((← IO.monoMsNow) - t0 < 100)
+  let _ ← Blocking.recv conn 1
+  -- A second, longer wait on the same fd, spanning the first one's deadline.
+  let waiter ← Green.run (disp.waitReadableFor conn 1000) tok
+  IO.sleep 400
+  let early ← IO.hasFinished waiter
+  Blocking.sendAll client "y".toUTF8
+  let second := (← IO.wait waiter).toOption.getD false
+  disp.shutdown
+  for s in [client, conn] do let _ ← close s
+  let _ ← close server
+  unless ready && quick && !early && second do
+    throw (IO.userError s!"ready={ready} quick={quick} early={early} second={second}")
+
+-- Thousands of deadlines at once, all expiring on time: 2000 green waits
+-- with 100-150 ms deadlines finish in about 150 ms (the timers are libuv's,
+-- not a sweep). (2000 *`IO`-blocked* waits would each cost the task manager a
+-- compensating OS thread; that is why the server waits in `Green` wherever it
+-- can.)
+#eval show IO Unit from do
+  let (client, conn, server) ← socketPair
+  let disp ← EventDispatcher.create
+  let tok ← Std.CancellationToken.new
+  let t0 ← IO.monoMsNow
+  let waits ← (List.range 2000).mapM fun i => Green.run (disp.waitReadableFor conn (100 + i % 50)) tok
+  let mut timedOut := 0
+  for w in waits do
+    if (← IO.wait w).toOption == some false then timedOut := timedOut + 1
+  let elapsed := (← IO.monoMsNow) - t0
+  disp.shutdown
+  for s in [client, conn] do let _ ← close s
+  let _ ← close server
+  unless timedOut == 2000 && elapsed < 1000 do
+    throw (IO.userError s!"{timedOut} of 2000 waits timed out, in {elapsed} ms")
+
+-- `Green.sleep` is precise and holds no pool thread: 200 green threads
+-- sleeping 300 ms at once (far more than the pool has workers) all finish
+-- in about 300 ms. With `IO.sleep` they would queue behind each other.
+#eval show IO Unit from do
+  let tok ← Std.CancellationToken.new
+  let t0 ← IO.monoMsNow
+  let sleepers ← (List.range 200).mapM fun _ => Green.run (Green.sleep 300) tok
+  for t in sleepers do let _ ← IO.wait t
+  let elapsed := (← IO.monoMsNow) - t0
+  unless elapsed ≥ 300 && elapsed < 1000 do
+    throw (IO.userError s!"200 concurrent 300 ms sleeps took {elapsed} ms")
 
 end Tests.Network.Socket.EventDispatcher

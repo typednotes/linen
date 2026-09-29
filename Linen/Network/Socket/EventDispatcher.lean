@@ -39,9 +39,12 @@
   ## Timeouts
 
   `waitReadableFor`/`waitWritableFor` (and their `IO` forms
-  `awaitReadableFor`/`awaitWritableFor`) give up after a deadline: the
-  dispatch loop sweeps expired waiters at least every `sweepIntervalMillis`
-  and resolves them as timed out.
+  `awaitReadableFor`/`awaitWritableFor`) give up after a deadline. Each such
+  wait arms a libuv timer (`Std.Internal.UV.Timer`, millisecond resolution,
+  driven by Lean's own event loop) that, on firing, removes the waiter and
+  resolves it as timed out; readiness stops the timer. So a timeout is
+  honoured to within about a millisecond, and costs nothing while the
+  dispatcher is idle — there is no periodic sweep.
 
   ## Waiting from `IO`
 
@@ -67,6 +70,7 @@
 
 import Linen.Network.Socket
 import Linen.Control.Concurrent.Green
+import Std.Internal.UV.Timer
 import Std.Sync.Mutex
 import Std.Data.HashMap
 
@@ -75,14 +79,16 @@ namespace Network.Socket
 open Control.Concurrent.Green
 
 /-- A waiter entry: the promise to resolve — `true` when the socket is ready
-    (or the dispatcher shuts down), `false` when the deadline passed — the
-    events awaited, the socket (to re-arm its registration), and the
-    deadline (`IO.monoMsNow` time), if any. -/
+    (or the dispatcher shuts down), `false` when its timer fired — the events
+    awaited, the socket (to re-arm its registration), an id unique on its
+    shard (so a firing timer removes exactly this waiter), and the timer, if
+    the wait has a deadline. -/
 private structure Waiter where
-  promise  : IO.Promise Bool
-  events   : EventType
-  raw      : RawSocket
-  deadline : Option Nat
+  promise : IO.Promise Bool
+  events  : EventType
+  raw     : RawSocket
+  id      : Nat
+  timer   : Option Std.Internal.UV.Timer
 
 /-- One dispatcher shard: an event loop, the waiters registered on it (keyed by
 fd), and a flag controlling its dispatch thread. -/
@@ -90,7 +96,7 @@ private structure Shard where
   eventLoop : EventLoop
   waiters   : Std.Mutex (Std.HashMap Nat (List Waiter))
   running   : IO.Ref Bool
-  lastSweep : IO.Ref Nat
+  nextId    : IO.Ref Nat
 
 /-- Event dispatcher: bridges kqueue/epoll events to Green thread suspensions,
 sharded across several event loops + dispatch threads for parallel throughput.
@@ -109,27 +115,24 @@ private def waiterMatches (evType : EventType) (w : Waiter) : Bool :=
   (evType.hasWritable && w.events.hasWritable) ||
   evType.hasError
 
-/-- How often, at least, the dispatch loop resolves waiters whose deadline
-    has passed. A timeout is honoured to within this. -/
-def sweepIntervalMillis : Nat := 100
-
 /-- Every direction the waiters in `ws` await, as a one-shot registration. -/
 private def armMask (ws : List Waiter) : EventType :=
   ws.foldl (fun acc w => acc ||| w.events) EventType.oneshot
 
+/-- Stop a resolved waiter's timer, so it neither fires nor lingers. -/
+private def stopTimer (w : Waiter) : IO Unit := do
+  if let some t := w.timer then
+    try t.stop catch _ => pure ()
+
 /-- The dispatch loop for one shard, on its own dedicated OS thread. Drains a
 whole `kevent`/`epoll_wait` batch, collects the matching waiters under a single
-lock, then — after releasing it — resolves their promises and re-arms each fd
-that still has waiters (its registration was one-shot). Every
-`sweepIntervalMillis` it also resolves expired waiters as timed out. -/
+lock, then — after releasing it — resolves their promises, stops their timers,
+and re-arms each fd that still has waiters (its registration was one-shot). -/
 private def dispatchShard (sh : Shard) : IO Unit := do
   while ← sh.running.get do
     let events ← EventLoop.wait sh.eventLoop 50
-    let now ← IO.monoMsNow
-    let sweep := now ≥ (← sh.lastSweep.get) + sweepIntervalMillis
-    if sweep then sh.lastSweep.set now
-    if !events.isEmpty || sweep then
-      let (ready, expired, rearm) ← sh.waiters.atomically do
+    if !events.isEmpty then
+      let (ready, rearm) ← sh.waiters.atomically do
         let mut ready : List Waiter := []
         let mut rearm : Std.HashMap Nat (List Waiter) := {}
         for ev in events do
@@ -147,41 +150,54 @@ private def dispatchShard (sh : Shard) : IO Unit := do
               -- registration is now spent for *every* direction.
               rearm := rearm.insert ev.socketFd remaining
             ready := ready ++ matched
-        let mut expired : List Waiter := []
-        if sweep then
-          let ws ← get
-          let mut kept : Std.HashMap Nat (List Waiter) := {}
-          for (fd, waiterList) in ws.toList do
-            let (late, onTime) := waiterList.partition fun w => w.deadline.any (· ≤ now)
-            expired := expired ++ late
-            if !onTime.isEmpty then kept := kept.insert fd onTime
-          set kept
-        pure (ready, expired, rearm)
+        pure (ready, rearm)
       for w in ready do
         w.promise.resolve true
-      for w in expired do
-        w.promise.resolve false
+        stopTimer w
       for (_, remaining) in rearm.toList do
         if let some w := remaining.head? then
           -- The fd may have been closed meanwhile; its waiters then time out
           -- or are woken by shutdown, so a failed re-arm is not an error.
           try FFI.eventLoopAdd sh.eventLoop w.raw (armMask remaining).flags catch _ => pure ()
 
+/-- A waiter's timer fired: if the waiter is still registered, remove it and
+    resolve it as timed out. (If readiness won the race, it is gone already,
+    and its promise — resolved `true` — ignores the `false`.) -/
+private def expire (sh : Shard) (fd id : Nat) (promise : IO.Promise Bool) : IO Unit := do
+  let removed ← sh.waiters.atomically do
+    let ws ← get
+    match ws[fd]? with
+    | none => pure false
+    | some waiterList =>
+      let rest := waiterList.filter (·.id != id)
+      if rest.length == waiterList.length then pure false
+      else
+        set (if rest.isEmpty then ws.erase fd else ws.insert fd rest)
+        pure true
+  if removed then promise.resolve false
+
 /-- Register a waiter for a socket fd on its shard (`fd % N`), arming the fd
-one-shot for every direction awaited on it. Internal. -/
+one-shot for every direction awaited on it, and — for a wait with a deadline —
+a libuv timer that expires it. Internal. -/
 private def register (disp : EventDispatcher) (raw : RawSocket)
     (evts : EventType) (timeoutMillis : Option Nat := none) : IO (IO.Promise Bool) := do
   let fdNat ← FFI.socketGetFd raw
   let promise ← IO.Promise.new
-  let deadline ← timeoutMillis.mapM fun ms => return (← IO.monoMsNow) + ms
-  let waiter : Waiter := { promise, events := evts, raw, deadline }
   if h : 0 < disp.shards.size then
     let sh := disp.shards[fdNat % disp.shards.size]'(Nat.mod_lt fdNat h)
+    let id ← sh.nextId.modifyGet fun n => (n, n + 1)
+    let timer ← timeoutMillis.mapM fun ms => Std.Internal.UV.Timer.mk ms.toUInt64 false
+    let waiter : Waiter := { promise, events := evts, raw, id, timer }
     let all ← sh.waiters.atomically do
       let ws ← get
       let all := waiter :: ws.getD fdNat []
       set (ws.insert fdNat all)
       pure all
+    if let some t := timer then
+      let fired ← t.next
+      let _ ← IO.mapTask (t := fired.result?) fun
+        | some () => expire sh fdNat id promise
+        | none => pure ()  -- stopped: the socket was ready first
     FFI.eventLoopAdd sh.eventLoop raw (armMask all).flags
   pure promise
 
@@ -194,8 +210,8 @@ def create (shards : Nat := 4) : IO EventDispatcher := do
     let eventLoop ← EventLoop.create
     let waiters ← Std.Mutex.new (∅ : Std.HashMap Nat (List Waiter))
     let running ← IO.mkRef true
-    let lastSweep ← IO.mkRef (← IO.monoMsNow)
-    let sh : Shard := { eventLoop, waiters, running, lastSweep }
+    let nextId ← IO.mkRef 0
+    let sh : Shard := { eventLoop, waiters, running, nextId }
     let _ ← IO.asTask (prio := .dedicated) (dispatchShard sh)
     arr := arr.push sh
   pure (EventDispatcher.mk arr)
@@ -219,6 +235,7 @@ def shutdown (disp : EventDispatcher) : IO Unit := do
       for (_, waiterList) in pending.toList do
         for w in waiterList do
           w.promise.resolve true
+          stopTimer w
       EventLoop.close sh.eventLoop
 
 /-- Wait for a socket to become readable. Suspends the Green thread

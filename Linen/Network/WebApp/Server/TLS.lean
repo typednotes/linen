@@ -314,7 +314,7 @@ def runTLSSocketEL (ctx : TLSContext) (serverSock : Socket .listening) (settings
       let _ ← (Control.Concurrent.forkGreen
         (tlsConnectionEL ctx clientSock remoteAddr settings app disp onInsecure) : IO _)
     | .wouldBlock => disp.waitReadable serverSock
-    | .error _ => (IO.sleep 10 : IO _)
+    | .error _ => Control.Concurrent.Green.Green.sleep 10  -- no pool thread held
 
 /-- Run a web application with TLS on the given port, on green threads over
     an `EventDispatcher` (`Server.runSettingsEventLoop`'s TLS counterpart):

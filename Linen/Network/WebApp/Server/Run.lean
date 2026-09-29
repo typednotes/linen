@@ -265,7 +265,7 @@ def acceptLoopEL (serverSock : Socket .listening) (settings : Settings)
     | .error _ =>
       -- e.g. `EMFILE`: the listener stays readable, so retrying at once
       -- would spin; back off briefly.
-      (IO.sleep 10 : IO _)
+      Control.Concurrent.Green.Green.sleep 10
 
 /-- Run a WAI application with non-blocking EventDispatcher mode.
     Better for high-concurrency scenarios with many idle connections. -/
