@@ -17,6 +17,11 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 - **`Data.Json.Value.lookupText` / `lookupNat` / `lookupBool`** — lenient
   scalar reads (a quoted number is a number, an unquoted one is text), moved
   from `infra`'s `JsonRead.stringField` / `natField` / `boolField`.
+- **`System.Console.Ansi.style`, `dim`, `wanted`** (and `shouldColor`, its pure
+  half; `Intensity.faint`; `Color.fgCode`, `boldCode`, `faintCode`) — a
+  switchable SGR wrapper and the `NO_COLOR` / `FORCE_COLOR` / terminal rule,
+  moved from `infra` (`Infra/Core/Ansi.lean`); `typednotes-compiler` reads
+  `NO_COLOR` too.
 - **`Cloud.Class.unauthenticated` and `Cloud.Class.serviceDisabled`**, split
   out of `denied`; `Class.isAuthFailure` for the old, coarse question;
   `classifyMessage`, and `unauthenticatedCodes` / `serviceDisabledMarkers`.
