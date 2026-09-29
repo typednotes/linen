@@ -98,7 +98,7 @@ def sameShape (a b : Graph Id V) : Bool :=
 
 -- The exact document (`Data.Json` escapes `/` as `\/`, which is valid JSON).
 #guard Encode.encode (ToJSON.toJSON g) ==
-  "{\"format\":\"linen.reactive.graph\\/1\",\"functions\":[\"fn.1\",\"fn.2\",\"fn.3\"],\
+  "{\"format\":\"linen.reactive.graph/1\",\"functions\":[\"fn.1\",\"fn.2\",\"fn.3\"],\
 \"nodes\":[{\"label\":\"Tests.Control.Reactive.Json.sheet.x\",\"op\":\"subject\"},\
 {\"label\":\"Tests.Control.Reactive.Json.sheet.checked\",\"op\":\"map\",\"function\":\"fn.1\",\
 \"args\":[\"Tests.Control.Reactive.Json.sheet.x\"]},\
@@ -161,7 +161,7 @@ def fromDoc (v : Value) : Except String (Graph Id V) := Graph.fromJSON reg v
 -- ── Logs of occurrences ─────────────────────────────────────────────────────
 
 #guard Encode.encode (Occurrence.logToJSON g [.next x 3 (7 : Nat), .complete x 9]) ==
-  "{\"format\":\"linen.reactive.occurrences\\/1\",\"occurrences\":[\
+  "{\"format\":\"linen.reactive.occurrences/1\",\"occurrences\":[\
 {\"time\":3,\"subject\":\"Tests.Control.Reactive.Json.sheet.x\",\"next\":{\"nat\":7}},\
 {\"time\":9,\"subject\":\"Tests.Control.Reactive.Json.sheet.x\",\"complete\":true}]}"
 #guard ok? (Occurrence.logFromJSON g (Occurrence.logToJSON g log)) log

@@ -216,7 +216,7 @@ def wire (log : IO.Ref (List String)) (body : String)
 /- **Sending always uses the batch form**, even for one message, so partial
    failure is handled on one code path rather than discovered later. -/
 /--
-info: (["AmazonSQS.SendMessageBatch {\"QueueUrl\":\"https:\\/\\/sqs.eu-west-3.amazonaws.com\\/123456789012\\/jobs\",\"Entries\":[{\"Id\":\"e0\",\"MessageBody\":\"work\"}]}"],
+info: (["AmazonSQS.SendMessageBatch {\"QueueUrl\":\"https://sqs.eu-west-3.amazonaws.com/123456789012/jobs\",\"Entries\":[{\"Id\":\"e0\",\"MessageBody\":\"work\"}]}"],
  ["m-1"])
 -/
 #guard_msgs in
@@ -271,7 +271,7 @@ info: (["AmazonSQS.SendMessageBatch {\"QueueUrl\":\"https:\\/\\/sqs.eu-west-3.am
   | .ok (some m) => return (some m.body, some m.receipt.handle, m.attributes, m.receiveCount)
   | _ => return (none, none, [], none)
 
-/-- info: ["AmazonSQS.ReceiveMessage {\"QueueUrl\":\"https:\\/\\/sqs.eu-west-3.amazonaws.com\\/123456789012\\/jobs\",\"MaxNumberOfMessages\":1,\"MessageSystemAttributeNames\":[\"All\"],\"MessageAttributeNames\":[\"All\"],\"WaitTimeSeconds\":20}"] -/
+/-- info: ["AmazonSQS.ReceiveMessage {\"QueueUrl\":\"https://sqs.eu-west-3.amazonaws.com/123456789012/jobs\",\"MaxNumberOfMessages\":1,\"MessageSystemAttributeNames\":[\"All\"],\"MessageAttributeNames\":[\"All\"],\"WaitTimeSeconds\":20}"] -/
 #guard_msgs in
 #eval show IO (List String) from do
   let log ← IO.mkRef []
@@ -289,7 +289,7 @@ info: (["AmazonSQS.SendMessageBatch {\"QueueUrl\":\"https:\\/\\/sqs.eu-west-3.am
   return ((← c.receive { maxMessages := 10 }).toOption.getD []).length
 
 /- `extendLease … 0` is how a release reaches the wire. -/
-/-- info: ["AmazonSQS.ChangeMessageVisibilityBatch {\"QueueUrl\":\"https:\\/\\/sqs.eu-west-3.amazonaws.com\\/123456789012\\/jobs\",\"Entries\":[{\"Id\":\"e0\",\"ReceiptHandle\":\"AQEB\",\"VisibilityTimeout\":0}]}"] -/
+/-- info: ["AmazonSQS.ChangeMessageVisibilityBatch {\"QueueUrl\":\"https://sqs.eu-west-3.amazonaws.com/123456789012/jobs\",\"Entries\":[{\"Id\":\"e0\",\"ReceiptHandle\":\"AQEB\",\"VisibilityTimeout\":0}]}"] -/
 #guard_msgs in
 #eval show IO (List String) from do
   let log ← IO.mkRef []
@@ -297,7 +297,7 @@ info: (["AmazonSQS.SendMessageBatch {\"QueueUrl\":\"https:\\/\\/sqs.eu-west-3.am
   let _ ← c.extendLease [⟨"AQEB"⟩] 0
   log.get
 
-/-- info: ["AmazonSQS.DeleteMessageBatch {\"QueueUrl\":\"https:\\/\\/sqs.eu-west-3.amazonaws.com\\/123456789012\\/jobs\",\"Entries\":[{\"Id\":\"e0\",\"ReceiptHandle\":\"AQEB\"}]}"] -/
+/-- info: ["AmazonSQS.DeleteMessageBatch {\"QueueUrl\":\"https://sqs.eu-west-3.amazonaws.com/123456789012/jobs\",\"Entries\":[{\"Id\":\"e0\",\"ReceiptHandle\":\"AQEB\"}]}"] -/
 #guard_msgs in
 #eval show IO (List String) from do
   let log ← IO.mkRef []

@@ -19,7 +19,7 @@ namespace Tests.CDP.Domains.ServiceWorker
   = .ok { registrationId := "r1", scopeURL := "https://x/", isDeleted := false }
 #guard encode (ToJSON.toJSON ({ registrationId := "r1", scopeURL := "https://x/", isDeleted := true }
     : ServiceWorkerRegistration))
-  = "{\"registrationId\":\"r1\",\"scopeURL\":\"https:\\/\\/x\\/\",\"isDeleted\":true}"
+  = "{\"registrationId\":\"r1\",\"scopeURL\":\"https://x/\",\"isDeleted\":true}"
 
 /-! ### ServiceWorkerVersionRunningStatus / ServiceWorkerVersionStatus round-trip -/
 
@@ -43,7 +43,7 @@ namespace Tests.CDP.Domains.ServiceWorker
 #guard encode (ToJSON.toJSON
     ({ versionId := "v1", registrationId := "r1", scriptURL := "https://x/sw.js"
        runningStatus := .stopped, status := .new } : ServiceWorkerVersion))
-  = ("{\"versionId\":\"v1\",\"registrationId\":\"r1\",\"scriptURL\":\"https:\\/\\/x\\/sw.js\"," ++
+  = ("{\"versionId\":\"v1\",\"registrationId\":\"r1\",\"scriptURL\":\"https://x/sw.js\"," ++
      "\"runningStatus\":\"stopped\",\"status\":\"new\"}")
 
 /-! ### ServiceWorkerErrorMessage -/
@@ -81,7 +81,7 @@ namespace Tests.CDP.Domains.ServiceWorker
 #guard Command.commandName ({ origin := "https://x", registrationId := "r1", data := "d" }
     : PDeliverPushMessage) = "ServiceWorker.deliverPushMessage"
 #guard encode (ToJSON.toJSON ({ origin := "https://x", registrationId := "r1", data := "d" }
-    : PDeliverPushMessage)) = "{\"origin\":\"https:\\/\\/x\",\"registrationId\":\"r1\",\"data\":\"d\"}"
+    : PDeliverPushMessage)) = "{\"origin\":\"https://x\",\"registrationId\":\"r1\",\"data\":\"d\"}"
 #guard match Command.decodeResponse (α := PDeliverPushMessage) (.object []) with
   | .ok () => true | _ => false
 

@@ -15,7 +15,7 @@ namespace Tests.Json.Encode
 #guard Encode.escapeString "" = "\"\""
 #guard Encode.escapeString "a\"b" = "\"a\\\"b\""        -- double quote → \"
 #guard Encode.escapeString "a\\b" = "\"a\\\\b\""        -- backslash → \\
-#guard Encode.escapeString "a/b" = "\"a\\/b\""          -- forward slash → \/
+#guard Encode.escapeString "a/b" = "\"a/b\""              -- forward slash: as is (YAML has no \/)
 #guard Encode.escapeString "a\nb" = "\"a\\nb\""          -- newline → \n
 #guard Encode.escapeString "a\tb" = "\"a\\tb\""          -- tab → \t
 #guard Encode.escapeString "a\rb" = "\"a\\rb\""          -- carriage return → \r

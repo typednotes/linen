@@ -90,7 +90,7 @@ namespace Tests.CDP.Domains.IndexedDB
     (ToJSON.toJSON
       ({ databaseName := "db", objectStoreName := "os", securityOrigin := some "http://x" }
         : PClearObjectStore))
-  = "{\"databaseName\":\"db\",\"objectStoreName\":\"os\",\"securityOrigin\":\"http:\\/\\/x\"}"
+  = "{\"databaseName\":\"db\",\"objectStoreName\":\"os\",\"securityOrigin\":\"http://x\"}"
 
 -- ── deleteDatabase ──
 
@@ -156,7 +156,7 @@ namespace Tests.CDP.Domains.IndexedDB
 #guard Command.commandName ({} : PRequestDatabaseNames) = "IndexedDB.requestDatabaseNames"
 #guard encode (ToJSON.toJSON ({} : PRequestDatabaseNames)) = "{}"
 #guard encode (ToJSON.toJSON ({ securityOrigin := some "http://x" } : PRequestDatabaseNames))
-  = "{\"securityOrigin\":\"http:\\/\\/x\"}"
+  = "{\"securityOrigin\":\"http://x\"}"
 #guard decodeAs "{\"databaseNames\": [\"a\", \"b\"]}" (α := RequestDatabaseNames)
   = .ok { databaseNames := ["a", "b"] }
 

@@ -17,7 +17,7 @@ namespace Tests.CDP.Domains.Audits
   = .ok { name := "n", path := "/", domain := "d" }
 #guard decodeAs "{\"requestId\": \"r1\"}" (α := AffectedRequest) = .ok { requestId := "r1" }
 #guard encode (ToJSON.toJSON ({ requestId := "r1", url := some "http://x" } : AffectedRequest))
-  = "{\"requestId\":\"r1\",\"url\":\"http:\\/\\/x\"}"
+  = "{\"requestId\":\"r1\",\"url\":\"http://x\"}"
 #guard decodeAs "{\"frameId\": \"f1\"}" (α := AffectedFrame) = .ok { frameId := "f1" }
 
 -- ── Cookie issues ──

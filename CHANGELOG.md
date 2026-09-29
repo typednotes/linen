@@ -57,6 +57,14 @@ fallback — and the error taxonomy split its move onto `Linen.Cloud` needed.
   `keychainService`, `"linen"`), so a tool that stored credentials under its
   own name keeps finding them — and its not-found message names the right
   service. Asked for by `infra`, whose entries live under `"infra"`.
+- **The JSON encoder no longer escapes `/`.** `\/` is legal JSON and not
+  legal YAML 1.1, so Kubernetes' server-side apply (`apply-patch+yaml`)
+  refused every manifest naming `apps/v1` — "found unknown escape
+  character", on `infra`'s first live apply. RFC 8259 does not require the
+  escape and Go, Python, Aeson and serde do not emit it. Output bytes change
+  wherever a string holds `/` (URLs, `apiVersion`s, JWT claim sets); the
+  decoder still accepts `\/`, and `Web.Html` keeps `</script` out of raw text
+  by proof, independently of this.
 - **A Scaleway error keeps its `details`**: `describeError` appends each
   `argument_name: help_message` to the message, so "invalid argument(s)" says
   which argument and why.

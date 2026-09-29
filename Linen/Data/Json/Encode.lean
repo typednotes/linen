@@ -6,8 +6,17 @@
   $$\text{encode} : \text{Value} \to \text{String}$$
 
   ## Escaping
-  Strings are escaped per RFC 8259 §7: `"`, `\\`, `/`, `\b`, `\f`,
-  `\n`, `\r`, `\t`, and `\uXXXX` for control characters below U+0020.
+  Strings are escaped per RFC 8259 §7: `"`, `\\`, `\b`, `\f`, `\n`,
+  `\r`, `\t`, and `\uXXXX` for control characters below U+0020.
+
+  `/` is **not** escaped. RFC 8259 permits `\/` and requires nothing of it,
+  and emitting it made the output something other than YAML: Kubernetes'
+  server-side apply decodes its body as YAML 1.1, which has no `\/`, and
+  refused every manifest naming an `apiVersion` like `apps/v1` ("found
+  unknown escape character", infra's first live apply, 2026-09-29). Go,
+  Python, Aeson and serde do not escape it either. The decoder still reads
+  `\/`. Embedding in HTML is `Web.Html`'s concern, which refuses `</script`
+  in raw text by proof rather than relying on this.
   -/
 
 import Linen.Data.Json.Types
@@ -37,7 +46,6 @@ private def escapeChar (c : Char) : String :=
   match c with
   | '"'  => "\\\""
   | '\\' => "\\\\"
-  | '/'  => "\\/"
   | '\x08' => "\\b"   -- backspace
   | '\x0C' => "\\f"   -- form feed
   | '\n' => "\\n"

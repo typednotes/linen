@@ -100,7 +100,7 @@ def sa : ServiceAccount :=
 /- The claims RFC 7523 requires: who is asserting, what for, to whom, and for
    how long. `exp` is exactly an hour after `iat` — Google's maximum, and
    asking for more is rejected outright. -/
-/-- info: "{\"iss\":\"deploy@typednotes.iam.gserviceaccount.com\",\"scope\":\"https:\\/\\/www.googleapis.com\\/auth\\/cloud-platform\",\"aud\":\"https:\\/\\/oauth2.googleapis.com\\/token\",\"iat\":1440938160,\"exp\":1440941760}" -/
+/-- info: "{\"iss\":\"deploy@typednotes.iam.gserviceaccount.com\",\"scope\":\"https://www.googleapis.com/auth/cloud-platform\",\"aud\":\"https://oauth2.googleapis.com/token\",\"iat\":1440938160,\"exp\":1440941760}" -/
 #guard_msgs in
 #eval assertionClaims sa Gcp.cloudPlatformScope 1440938160
 

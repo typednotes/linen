@@ -119,7 +119,7 @@ def sampleRequestJson : String :=
 
 #guard encode (ToJSON.toJSON ({ requestId := "1" } : PContinueRequest)) = "{\"requestId\":\"1\"}"
 #guard encode (ToJSON.toJSON ({ requestId := "1", url := some "https://y" } : PContinueRequest))
-  = "{\"requestId\":\"1\",\"url\":\"https:\\/\\/y\"}"
+  = "{\"requestId\":\"1\",\"url\":\"https://y\"}"
 #guard Command.commandName ({ requestId := "1" } : PContinueRequest) = "Fetch.continueRequest"
 
 #guard encode (ToJSON.toJSON

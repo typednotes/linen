@@ -29,7 +29,7 @@ namespace Tests.CDP.Domains.Cast
 
 #guard encode (ToJSON.toJSON ({} : PEnable)) = "{}"
 #guard encode (ToJSON.toJSON ({ presentationUrl := some "http://x" } : PEnable))
-  = "{\"presentationUrl\":\"http:\\/\\/x\"}"
+  = "{\"presentationUrl\":\"http://x\"}"
 #guard Command.commandName ({} : PEnable) = "Cast.enable"
 
 /-! ### PDisable — the whole params value is JSON `null`, not `{}`, matching
