@@ -580,7 +580,12 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   `IO.Promise` when a socket is ready, so `waitReadable` / `waitWritable` (and
   `recvGreen` / `sendAllGreen`) **suspend a `Green` thread as a heap object
   instead of holding an OS thread**. This is what lets one worker pool serve many
-  thousands of IO-bound connections.
+  thousands of IO-bound connections. Registrations are one-shot and re-armed (level-triggered
+  ones spun a core once any socket had been awaited); waits can time out
+  (`waitReadableFor`, `recvFor`, `sendAllGreenFor`), and `IO` code can wait
+  through the dispatcher without starving the pool (`awaitReadableFor`,
+  `recvAwait`, `sendAllAwait`: `IO.wait`, which the task manager compensates
+  for).
 - `Network.Socket.Blocking` — blocking-style `accept` / `connect` / `send` /
   `sendAll` / `recv`, retrying on `wouldBlock` for tests, scripts, and code
   that doesn't need event-loop integration (production non-blocking I/O should
@@ -1602,9 +1607,10 @@ convention.
   TLS session.
 - `Network.WebApp.Server.Run` — `runSettings`/`runSettingsEventLoop`: the
   accept loop and per-connection request/response cycle, keep-alive aware.
-  The event-loop mode buffers each request head on the green thread (no pool
-  thread held by a slow or idle client) and serves pipelined requests back
-  to back.
+  Both modes run one HTTP/1.1 loop (`serveHttp`) over an `HttpTransport`
+  (`blockingTransport`, `eventLoopTransport`): heads buffered until complete
+  (in event-loop mode on the green thread), pipelined requests served back
+  to back, `settingsTimeout` enforced on every wait.
 - `Network.WebApp.Server.Conduit` — `ISource`: buffered incremental body
   reading for known-length and chunked request bodies.
 - `Network.WebApp.Server.IO` — low-level connection byte-sending helpers.
@@ -1622,7 +1628,9 @@ convention.
   `keyFile` are required settings (not `Option`).
 - `Network.WebApp.Server.TLS` — HTTPS support via `Network.TLS.Context`
   (OpenSSL FFI): one thread per connection, requests read and responses
-  written through the TLS session (`runTLS`, `runTLSSocket`). HTTP/1.1 only
+  written through the TLS session, by the same `serveHttp` loop; a thread per
+  connection (`runTLS`, `runTLSSocket`) or green threads
+  (`runTLSEventLoop`, `runTLSSocketEL`). HTTP/1.1 only
   (no ALPN answer, so clients fall back from `h2`). Plain HTTP on the TLS
   port is told apart by peeking at the first byte, and answered per
   `OnInsecure`: `426 Upgrade Required` (`denyInsecure`) or served
@@ -2447,7 +2455,7 @@ the secrets, never their values.
 | `Linen.Network.Socket.Types` | phantom-typed `Socket` lifecycle, `Family`/`SockAddr`/`EventType`, non-blocking outcome types |
 | `Linen.Network.Socket.FFI` | `@[extern]` C bindings: sockets, options, UDP, `getAddrInfo`, kqueue/epoll event loop |
 | `Linen.Network.Socket` | safe phantom-typed lifecycle API, `withSocket`/`listenTCP`/`withEventLoop`, `EventLoop`, `sendAll`/`sendTo`/`recvFrom`, `peek` |
-| `Linen.Network.Socket.EventDispatcher` | kqueue/epoll → `Green` bridge: `waitReadable`/`waitWritable`/`recvGreen`/`sendAllGreen` |
+| `Linen.Network.Socket.EventDispatcher` | kqueue/epoll → `Green` bridge, one-shot registrations: `waitReadable`/`waitWritable`(`For`), `awaitReadableFor`/`awaitWritableFor`, `recvFor`/`recvAwait`, `sendAllGreen`(`For`)/`sendAllAwait` |
 | `Linen.Network.Socket.Blocking` | blocking-style `accept`/`connect`/`send`/`sendAll`/`recv` over the non-blocking API, retrying on `wouldBlock` |
 | `Linen.Network.Sendfile` | portable `sendFile`/`sendFileSimple` (chunked read + `Blocking.sendAll`, no zero-copy syscall); `sendFileWith` over any write action |
 | `Linen.Data.Streaming.Network` | `AppData`, `bindPortTCP`/`getSocketTCP`/`mkAppData`/`runTCPServer`, `acceptSafe` (retry loop, no `partial`) |
@@ -2742,11 +2750,11 @@ the secrets, never their values.
 | `Linen.Network.WebApp.Server.IO` | low-level connection byte-sending helpers |
 | `Linen.Network.WebApp.Server.SendFile` | portable `sendFile` response body streaming |
 | `Linen.Network.WebApp.Server.Internal` | re-exports the server's public surface |
-| `Linen.Network.WebApp.Server.Run` | `runSettings`/`runSettingsEventLoop`: the accept-loop/connection-handling core; event-loop heads buffered on the green thread, pipelining |
+| `Linen.Network.WebApp.Server.Run` | `runSettings`/`runSettingsEventLoop`; `serveHttp` over an `HttpTransport` (blocking / event loop), pipelining, `settingsTimeout` |
 | `Linen.Network.WebApp.Server.WithApplication` | `withApplication`/`withApplicationSettings`: run a server for the duration of an `IO` action |
 | `Linen.Network.WebApp.Server` | the package aggregator plus `run`, a one-line server entry point |
 | `Linen.Network.WebApp.Server.QUIC` | bridges `Network.WebApp` to HTTP/3 over `Network.QUIC` |
-| `Linen.Network.WebApp.Server.TLS` | HTTPS via `Network.TLS.Context`, through the session, one thread per connection; HTTP/1.1 only; `OnInsecure` by first-byte peek |
+| `Linen.Network.WebApp.Server.TLS` | HTTPS through the session, thread-per-connection (`runTLS`) or green threads (`runTLSEventLoop`); HTTP/1.1 only; `OnInsecure` by first-byte peek |
 | `Linen.Network.WebApp.Server.TLS.Internal` | re-exports `Server.TLS` for advanced use |
 | `Linen.Network.WebApp.Server.WebSockets` | upgrades `Network.WebApp` requests to `Network.WebSockets` connections via `responseRaw` |
 | `Linen.Network.WebSockets.Types` | `Opcode`/`CloseCode`/`ConnectionState`/`ConnectionOptions`/`Connection`/`PendingConnection`/`ServerApp` |

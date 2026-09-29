@@ -40,6 +40,22 @@ does not have them.
   (OpenSSL may already hold decrypted bytes the socket will not signal),
   waiting in whichever direction OpenSSL asks. Tested on non-blocking
   sockets at both ends, with multi-MiB transfers forcing `wantWrite`.
+- **`Server.TLS.runTLSEventLoop`** (`runTLSSocketEL`, `tlsConnectionEL`) —
+  HTTPS on green threads: peek, handshake and head reads suspend the green
+  thread, so idle and slow TLS connections hold no pool thread.
+- **One HTTP/1.1 loop for every transport**: `Server.HttpTransport` and
+  `serveHttp`, with `blockingTransport`, `eventLoopTransport`, and
+  `Server.TLS.tlsTransport` / `tlsTransportEL`. Plain and TLS, blocking and
+  event-loop connections now share parsing, pipelining, draining, timeouts
+  and the buffered `responseRaw` handoff.
+- **Timeouts on the dispatcher**: `waitReadableFor` / `waitWritableFor`
+  (Green), `awaitReadableFor` / `awaitWritableFor` (`IO`, waiting with
+  `IO.wait` on the dispatcher's promise — which Lean's task manager
+  compensates for, unlike a blocked `poll`), `recvFor` / `recvAwait`,
+  `sendAllGreenFor` / `sendAllAwait`; `EventType.oneshot`.
+- **TLS with timeouts**: `Network.TLS.readWithin` / `writeWithin` (`poll`
+  on a non-blocking socket); `Network.TLS.Green.readFor`, timeouts on
+  `handshake` / `accept` / `connect` / `write`, and `readIO` / `writeIO`.
 - **`Network.Socket.peek`** (`MSG_PEEK`), and `ByteSource`'s `feed` /
   `unread`, `headComplete`, `maxHeadBytes`, `Server.recvSuspending`,
   `Response.filePartLength` / `fileBodyLength`.
@@ -119,8 +135,31 @@ does not have them.
   parsed from the C `RecvBuffer`, which gives up after a few `EAGAIN`
   retries, so a head or body arriving in pieces dropped the connection.
   Heads are now buffered on the green thread (no pool thread held while
-  waiting) and parsed once complete; body reads wait up to
-  `settingsTimeout` — the first use of that setting.
+  waiting) and parsed once complete.
+- **The event dispatcher no longer spins.** Registrations were
+  level-triggered and never removed, so after one `waitWritable` — or a
+  `waitReadable` that left data unread — the shard's `kevent`/`epoll_wait`
+  returned at once, forever: an idle process burnt a full core (measured:
+  2.0 s of CPU in 2 s; now 0.01 s). They are now one-shot, carry every
+  direction awaited on the fd (with epoll a second waiter used to replace
+  the first's mask), and are re-armed while waiters remain — libuv's, mio's
+  and GHC's scheme. A test checks the CPU an idle dispatcher uses.
+- **Every server mode enforces `settingsTimeout`**: waiting for a request
+  head (closed quietly, as in Warp), for body bytes (an error the
+  application sees), and for a peer to accept writes. Through 1.8.0 the
+  blocking server and the TLS server waited forever, so an idle or
+  stalled client held its thread; `settingsTimeout` was never read.
+- **Event-loop body reads no longer block pool threads**: they wait on the
+  dispatcher's promise with `IO.wait` instead of `poll`, as do writes from
+  `IO` callbacks (streamed bodies, files, `responseRaw`), which used
+  `Blocking.sendAll`.
+- **`responseRaw` sees bytes already buffered** in blocking mode too — a
+  WebSocket client's first frame sent right behind its upgrade request was
+  skipped, since the handler read the socket directly.
+- **A `Content-Length` body cut short by the peer is an error**, where the
+  empty read at end of input made it look complete.
+- **The event-loop accept loops back off on accept errors** (e.g. `EMFILE`)
+  instead of spinning on a listener that stays readable.
 - **File responses carry `Content-Length`** (of the `FilePart`, when
   given): without it a kept-alive client could not find the end of the
   file.
