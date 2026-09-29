@@ -23,7 +23,9 @@
     task manager compensates for.
 
   Either way requests are parsed, and responses written, *through the
-  session*, by the same HTTP/1.1 loop as plain connections (`serveHttp`).
+  session*: by HTTP/2 (`serveHttp2`, `Network.HTTP2.serve`) when ALPN chose
+  `h2` — offered unless `TLSSettings.http2` is off — and otherwise by the
+  same HTTP/1.1 loop as plain connections (`serveHttp`).
   Through 1.8.0 this module ran the handshake and then parsed and answered
   requests on the raw socket, bypassing the session entirely, so no HTTPS
   request could succeed; nothing tested it.
@@ -35,10 +37,8 @@
 
   ## What is not supported (say it loudly)
 
-  - **HTTP/2.** The server speaks HTTP/1.1 only, so it does not answer ALPN:
-    a client offering `h2, http/1.1` falls back to HTTP/1.1. (It used to
-    call `Network.TLS.setAlpn`, which *prefers `h2`* — every browser would
-    have negotiated a protocol this server cannot speak.)
+  - **HTTP/2 without TLS** (`h2c`, by prior knowledge or `Upgrade`): HTTP/2
+    is offered only over TLS, by ALPN — which is how browsers use it.
 
   ## No `partial`
 
@@ -65,6 +65,7 @@ import Linen.Network.WebApp.Server.Settings
 import Linen.Network.WebApp.Server.Request
 import Linen.Network.WebApp.Server.Response
 import Linen.Network.WebApp.Server.Run
+import Linen.Network.WebApp.Server.HTTP2
 
 namespace Network.WebApp.Server.TLS
 
@@ -94,6 +95,22 @@ deriving Repr
 structure TLSSettings where
   certSettings : CertSettings
   onInsecure : OnInsecure := .denyInsecure "This server requires HTTPS"
+  /-- Offer HTTP/2: ALPN prefers `h2`, then `http/1.1`. Off, the server does
+      not answer ALPN and every client speaks HTTP/1.1. -/
+  http2 : Bool := true
+
+/-- Answer ALPN on `ctx` with `h2` then `http/1.1` (`http2`), or not at all. -/
+def configureAlpn (ctx : TLSContext) (http2 : Bool) : IO Unit :=
+  Network.TLS.setServerAlpn ctx (if http2 then ["h2", "http/1.1"] else [])
+
+/-- Serve a TLS connection after its handshake with the protocol ALPN chose:
+    HTTP/2 for `h2`, HTTP/1.1 otherwise. -/
+def serveNegotiated (session : TLSSession) (transport : HttpTransport) (remoteAddr : SockAddr)
+    (settings : Settings) (app : Application) : Green Unit := do
+  if (← (Network.TLS.getAlpn session : IO _)) == some "h2" then
+    serveHttp2 transport remoteAddr settings app
+  else
+    serveHttp transport remoteAddr settings app
 
 /-- Whether the first byte of a connection opens a TLS handshake record
     (content type 22, RFC 8446 §5.1). -/
@@ -217,7 +234,8 @@ def tlsConnection (ctx : TLSContext) (clientSock : Socket .connected)
       try
         handshake session clientSock.raw timeout
         let transport ← tlsTransport session clientSock settings
-        Green.block (serveHttp transport remoteAddr settings app) (← Std.CancellationToken.new)
+        Green.block (serveNegotiated session transport remoteAddr settings app)
+          (← Std.CancellationToken.new)
       finally
         Network.TLS.close session
     catch e => reportError settings remoteAddr e
@@ -245,8 +263,8 @@ def runTLSSocket (ctx : TLSContext) (serverSock : Socket .listening) (settings :
     if ← stop.isCancelled then
       let _ ← Network.Socket.close clientSock
     else
-      let _tid ← Control.Concurrent.forkIO
-        (tlsConnection ctx clientSock remoteAddr settings app onInsecure)
+      -- A thread of its own: `forkConnection` says why.
+      forkConnection (tlsConnection ctx clientSock remoteAddr settings app onInsecure)
 
 /-- Run a web application with TLS on the given port, a thread per
     connection.
@@ -256,6 +274,7 @@ def runTLS (tlsSettings : TLSSettings) (settings : Settings)
   let (certPath, keyPath) := match tlsSettings.certSettings with
     | .certFile c k => (c, k)
   let ctx ← Network.TLS.createContext certPath keyPath
+  configureAlpn ctx tlsSettings.http2
   let serverSock ← Network.Socket.listenTCP
     settings.settingsHost settings.settingsPort settings.settingsBacklog
   try
@@ -285,7 +304,7 @@ def tlsConnectionEL (ctx : TLSContext) (clientSock : Socket .connected)
       let session ← Network.TLS.Green.accept disp ctx clientSock (some timeout)
       try
         let transport ← (tlsTransportEL session clientSock settings disp : IO _)
-        serveHttp transport remoteAddr settings app
+        serveNegotiated session transport remoteAddr settings app
       finally
         (Network.TLS.close session : IO _)
     catch e => (reportError settings remoteAddr e : IO _)
@@ -326,6 +345,7 @@ def runTLSEventLoop (tlsSettings : TLSSettings) (settings : Settings)
   let (certPath, keyPath) := match tlsSettings.certSettings with
     | .certFile c k => (c, k)
   let ctx ← Network.TLS.createContext certPath keyPath
+  configureAlpn ctx tlsSettings.http2
   let serverSock ← Network.Socket.listenTCP
     settings.settingsHost settings.settingsPort settings.settingsBacklog
   Network.Socket.setNonBlocking serverSock

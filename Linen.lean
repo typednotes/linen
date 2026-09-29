@@ -567,6 +567,7 @@ import Linen.Network.WebApp.Server.Internal
 import Linen.Network.WebApp.Server.WithApplication
 import Linen.Network.WebApp.Server
 import Linen.Network.WebApp.Server.QUIC
+import Linen.Network.WebApp.Server.HTTP2
 import Linen.Network.WebApp.Server.TLS
 import Linen.Network.WebApp.Server.TLS.Internal
 import Linen.Network.WebSockets.Types

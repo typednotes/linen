@@ -9,6 +9,7 @@
 -/
 import Linen.Network.WebApp.Server.TLS
 import LinenTest.Linen.Network.TLS.TestSupport
+import Linen.Network.HTTP2.Server
 
 open Network.WebApp.Server.TLS
 open Network.WebApp (Application AppM responseLBS)
@@ -76,9 +77,10 @@ deriving Repr
 private def withTLSServer (mode : Mode) (certPath keyPath : String) (app : Application)
     (client : UInt16 → IO α)
     (onInsecure : OnInsecure := .denyInsecure "This server requires HTTPS")
-    (settings : Network.WebApp.Server.Settings := Network.WebApp.Server.defaultSettings) :
-    IO α := do
+    (settings : Network.WebApp.Server.Settings := Network.WebApp.Server.defaultSettings)
+    (http2 : Bool := true) : IO α := do
   let ctx ← Network.TLS.createContext certPath keyPath
+  configureAlpn ctx http2
   let server ← listenTCP "127.0.0.1" 0
   let port := (← getSockName server).port
   match mode with
@@ -242,6 +244,169 @@ private def oneSecond : Network.WebApp.Server.Settings :=
     let _ ← close silent
     unless got.isEmpty && waited ≥ 900 && waited < 5000 do
       throw (IO.userError s!"silent client: closed after {waited} ms")
+
+-- Idle connections do not starve new ones (more idle clients than the task
+-- pool has workers); through 1.8.0 blocking mode ran each connection on a
+-- pool thread that then sat in `poll`.
+#eval bothModes fun mode => withTestCert fun certPath keyPath => do
+  withTLSServer mode certPath keyPath echoApp fun port => do
+    let idle ← (List.range 64).mapM fun _ => do
+      Blocking.connect (← socket .inet .stream) { host := "127.0.0.1", port }
+    IO.sleep 200
+    let t0 ← IO.monoMsNow
+    let reply ← tlsExchange certPath port "/busy"
+    let waited := (← IO.monoMsNow) - t0
+    for c in idle do let _ ← close c
+    unless contains reply "GET /busy secure=true" && waited < 3000 do
+      throw (IO.userError s!"answered after {waited} ms with 64 idle connections")
+
+/-! ### HTTP/2, by ALPN -/
+
+open Network.HTTP2 in
+/-- A TLS connection offering `h2` by ALPN; the protocol the server chose. -/
+private def h2Connect (certPath : String) (port : UInt16) (offer : List String := ["h2", "http/1.1"]) :
+    IO (Socket .connected × Network.TLS.TLSSession × Option String) := do
+  let clientCtx ← Network.TLS.createClientContextWithCA certPath
+  Network.TLS.setClientAlpn clientCtx offer
+  let conn ← Blocking.connect (← socket .inet .stream) { host := "127.0.0.1", port }
+  let session ← Network.TLS.connectSocket clientCtx conn.raw "localhost"
+  return (conn, session, ← Network.TLS.getAlpn session)
+
+open Network.HTTP2 in
+/-- Frames from a TLS session, buffered. -/
+private def h2Frames (session : Network.TLS.TLSSession) : IO (IO (Option Frame)) := do
+  let buffer ← IO.mkRef ByteArray.empty
+  return do
+    for _ in [0:1000] do
+      let buf ← buffer.get
+      if let some h := decodeFrameHeader buf then
+        let n := 9 + h.payloadLength.toNat
+        if buf.size ≥ n then
+          buffer.set (buf.extract n buf.size)
+          return some { header := h, payload := buf.extract 9 n }
+      let piece ← Network.TLS.read session 16384
+      if piece.isEmpty then return none
+      buffer.modify (· ++ piece)
+    return none
+
+open Network.HTTP2 in
+/-- One HTTP/2 request over a fresh TLS connection: its `:status` and body.
+    Sends a body when given, and returns window as the response arrives. -/
+private def h2Request (certPath : String) (port : UInt16) (method path : String)
+    (body : ByteArray := ByteArray.empty) : IO (Option String × String) := do
+  let (conn, session, alpn) ← h2Connect certPath port
+  unless alpn == some "h2" do throw (IO.userError s!"ALPN chose {alpn}, not h2")
+  let next ← h2Frames session
+  let send (f : Frame) := Network.TLS.write session (encodeFrame f)
+  Network.TLS.write session connectionPreface
+  send (buildSettingsFrame [])
+  let sid := StreamId.fromWire 1
+  let fields := [(":method", method), (":scheme", "https"), (":path", path),
+                 (":authority", "localhost")]
+  send (buildHeadersFrame sid (HPACK.encodeHeadersStatic fields) (endStream := body.isEmpty))
+  -- The body in 16 KiB frames (within the server's 256 KiB stream window).
+  let mut off := 0
+  while off < body.size do
+    let n := min 16384 (body.size - off)
+    send (buildDataFrame sid (body.extract off (off + n)) (endStream := off + n == body.size))
+    off := off + n
+  let mut status := none
+  let mut got := ByteArray.empty
+  for _ in [0:10000] do
+    let some f ← next | break
+    if f.header.streamId.val != 1 then continue
+    match f.header.frameType with
+    | .headers =>
+      status := ((HPACK.decodeHeaders (HPACK.DynamicTable.empty 4096) f.payload).map (·.1)).bind
+        (·.lookup ":status")
+    | .data =>
+      got := got ++ f.payload
+      if f.payload.size > 0 then
+        send (buildWindowUpdateFrame StreamId.zero f.payload.size.toUInt32)
+        send (buildWindowUpdateFrame sid f.payload.size.toUInt32)
+    | _ => pure ()
+    if FrameFlags.test f.header.flags FrameFlags.endStream then break
+  Network.TLS.close session
+  let _ ← close conn
+  return (status, String.fromUTF8! got)
+
+-- HTTP/2 end to end: a GET and an upload larger than the connection's
+-- first window, answered through the WebApp application, in both modes.
+#eval bothModes fun mode => withTestCert fun certPath keyPath => do
+  withTLSServer mode certPath keyPath echoApp fun port => do
+    let (status, body) ← h2Request certPath port "GET" "/h2?x=1"
+    unless status == some "200" && contains body "GET /h2 secure=true body=;" do
+      throw (IO.userError s!"h2 GET: {status} {repr body}")
+    let upload := String.ofList (List.replicate 200000 'u')
+    let (status, body) ← h2Request certPath port "POST" "/up" upload.toUTF8
+    unless status == some "200" && contains body s!"POST /up secure=true body={upload};" do
+      throw (IO.userError s!"h2 POST: {status}, {body.length} bytes")
+
+-- ALPN: a client offering only HTTP/1.1 gets it; with `http2 := false` the
+-- server answers no ALPN and an h2-preferring client falls back.
+#eval bothModes fun mode => withTestCert fun certPath keyPath => do
+  withTLSServer mode certPath keyPath echoApp fun port => do
+    let (conn, session, alpn) ← h2Connect certPath port ["http/1.1"]
+    Network.TLS.close session
+    let _ ← close conn
+    unless alpn == some "http/1.1" do throw (IO.userError s!"offered http/1.1, got {alpn}")
+  withTLSServer mode certPath keyPath echoApp (http2 := false) fun port => do
+    let (conn, session, alpn) ← h2Connect certPath port
+    unless alpn == none do throw (IO.userError s!"http2 off, yet ALPN chose {alpn}")
+    Network.TLS.write session "GET /fallback HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".toUTF8
+    let reply ← readUntil session (fun _ => false)
+    Network.TLS.close session
+    let _ ← close conn
+    unless contains reply "GET /fallback secure=true" do throw (IO.userError "HTTP/1.1 fallback")
+
+/-- Whether a `curl` with HTTP/2 support is installed. -/
+private def curlHasHttp2 : IO Bool := do
+  try
+    let out ← IO.Process.output { cmd := "curl", args := #["--version"] }
+    return out.exitCode == 0 && (out.stdout.splitOn "HTTP2").length > 1
+  catch _ => return false
+
+-- Interop with curl (nghttp2), when available: a GET with a query, a 3 MB
+-- upload and a 1 MB download (flow control both ways), and five requests
+-- multiplexed on one connection. Where curl lacks HTTP/2 this says so; the
+-- own-client tests above still run.
+#eval bothModes fun mode => withTestCert fun certPath keyPath => do
+  unless ← curlHasHttp2 do
+    IO.println "curl with HTTP/2 not found: skipping the curl interop check"
+    return
+  let big := String.ofList (List.replicate 1000000 'd')
+  let app : Application := fun req respond => AppM.respondIO respond do
+    let mut n := 0
+    for _ in [0:100000] do
+      let piece ← req.requestBody
+      if piece.isEmpty then break
+      n := n + piece.size
+    let extra := if req.rawPathInfo == "/big" then big else ""
+    pure (responseLBS status200 []
+      s!"{req.requestMethod} {req.rawPathInfo}{req.rawQueryString} {req.httpVersion} n={n}{extra};")
+  withTLSServer mode certPath keyPath app fun port => do
+    let url := s!"https://localhost:{port}"
+    let curl (args : Array String) : IO String := do
+      let base : Array String := #["-sS", "--http2", "--cacert", certPath, "--max-time", "30"]
+      let out ← IO.Process.output { cmd := "curl", args := base ++ args }
+      unless out.exitCode == 0 do throw (IO.userError s!"curl {args}: {out.stderr}")
+      return out.stdout
+    let got ← curl #[url ++ "/q?a=b"]
+    unless got == "GET /q?a=b HTTP/2.0 n=0;" do throw (IO.userError s!"curl GET: {repr got}")
+    let (h, uploadPath) ← IO.FS.createTempFile
+    h.putStr (String.ofList (List.replicate 3000000 'u'))
+    h.flush
+    let got ← curl #["--data-binary", "@" ++ uploadPath.toString, url ++ "/up"]
+    IO.FS.removeFile uploadPath
+    unless got == "POST /up HTTP/2.0 n=3000000;" do throw (IO.userError s!"curl upload: {repr got}")
+    let got ← curl #["-w", "%{http_version} %{size_download}", "-o", "/dev/null", url ++ "/big"]
+    unless got == s!"2 {("GET /big HTTP/2.0 n=0;".length + big.length)}" do
+      throw (IO.userError s!"curl download: {got}")
+    let got ← curl #["--parallel", "--parallel-immediate", "-w", "\n",
+      url ++ "/1", url ++ "/2", url ++ "/3", url ++ "/4", url ++ "/5"]
+    for i in [1, 2, 3, 4, 5] do
+      unless contains got s!"GET /{i} HTTP/2.0 n=0;" do
+        throw (IO.userError s!"curl parallel: /{i} missing in {repr got}")
 
 /-! ### Signatures -/
 
