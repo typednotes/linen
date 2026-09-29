@@ -86,10 +86,13 @@ structure DynamicTable where
   maxSize : Nat
   deriving Repr
 
-/-- Calculate the HPACK entry size per RFC 7541 Section 4.1.
-    $$\text{entrySize}(n, v) = |n| + |v| + 32$$ -/
+/-- Calculate the HPACK entry size per RFC 7541 Section 4.1: the name's and
+    value's lengths **in octets**, plus 32. (Through 1.8.0 this counted
+    characters, so any non-ASCII field put this table out of step with the
+    peer's.)
+    $$\text{entrySize}(n, v) = |n|_{\text{octets}} + |v|_{\text{octets}} + 32$$ -/
 @[inline] def entrySize (name value : String) : Nat :=
-  name.length + value.length + 32
+  name.utf8ByteSize + value.utf8ByteSize + 32
 
 namespace DynamicTable
 

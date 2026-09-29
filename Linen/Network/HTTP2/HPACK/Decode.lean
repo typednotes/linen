@@ -102,17 +102,11 @@ def decodeString (bs : ByteArray) (offset : Nat) : Option (DecodeResult String) 
       if dataStart + strLen > bs.size then none
       else
         let raw := bs.extract dataStart (dataStart + strLen)
-        let str := if isHuffman then
-          match huffmanDecode raw with
-          | some s => s
-          | none => match String.fromUTF8? raw with
-            | some s => s
-            | none => ""
-        else
-          match String.fromUTF8? raw with
-          | some s => s
-          | none => ""
-        some { value := str, consumed := lenResult.consumed + strLen }
+        -- A string that does not decode is a decoding error (§5.2) — not
+        -- its raw bytes, and not "": through 1.8.0 both were substituted,
+        -- so a malformed field silently became a different one.
+        let str? := if isHuffman then huffmanDecode raw else String.fromUTF8? raw
+        str?.map fun str => { value := str, consumed := lenResult.consumed + strLen }
 
 -- ── Header block decoding ──────────────────────────────
 
@@ -124,7 +118,7 @@ set_option linter.unusedVariables false in
     instruction begins with an integer (consuming ≥ 1 byte by
     `decodeInteger_consumed`), so `offset` strictly increases. -/
 private def decodeHeadersGo (bs : ByteArray) (offset : Nat) (dt : DynamicTable)
-    (acc : List HeaderField) : Option (List HeaderField × DynamicTable) :=
+    (acc : List HeaderField) (maxTableSize : Nat) : Option (List HeaderField × DynamicTable) :=
   if offset ≥ bs.size then some (acc.reverse, dt)
   else
     let byte := bs[offset]!
@@ -135,7 +129,7 @@ private def decodeHeadersGo (bs : ByteArray) (offset : Nat) (dt : DynamicTable)
       | some idxResult =>
         match indexLookup dt idxResult.value with
         | none => none
-        | some field => decodeHeadersGo bs (offset + idxResult.consumed) dt (field :: acc)
+        | some field => decodeHeadersGo bs (offset + idxResult.consumed) dt (field :: acc) maxTableSize
     else if (byte &&& 0xC0) == 0x40 then
       -- Literal with Incremental Indexing (Section 6.2.1): 01xxxxxx
       match h : decodeInteger bs offset 6 with
@@ -150,7 +144,7 @@ private def decodeHeadersGo (bs : ByteArray) (offset : Nat) (dt : DynamicTable)
             | none => none
             | some valResult =>
               decodeHeadersGo bs (pos + valResult.consumed) (dt.insert name valResult.value)
-                ((name, valResult.value) :: acc)
+                ((name, valResult.value) :: acc) maxTableSize
         else
           match decodeString bs pos with
           | none => none
@@ -161,13 +155,19 @@ private def decodeHeadersGo (bs : ByteArray) (offset : Nat) (dt : DynamicTable)
             | some valResult =>
               decodeHeadersGo bs (pos' + valResult.consumed)
                 (dt.insert nameResult.value valResult.value)
-                ((nameResult.value, valResult.value) :: acc)
+                ((nameResult.value, valResult.value) :: acc) maxTableSize
     else if (byte &&& 0xE0) == 0x20 then
       -- Dynamic Table Size Update (Section 6.3): 001xxxxx
       match h : decodeInteger bs offset 5 with
       | none => none
       | some sizeResult =>
-        decodeHeadersGo bs (offset + sizeResult.consumed) (dt.resize sizeResult.value) acc
+        -- §6.3: the new size may not exceed the limit the decoder
+        -- advertised (SETTINGS_HEADER_TABLE_SIZE); a larger one is a
+        -- decoding error — otherwise a peer could grow this table at will.
+        -- §4.2: and a size update may only open a header block.
+        if sizeResult.value > maxTableSize || !acc.isEmpty then none
+        else decodeHeadersGo bs (offset + sizeResult.consumed) (dt.resize sizeResult.value) acc
+          maxTableSize
     else
       -- Literal without Indexing (6.2.2) or Never Indexed (6.2.3): 0000xxxx / 0001xxxx
       match h : decodeInteger bs offset 4 with
@@ -182,6 +182,7 @@ private def decodeHeadersGo (bs : ByteArray) (offset : Nat) (dt : DynamicTable)
             | none => none
             | some valResult =>
               decodeHeadersGo bs (pos + valResult.consumed) dt ((name, valResult.value) :: acc)
+                maxTableSize
         else
           match decodeString bs pos with
           | none => none
@@ -191,16 +192,19 @@ private def decodeHeadersGo (bs : ByteArray) (offset : Nat) (dt : DynamicTable)
             | none => none
             | some valResult =>
               decodeHeadersGo bs (pos' + valResult.consumed) dt
-                ((nameResult.value, valResult.value) :: acc)
+                ((nameResult.value, valResult.value) :: acc) maxTableSize
 termination_by bs.size - offset
 decreasing_by
   all_goals (have hc := decodeInteger_consumed h; simp_wf; omega)
 
 /-- Decode a complete HPACK header block into a list of header fields.
-    Updates the dynamic table as fields with indexing are decoded.
+    Updates the dynamic table as fields with indexing are decoded. A dynamic
+    table size update larger than `maxTableSize` — the
+    SETTINGS_HEADER_TABLE_SIZE this decoder advertised — is an error.
 
     $$\text{decodeHeaders} : \text{DynamicTable} \to \text{ByteArray} \to \text{Option}(\text{List}(\text{HeaderField}) \times \text{DynamicTable})$$ -/
-def decodeHeaders (dt : DynamicTable) (bs : ByteArray) : Option (List HeaderField × DynamicTable) :=
-  decodeHeadersGo bs 0 dt []
+def decodeHeaders (dt : DynamicTable) (bs : ByteArray) (maxTableSize : Nat := 4096) :
+    Option (List HeaderField × DynamicTable) :=
+  decodeHeadersGo bs 0 dt [] maxTableSize
 
 end Network.HTTP2.HPACK

@@ -79,4 +79,32 @@ def litNoIndex : ByteArray := ByteArray.mk #[0x04, 0x0c] ++ "/sample/path".toUTF
 
 #guard (decodeHeaders (DynamicTable.empty 4096) ByteArray.empty).map (·.1) == some []
 
+/-! ### Size updates: bounded, and only at the start of a block (§4.2, §6.3) -/
+
+-- 0x3f 0xe1 0x1f = size update to 4096: allowed at the default limit…
+#guard (decodeHeaders (DynamicTable.empty 4096) (ByteArray.mk #[0x3f, 0xe1, 0x1f])).isSome
+-- …but not above the limit the decoder advertised (0x3f 0xe2 0x1f = 4097).
+#guard (decodeHeaders (DynamicTable.empty 4096) (ByteArray.mk #[0x3f, 0xe2, 0x1f])).isNone
+#guard (decodeHeaders (DynamicTable.empty 4096) (ByteArray.mk #[0x3f, 0xe2, 0x1f])
+          (maxTableSize := 8192)).isSome
+-- After a field (0x82 = `:method: GET`), a size update is a decoding error.
+#guard (decodeHeaders (DynamicTable.empty 4096) (ByteArray.mk #[0x20, 0x82])).isSome
+#guard (decodeHeaders (DynamicTable.empty 4096) (ByteArray.mk #[0x82, 0x20])).isNone
+
+/-! ### Strings that do not decode are errors (§5.2) -/
+
+-- A Huffman string (length 1, H bit set) whose byte is 8 bits of padding:
+-- through 1.8.0 this decoded as the raw byte (or ""), not as an error.
+#guard (decodeString (ByteArray.mk #[0x81, 0xff]) 0).isNone
+-- Padding of zeros, not ones.
+#guard (decodeString (ByteArray.mk #[0x81, 0x00]) 0).isNone
+-- The EOS symbol (30 bits of ones) inside the string.
+#guard (decodeString (ByteArray.mk #[0x84, 0xff, 0xff, 0xff, 0xff]) 0).isNone
+-- A raw string that is not UTF-8.
+#guard (decodeString (ByteArray.mk #[0x01, 0xff]) 0).isNone
+-- A literal field whose value is such a string fails the whole block.
+#guard (decodeHeaders (DynamicTable.empty 4096) (ByteArray.mk #[0x04, 0x81, 0xff])).isNone
+-- And a valid Huffman string still decodes ("a" = 0x1f).
+#guard (decodeString (ByteArray.mk #[0x81, 0x1f]) 0).map (·.value) == some "a"
+
 end Tests.Network.HTTP2.HPACKDecode

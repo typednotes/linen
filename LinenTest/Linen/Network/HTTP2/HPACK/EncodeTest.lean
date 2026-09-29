@@ -65,4 +65,20 @@ def roundtrips (hdrs : List HeaderField) : Bool :=
 #guard (encodeHeaders (DynamicTable.empty 4096) [(":method", "GET"), (":scheme", "http")]).1
         == ByteArray.mk #[0x82, 0x86]
 
+/-! ### `encodeHeadersStatic` — no dynamic table -/
+
+private def fields : List HeaderField :=
+  [(":status", "200"), ("content-type", "text/plain"), ("x-custom", "caf\u00e9")]
+
+-- It decodes back to the same fields, and — since it uses no dynamic table —
+-- it does so against a decoder whose table is size 0.
+#guard (decodeHeaders (DynamicTable.empty 0) (encodeHeadersStatic fields) (maxTableSize := 0)).map (·.1)
+        == some fields
+-- It never grows the decoder's table.
+#guard (decodeHeaders (DynamicTable.empty 4096) (encodeHeadersStatic fields)).map (·.2.size) == some 0
+-- An exact static-table match is one byte (`:status: 200` is index 8).
+#guard encodeHeadersStatic [(":status", "200")] == ByteArray.mk #[0x88]
+-- The same fields encode identically every time (no state).
+#guard encodeHeadersStatic fields == encodeHeadersStatic fields
+
 end Tests.Network.HTTP2.HPACKEncode

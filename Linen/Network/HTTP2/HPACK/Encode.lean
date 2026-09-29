@@ -151,4 +151,20 @@ def encodeHeaders (dt : DynamicTable) (headers : List HeaderField) : ByteArray �
       (acc ++ encoded, dt')
   ) (ByteArray.empty, dt)
 
+/-- Encode a list of header fields without the dynamic table: an exact match
+    in the static table is indexed, anything else is a literal *without
+    indexing* (§6.2.2), naming the static table's entry when the name is
+    there. The block's meaning depends on no table state, so it is valid
+    whatever SETTINGS_HEADER_TABLE_SIZE the peer advertised — including 0 —
+    and blocks from concurrent streams need no ordering. What the HTTP/2
+    server sends.
+
+    $$\text{encodeHeadersStatic} : \text{List}(\text{HeaderField}) \to \text{ByteArray}$$ -/
+def encodeHeadersStatic (headers : List HeaderField) : ByteArray :=
+  headers.foldl (fun acc (name, value) =>
+    match findInTables (DynamicTable.empty 0) name value with
+    | some (idx, true) => acc ++ encodeHeaderRep (.indexed idx)
+    | some (idx, false) => acc ++ encodeHeaderRep (.literalNotIndexed (some idx) name value)
+    | none => acc ++ encodeHeaderRep (.literalNotIndexed none name value)) ByteArray.empty
+
 end Network.HTTP2.HPACK

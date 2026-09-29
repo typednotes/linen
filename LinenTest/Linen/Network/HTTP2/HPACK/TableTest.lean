@@ -86,4 +86,14 @@ def dt : DynamicTable := ((DynamicTable.empty 4096).insert "x-custom" "v1").inse
 #guard findInTables dt "other" "v2" == some (62, true)          -- dynamic exact
 #guard findInTables dt "nope" "x" == none
 
+/-! ### Entry sizes are in octets (§4.1) -/
+
+#guard entrySize "a" "b" == 34
+-- "é" is one character but two octets; "☕" three.
+#guard entrySize "é" "☕" == 2 + 3 + 32
+-- `ééééé: x` is 10 + 1 + 32 = 43 octets (38 by characters): a table of 80
+-- octets holds one such entry, not the two a character count would allow —
+-- which is what keeps this table in step with the peer's.
+#guard ((DynamicTable.empty 80).insert "ééééé" "x" |>.insert "ééééé" "x").size == 1
+
 end Tests.Network.HTTP2.HPACKTable
