@@ -7,6 +7,16 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-09-29
+
+### Fixed
+
+- **Deterministic HTTP/2 stream-state regression tests.** The half-closed
+  stream test allowed its response to finish before the invalid DATA arrived,
+  so a correct connection-level STREAM_CLOSED error failed its stream-reset
+  assertion on faster CI runners. A promise now holds the response open;
+  a separate test checks the fully closed stream's GOAWAY.
+
 ## [1.9.0] - 2026-09-29
 
 The JSON encoding, Scaleway error details, EC2 XML error parsing, and GCP

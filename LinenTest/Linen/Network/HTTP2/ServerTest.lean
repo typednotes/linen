@@ -386,28 +386,38 @@ private def echo : Handler := fun req responder => do
 
 /-! ### Stream errors: RST_STREAM, the connection goes on -/
 
-#eval withServer echo fun c => do
-  c.open
-  -- A malformed request (uppercase field name).
-  c.send (buildHeadersFrame (sid 1) (headersOf (getReq ++ [("Accept", "*")])) (endStream := true))
-  unless (← c.reset) == some (1, .protocolError) do fail "malformed request not reset"
-  -- content-length that disagrees with the DATA sent.
-  c.send (buildHeadersFrame (sid 3) (headersOf (getReq ++ [("content-length", "10")])))
-  c.send (buildDataFrame (sid 3) "abc".toUTF8 (endStream := true))
-  unless (← c.reset) == some (3, .protocolError) do fail "content-length mismatch not reset"
-  -- DATA after END_STREAM (half-closed remote): STREAM_CLOSED.
-  c.send (buildHeadersFrame (sid 5) (headersOf (getReq.set 2 (":path", "/slow"))) (endStream := true))
-  c.send (buildDataFrame (sid 5) "x".toUTF8)
-  let mut sawClosed := false
-  for _ in [0:5] do
-    let some f ← c.next | break
-    if f.header.frameType == .rstStream && f.header.streamId.val == 5 &&
-        decodeRstStream f.payload == some .streamClosed then sawClosed := true; break
-  unless sawClosed do fail "DATA on a half-closed stream not reset"
-  -- The connection still works.
-  c.send (buildHeadersFrame (sid 7) (headersOf getReq) (endStream := true))
-  let (fields, _) ← c.response 7
-  unless fields.lookup ":status" == some "200" do fail "connection unusable after stream errors"
+#eval show IO Unit from do
+  let gate ← IO.Promise.new (α := Unit)
+  let handler : Handler := fun req responder => do
+    if req.streamId == 5 then
+      -- The request is complete but the response is deliberately still open.
+      -- Naming the path /slow did not slow `echo`: it could finish before
+      -- DATA was read, making stream 5 fully closed (correctly a GOAWAY).
+      -- The client below has bounded reads; its finally always releases us.
+      let _ ← (IO.wait gate.result? : IO _)
+    echo req responder
+  try
+    withServer handler fun c => do
+      c.open
+      -- A malformed request (uppercase field name).
+      c.send (buildHeadersFrame (sid 1) (headersOf (getReq ++ [("Accept", "*")])) (endStream := true))
+      unless (← c.reset) == some (1, .protocolError) do fail "malformed request not reset"
+      -- content-length that disagrees with the DATA sent.
+      c.send (buildHeadersFrame (sid 3) (headersOf (getReq ++ [("content-length", "10")])))
+      c.send (buildDataFrame (sid 3) "abc".toUTF8 (endStream := true))
+      unless (← c.reset) == some (3, .protocolError) do fail "content-length mismatch not reset"
+      -- DATA after END_STREAM (half-closed remote): STREAM_CLOSED.
+      c.send (buildHeadersFrame (sid 5) (headersOf getReq) (endStream := true))
+      c.send (buildDataFrame (sid 5) "x".toUTF8)
+      unless (← c.reset) == some (5, .streamClosed) do
+        fail "DATA on a half-closed stream not reset"
+      gate.resolve ()
+      -- The connection still works.
+      c.send (buildHeadersFrame (sid 7) (headersOf getReq) (endStream := true))
+      let (fields, _) ← c.response 7
+      unless fields.lookup ":status" == some "200" do fail "connection unusable after stream errors"
+  finally
+    gate.resolve ()
 
 -- Beyond SETTINGS_MAX_CONCURRENT_STREAMS: REFUSED_STREAM.
 #eval show IO Unit from do
@@ -459,6 +469,14 @@ private def expectGoaway (setup : Client → IO Unit) (code : ErrorCode) (config
 #eval expectGoaway (fun c => do c.open; c.send (buildDataFrame StreamId.zero "x".toUTF8)) .protocolError
 -- DATA on an idle stream.
 #eval expectGoaway (fun c => do c.open; c.send (buildDataFrame (sid 9) "x".toUTF8)) .protocolError
+-- DATA on a normally closed stream is a connection error, unlike the
+-- half-closed stream above. Receiving the complete response pins that state
+-- without sleeps or assumptions about the handler's scheduling.
+#eval expectGoaway (fun c => do
+    c.open
+    c.send (buildHeadersFrame (sid 1) (headersOf getReq) (endStream := true))
+    let _ ← c.response 1
+    c.send (buildDataFrame (sid 1) "x".toUTF8)) .streamClosed
 -- HEADERS on an even (server) stream id.
 #eval expectGoaway (fun c => do
     c.open; c.send (buildHeadersFrame (sid 2) (headersOf getReq) (endStream := true))) .protocolError
