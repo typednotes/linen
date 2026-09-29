@@ -319,6 +319,7 @@ import Linen.Crypto.Zlib.FFI
 import Linen.Crypto.MD5
 import Linen.Crypto.RC4
 import Linen.Crypto.SecureRandom
+import Linen.Crypto.SHA1
 import Linen.Crypto.SHA256
 import Linen.Crypto.SigV4
 import Linen.Crypto.AES

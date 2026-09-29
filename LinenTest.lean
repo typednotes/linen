@@ -288,6 +288,7 @@ import LinenTest.Linen.Crypto.Zlib.FFITest
 import LinenTest.Linen.Crypto.MD5Test
 import LinenTest.Linen.Crypto.RC4Test
 import LinenTest.Linen.Crypto.SecureRandomTest
+import LinenTest.Linen.Crypto.SHA1Test
 import LinenTest.Linen.Crypto.SHA256Test
 import LinenTest.Linen.Crypto.SigV4Test
 import LinenTest.Linen.Crypto.AESTest

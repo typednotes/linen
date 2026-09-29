@@ -12,7 +12,7 @@ namespace Tests.Network.WebSockets
 
 #guard Opcode.toUInt8 .text == 0x1
 #guard (Frame.encode { fin := true, opcode := .text, mask := none, payload := ByteArray.empty }).size == 2
-#guard webSocketGUID == "258EAFA5-E914-47DA-95CA-5AB5DC76B45B"
+#guard webSocketGUID == "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 #eval show IO Unit from do
   let conn ← mkConnection (fun _ => pure ()) (pure ByteArray.empty)

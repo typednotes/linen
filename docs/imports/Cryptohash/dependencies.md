@@ -21,6 +21,12 @@ full-but-real-and-narrow scoping the user chose for the crypto port overall
 (real MD5, not a stub — but only the one algorithm this consumer needs, not
 the other 15).
 
+A second module, `Crypto.Hash.SHA1`, was later brought in for a different
+consumer: RFC 6455's WebSocket handshake fixes SHA-1 as the function behind
+`Sec-WebSocket-Accept` (`Linen.Network.WebSockets.Handshake`), which until
+then carried a placeholder. It is independent of `Crypto.Hash.MD5` and has the
+same (already-covered) dependencies.
+
 `Crypto.Hash.MD5`'s own `build-depends` (`byteable`, `bytestring`, `base`) are
 either already covered by `linen` or are an internal typeclass
 (`Crypto.Classes`, from the separate `crypto-api` package) not needed for a
@@ -34,3 +40,7 @@ direct `ByteArray → ByteArray` hash function.
    needed — the block count is `ByteArray.size`-derived and strictly
    decreasing). -->
 
+<!-- 2. `Crypto.Hash.SHA1` — ported as `Linen/Crypto/SHA1.lean` (namespace
+   `Crypto.SHA1`): FIPS 180-4 SHA-1 in the same style — an 80-word message
+   schedule and 80 rounds, each a fold over a fixed range; `hash_size`
+   proves the 20-byte output. -->

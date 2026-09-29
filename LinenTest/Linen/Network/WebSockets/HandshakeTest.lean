@@ -1,10 +1,10 @@
 /-
   Tests for `Linen.Network.WebSockets.Handshake`.
 
-  `sha1` is an honest placeholder (returns only the SHA-1 initial hash
-  constants, ignoring its input — a real SHA-1 is out of scope, see the
-  module's TODO), so `computeAcceptKey` is constant across client keys.
-  These tests document that limitation rather than a real handshake.
+  The accept-key vectors are the ones real peers check, so a wrong GUID or a
+  wrong SHA-1 fails here rather than at a browser. (Both were wrong through
+  1.8.0: the GUID's last two groups were garbled and `sha1` ignored its
+  input — and the old tests asserted that constant output.)
 -/
 import Linen.Network.WebSockets.Handshake
 
@@ -12,13 +12,16 @@ open Network.WebSockets
 
 namespace Tests.Network.WebSockets.Handshake
 
-#guard webSocketGUID == "258EAFA5-E914-47DA-95CA-5AB5DC76B45B"
+-- RFC 6455 §1.3 / §4.2.2.
+#guard webSocketGUID == "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
--- Placeholder `sha1`/`computeAcceptKey`: same output regardless of the key.
-#guard computeAcceptKey "dGhlIHNhbXBsZSBub25jZQ==" == computeAcceptKey "a-different-key"
-#guard computeAcceptKey "any-key" == Data.Base64.encode
-  (ByteArray.mk #[0x67, 0x45, 0x23, 0x01, 0xEF, 0xCD, 0xAB, 0x89, 0x98, 0xBA, 0xDC, 0xFE,
-                  0x10, 0x32, 0x54, 0x76, 0xC3, 0xD2, 0xE1, 0xF0])
+/-! ### `computeAcceptKey` -/
+
+-- The worked example in RFC 6455 §1.3.
+#guard computeAcceptKey "dGhlIHNhbXBsZSBub25jZQ==" == "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
+-- A second key (checked against an independent SHA-1), and the key matters.
+#guard computeAcceptKey "x3JJHMbDL1EzLkh9GBhXDw==" == "HSmrc0sMlYUkAGmm5OPpG2HaGWk="
+#guard computeAcceptKey "dGhlIHNhbXBsZSBub25jZQ==" != computeAcceptKey "x3JJHMbDL1EzLkh9GBhXDw=="
 
 /-! ### `isValidHandshake` -/
 
@@ -39,6 +42,8 @@ private def validHeaders : List (String × String) :=
 
 #guard (buildHandshakeResponse "dGhlIHNhbXBsZSBub25jZQ==").startsWith "HTTP/1.1 101 Switching Protocols\r\n"
 #guard ((buildHandshakeResponse "k").splitOn "Sec-WebSocket-Accept: ").length > 1
+#guard ((buildHandshakeResponse "dGhlIHNhbXBsZSBub25jZQ==").splitOn
+  "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n").length == 2
 #guard (buildHandshakeResponse "k").endsWith "\r\n\r\n"
 
 end Tests.Network.WebSockets.Handshake

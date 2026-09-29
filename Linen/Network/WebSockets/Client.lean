@@ -7,14 +7,14 @@
   opening handshake as a client, and hands the caller a fully-framed
   `Network.WebSockets.Connection`.
 
-  The `Sec-WebSocket-Accept` value the server returns is not verified against
-  `computeAcceptKey`: `Network.WebSockets.Handshake`'s underlying SHA-1 is
-  already a documented placeholder in this codebase (see its header comment),
-  so accept-key verification is skipped here for the same reason it would
-  always trivially fail — this client only checks that the server answered
-  `101 Switching Protocols`.
+  The server's answer is checked as RFC 6455 §4.1 requires of a client
+  (`checkHandshakeResponse`): status `101`, `Upgrade: websocket`,
+  `Connection: Upgrade`, and a `Sec-WebSocket-Accept` equal to
+  `computeAcceptKey` of the key that was sent. Through 1.8.0 only the status was
+  checked, because the handshake's SHA-1 was a placeholder.
 -/
 import Linen.Network.WebSockets.Connection
+import Linen.Network.WebSockets.Handshake
 import Linen.Network.HTTP.Client.Connection
 import Linen.Network.HTTP.Client.Request
 import Linen.Data.Base64
@@ -57,9 +57,42 @@ private def findSubarray (buf pat : ByteArray) : Option Nat := Id.run do
     if isMatch then return some i
   return none
 
+/-- Check a server's opening-handshake response head (status line and header
+    lines, without the terminating blank line) against the `Sec-WebSocket-Key`
+    the client sent, per RFC 6455 §4.1's client requirements:
+
+    1. the status code is `101`;
+    2. `Upgrade` is `websocket` (case-insensitively);
+    3. `Connection` contains the token `upgrade` (case-insensitively);
+    4. `Sec-WebSocket-Accept` is exactly `computeAcceptKey key`.
+
+    Header names are matched case-insensitively. Returns the reason on
+    failure, so the client can say *why* it is failing the connection. -/
+def checkHandshakeResponse (key : String) (head : String) : Except String Unit := do
+  let lines := head.splitOn "\r\n"
+  let statusLine := lines.headD ""
+  unless (statusLine.splitOn " ").getD 1 "" == "101" do
+    throw s!"WebSocket handshake failed: {statusLine}"
+  let headers : List (String × String) := lines.drop 1 |>.filterMap fun line =>
+    match line.splitOn ":" with
+    | name :: rest@(_ :: _) =>
+      some (name.trimAscii.toString.toLower, (":".intercalate rest).trimAscii.toString)
+    | _ => none
+  let header (name : String) : Option String := headers.lookup name
+  unless (header "upgrade").any (·.toLower == "websocket") do
+    throw "WebSocket handshake failed: missing `Upgrade: websocket`"
+  unless (header "connection").any (fun v =>
+      (v.toLower.splitOn ",").any (·.trimAscii.toString == "upgrade")) do
+    throw "WebSocket handshake failed: missing `Connection: Upgrade`"
+  match header "sec-websocket-accept" with
+  | none => throw "WebSocket handshake failed: missing `Sec-WebSocket-Accept`"
+  | some accept =>
+    unless accept == computeAcceptKey key do
+      throw s!"WebSocket handshake failed: `Sec-WebSocket-Accept: {accept}` does not match the key sent"
+
 /-- Read from `conn` until the HTTP response head (status line + headers) is
-    fully buffered. Returns the status line and any bytes read past the
-    terminating blank line — these belong to the WebSocket layer, not the
+    fully buffered. Returns the head (without its terminating blank line) and
+    any bytes read past it — these belong to the WebSocket layer, not the
     HTTP response, and must be fed to the connection as already-received
     data. -/
 private def readResponseHead (conn : Network.HTTP.Client.Connection)
@@ -71,8 +104,7 @@ private def readResponseHead (conn : Network.HTTP.Client.Connection)
     | some idx =>
       let head := buf.extract 0 idx
       let rest := buf.extract (idx + headerTerminator.size) buf.size
-      let statusLine := (String.fromUTF8! head).splitOn "\r\n" |>.headD ""
-      result := some (statusLine, rest)
+      result := some (String.fromUTF8! head, rest)
     | none =>
       let chunk ← conn.connRead 4096
       if chunk.isEmpty then
@@ -102,9 +134,10 @@ def runClient (host : String) (port : UInt16) (path : String)
           , (CI.mk' "Sec-WebSocket-Version", "13")
           ] }
     Network.HTTP.Client.sendRequest httpConn req
-    let (statusLine, leftover) ← readResponseHead httpConn
-    unless (statusLine.splitOn " ").getD 1 "" == "101" do
-      throw (IO.Error.userError s!"WebSocket handshake failed: {statusLine}")
+    let (head, leftover) ← readResponseHead httpConn
+    match checkHandshakeResponse key head with
+    | .error reason => throw (IO.Error.userError reason)
+    | .ok () => pure ()
     let leftoverRef ← IO.mkRef leftover
     let wsConn ← Network.WebSockets.mkConnection
       httpConn.connWrite
