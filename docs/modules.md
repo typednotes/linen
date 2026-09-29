@@ -1077,6 +1077,9 @@ OpenSSL — see the dependencies doc for the full rationale on each.
   only digest the PDF Standard Security Handler's key derivation needs.
   Padding fixes the block count before the compression loop starts, so the
   64-round loop is a plain `Array.foldl` — no `partial def` or fuel.
+- `Crypto.SHA1` — `cryptohash`'s `Crypto.Hash.SHA1.hash` (FIPS 180-4), in the
+  same pure, fold-only style as `Crypto.MD5`; added for the WebSocket
+  handshake, which fixes SHA-1 as a function (not for security).
 - `Crypto.RC4` — Hackage's `cipher-rc4` stream cipher: `initCtx` (key
   scheduling, a 256-round structural fold building the S-box permutation)
   and `combine` (the pseudo-random generation algorithm, structurally
@@ -1580,7 +1583,11 @@ convention.
   host, timeouts, backlog, graceful-shutdown timeout, auto `Date`/`Server`
   headers.
 - `Network.WebApp.Server.Request` — HTTP request-line and header parsing off
-  a raw socket buffer, producing a `Network.WebApp.Request`.
+  a raw socket buffer, producing a `Network.WebApp.Request`; RFC 9112 §6 body
+  framing (`requestFraming`, which refuses the ambiguous framings request
+  smuggling relies on), a chunked-body decoder (`chunkedBodyReader`) and
+  `drainBody` for keep-alive. The header-count bound is in the type
+  (`HeaderLines`).
 - `Network.WebApp.Server.Response` — status-line/header rendering and
   response transmission, both blocking (`sendResponse`) and event-driven
   (`sendResponseEL`).
@@ -1617,14 +1624,14 @@ convention.
 - `Network.WebSockets.Frame` — frame encoding/decoding: FIN/opcode byte,
   7/16/64-bit payload-length thresholds, and XOR masking (its own inverse).
 - `Network.WebSockets.Handshake` — the RFC 6455 §4 upgrade handshake:
-  `computeAcceptKey`/`isValidHandshake`/`buildHandshakeResponse`. The SHA-1
-  step is an honest non-functional placeholder (documented `TODO`,
-  no SHA-1 in the Lean stdlib) — not production-ready as-is.
+  `computeAcceptKey`/`isValidHandshake`/`buildHandshakeResponse`, over
+  `Crypto.SHA1`; checked against RFC 6455 §1.3's worked example.
 - `Network.WebSockets.Connection` — `mkConnection`: frames outgoing
   text/binary/close/ping messages and auto-responds to incoming pings.
 - `Network.WebSockets.Client` — `runClient`: outbound (client-side)
   connections, performing the RFC 6455 §4.1 opening handshake over a plain
-  TCP connection.
+  TCP connection and verifying the server's answer, `Sec-WebSocket-Accept`
+  included (`checkHandshakeResponse`).
 
 ### `CDP` — Chrome DevTools Protocol client
 
@@ -2552,6 +2559,7 @@ the secrets, never their values.
 | `Linen.Network.OAuth2.Experiment.Grants` | facade re-exporting the five grant modules |
 | `Linen.Network.OAuth2.Experiment` | top-level facade re-exporting `Types`/`Grants`/`Flows`/`Pkce`/`Utils` |
 | `Linen.Crypto.Zlib.FFI` | `@[extern]` zlib inflate-only FFI (`ffi/zlib.c`): opaque `Inflate` handle, `initInflate`/`feedInflate`/`finishInflate`, one-shot `decompress` |
+| `Linen.Crypto.SHA1` | FIPS 180-4 SHA-1 digest: pure, structurally-recursive `hash`, `hash_size` proved (for protocols that fix SHA-1, e.g. the WebSocket handshake) |
 | `Linen.Crypto.MD5` | RFC 1321 MD5 digest: pure, structurally-recursive `hash` (64-round compression over fixed 64-byte blocks) |
 | `Linen.Crypto.RC4` | RC4 stream cipher: `initCtx` (KSA, 256-byte S-box) + `combine` (PRGA keystream XOR), both structurally recursive |
 | `Linen.Crypto.ConstantTime` | `eq`/`eqString`: byte comparison that reads every byte (lengths not hidden) |
@@ -2712,7 +2720,7 @@ the secrets, never their values.
 | `Linen.Network.WebApp.Server.Date` | cached HTTP-date string generation for the `Date` response header |
 | `Linen.Network.WebApp.Server.Settings` | `Settings`/`defaultSettings`: port, host, timeouts, hooks |
 | `Linen.Network.WebApp.Server.Response` | status-line/header rendering and `sendResponse`/`sendResponseEL` connection writers |
-| `Linen.Network.WebApp.Server.Request` | HTTP request-line and header parsing off a buffered socket reader |
+| `Linen.Network.WebApp.Server.Request` | HTTP request-line and header parsing off a buffered socket reader; RFC 9112 body framing (`requestFraming`), chunked-body decoding, keep-alive `drainBody` |
 | `Linen.Network.WebApp.Server.Conduit` | `ISource`: buffered incremental body reading (`mkKnown`/`mkChunked`) |
 | `Linen.Network.WebApp.Server.IO` | low-level connection byte-sending helpers |
 | `Linen.Network.WebApp.Server.SendFile` | portable `sendFile` response body streaming |
@@ -2728,7 +2736,7 @@ the secrets, never their values.
 | `Linen.Network.WebSockets.Frame` | frame encoding/decoding: FIN/opcode byte, length variants, masking |
 | `Linen.Network.WebSockets.Handshake` | the RFC 6455 §4 upgrade handshake: `computeAcceptKey`/`isValidHandshake`/`buildHandshakeResponse` |
 | `Linen.Network.WebSockets.Connection` | `mkConnection`: frames outgoing sends, decodes/dispatches incoming frames |
-| `Linen.Network.WebSockets.Client` | `runClient`: outbound (client-side) connections, RFC 6455 §4.1 opening handshake |
+| `Linen.Network.WebSockets.Client` | `runClient`: outbound (client-side) connections, RFC 6455 §4.1 opening handshake with `Sec-WebSocket-Accept` verification |
 | `Linen.Network.WebSockets` | the package aggregator: `Types`/`Frame`/`Handshake`/`Connection`/`Client` |
 | `Linen.Data.Word8` | ASCII byte classification (`isUpper`/`isDigit`/…), case conversion, named byte constants |
 | `Linen.Numeric.Lens` | `lens`'s `Numeric.Lens`: `integral` (`Prism' Int Nat`), `base`/`binary`/`octal`/`decimal`/`hex` (`Prism' String Nat`), `adding`/`subtracting`/`negated`/`multiplying`/`dividing`/`exponentiating` (`Iso'`) |

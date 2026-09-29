@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen LinenTest --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen LinenTest --include='*.lean' | wc -l -->
-  <strong>792 modules</strong> · <strong>491 compile-time theorems</strong> · <strong>11436 <code>#guard</code> checks</strong>
+  <strong>793 modules</strong> · <strong>492 compile-time theorems</strong> · <strong>11497 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -118,9 +118,11 @@ for the full per-module feature list and module table.
   day/UTC-instant/time-of-day types are `Std.Time.Date.PlainDate`/
   `Std.Time.Duration`/`Std.Time.Zoned` underneath.
 - **`Network.HTTP` / `HTTP2` / `HTTP3` / `Socket` / `TLS` / `QUIC` /
-  `WebSockets`** — a full network stack: HTTP/1.1 client & wire types,
-  HTTP/2 framing + HPACK, HTTP/3 over QUIC + QPACK, POSIX sockets with a
-  green-thread event dispatcher, TLS 1.2/1.3 over OpenSSL, and WebSockets.
+  `WebSockets`** — a network stack: HTTP/1.1 client & wire types,
+  HTTP/2 framing + HPACK, HTTP/3 + QPACK wire formats, POSIX sockets with a
+  green-thread event dispatcher, TLS 1.2/1.3 over OpenSSL, and WebSockets
+  (client and server). QUIC connections are **not implemented**:
+  `Network.QUIC.Client`/`Server` are stubs that throw.
 - **`Network.WebApp` / `Network.WebApp.Server`** — a WAI-style application
   interface plus an HTTP server implementing it.
 - **`Web.Html` / `Web.Css`** — typed HTML5/CSS construction where illegal
@@ -227,7 +229,8 @@ for the full per-module feature list and module table.
 - **`Crypto.Zlib` / `Crypto.MD5` / `Crypto.RC4` / `Crypto.AES`** — zlib
   inflate, RFC 1321 MD5, the RC4 stream cipher, and AES-128 CBC decryption
   + PKCS5 unpadding — the primitives behind the PDF Standard Security
-  Handler.
+  Handler. **`Crypto.SHA1`** — pure FIPS 180-4 SHA-1, for the WebSocket
+  handshake.
 - **`Crypto.ConstantTime`** — comparing secrets (MAC tags, tokens) without
   a timing oracle; used by `Crypto.JOSE`'s HMAC verification.
 - **`System.Keychain`** — OS credential-store access (macOS Keychain,
@@ -418,7 +421,7 @@ you imported only pure-Lean modules.
 
 ## Modules
 
-See **[docs/modules.md](docs/modules.md)** for the full module table (all 770 modules).
+See **[docs/modules.md](docs/modules.md)** for the full module table (all 793 modules).
 
 ## Build & Test
 

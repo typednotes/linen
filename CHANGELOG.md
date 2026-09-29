@@ -7,6 +7,81 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+The four *Changed* entries below were first written into the 1.8.0 section,
+but landed after the `v1.8.0` tag (`4cb1074`): a consumer pinning `v1.8.0`
+does not have them.
+
+### Added
+
+- **`Crypto.SHA1`** — FIPS 180-4 SHA-1, pure and structurally recursive (the
+  sibling of `Crypto.MD5` from the `cryptohash` import), with
+  `hash_size : (hash m).size = 20`. For protocols that fix SHA-1 as a
+  function — the WebSocket handshake — not for security.
+- **`Network.WebApp.Server.requestFraming`**, `BodyFraming`,
+  `parseContentLength`, `parseChunkSize`, `chunkedBodyReader` and
+  `drainBody` — the request-body framing decision and chunked decoder, pure or
+  over injected readers so they are tested without a socket.
+
+### Changed
+
+- **`Network.WebApp.Server.recvHeaders` returns
+  `IO (Option (String × HeaderLines))`**, where `HeaderLines` carries
+  `length ≤ maxHeaders` in its type; `none` when the head has more header
+  lines. This replaces the axiom `recvHeaders_bounded`, which is removed.
+- **A request with no `Content-Length` and no `Transfer-Encoding` has
+  `requestBodyLength = .knownLength 0`**, not `.chunkedBody` (RFC 9112 §6.3:
+  it has no body). Middleware that treated `.chunkedBody` as "maybe a body",
+  such as `requestSizeLimit`, no longer wraps every `GET`.
+- **The JSON encoder no longer escapes `/`.** `\/` is legal JSON and not
+  legal YAML 1.1, so Kubernetes' server-side apply (`apply-patch+yaml`)
+  refused every manifest naming `apps/v1` — "found unknown escape
+  character", on `infra`'s first live apply. RFC 8259 does not require the
+  escape and Go, Python, Aeson and serde do not emit it. Output bytes change
+  wherever a string holds `/` (URLs, `apiVersion`s, JWT claim sets); the
+  decoder still accepts `\/`, and `Web.Html` keeps `</script` out of raw text
+  by proof, independently of this.
+- **A Scaleway error keeps its `details`**: `describeError` appends each
+  `argument_name: help_message` to the message, so "invalid argument(s)" says
+  which argument and why.
+- **`parseXmlError` reads EC2's `<Response><Errors><Error>` envelope**, and
+  a request id beside the error element — so an EC2 failure keeps its code
+  (and classifies) instead of falling back to the raw body.
+- **The GCP key-file source declines a federated or user credential file**
+  (`Credentials.Gcp.foreignTypes`, `declaredType`): `external_account`, which
+  `google-github-actions/auth` points `GOOGLE_APPLICATION_CREDENTIALS` at, is
+  not a service-account key, and failing on it hid the token the next source
+  had. Moved from `infra` (`GcpAuth.foreignTypes`).
+
+### Fixed
+
+- **The WebSocket handshake works with real peers.** `computeAcceptKey`
+  used a placeholder SHA-1 that ignored its input, *and* `webSocketGUID` was
+  garbled (`…-5AB5DC76B45B` for RFC 6455's `…-C5AB0DC85B11`), so every
+  `Sec-WebSocket-Accept` was the same wrong constant and browsers refused
+  the upgrade; the tests asserted the constant. It now matches RFC 6455
+  §1.3's worked example.
+- **`WebSockets.Client.runClient` verifies the server's handshake**
+  (`checkHandshakeResponse`: status `101`, `Upgrade`, `Connection`, and
+  `Sec-WebSocket-Accept` against the key it sent) instead of the status
+  alone.
+- **Chunked request bodies are decoded, and ambiguous framing is refused
+  (request smuggling).** The server read a `Transfer-Encoding: chunked` body
+  as empty and did not drain it, so on a kept-alive connection the body's
+  bytes were parsed as the *next request* — a smuggling primitive behind any
+  proxy that does decode chunked bodies. The body is now decoded (sizes,
+  extensions, trailers; truncation and malformed framing are errors, not a
+  short body), and a request is refused — the connection closed — when it
+  has both `Transfer-Encoding` and `Content-Length`, `Transfer-Encoding` on
+  HTTP/1.0, a final coding other than `chunked`, or an invalid or
+  conflicting `Content-Length`.
+- **A head with more than `maxHeaders` header lines is refused**, where it
+  was truncated and the rest read as body or as the next request.
+- **Every keep-alive loop drains the unread body** (`drainBody`), including
+  chunked bodies and the TLS server's loop, which drained nothing.
+- **`ci/consumer/link-helpers.lean` folds whitespace without escape
+  sequences** (`ded0fe3`), so the block survives being embedded in a string
+  literal — also after the `v1.8.0` tag.
+
 ## [1.8.0] - 2026-09-29
 
 The building blocks the sibling `infra` carried copies of — a JSON field
@@ -57,25 +132,6 @@ fallback — and the error taxonomy split its move onto `Linen.Cloud` needed.
   `keychainService`, `"linen"`), so a tool that stored credentials under its
   own name keeps finding them — and its not-found message names the right
   service. Asked for by `infra`, whose entries live under `"infra"`.
-- **The JSON encoder no longer escapes `/`.** `\/` is legal JSON and not
-  legal YAML 1.1, so Kubernetes' server-side apply (`apply-patch+yaml`)
-  refused every manifest naming `apps/v1` — "found unknown escape
-  character", on `infra`'s first live apply. RFC 8259 does not require the
-  escape and Go, Python, Aeson and serde do not emit it. Output bytes change
-  wherever a string holds `/` (URLs, `apiVersion`s, JWT claim sets); the
-  decoder still accepts `\/`, and `Web.Html` keeps `</script` out of raw text
-  by proof, independently of this.
-- **A Scaleway error keeps its `details`**: `describeError` appends each
-  `argument_name: help_message` to the message, so "invalid argument(s)" says
-  which argument and why.
-- **`parseXmlError` reads EC2's `<Response><Errors><Error>` envelope**, and
-  a request id beside the error element — so an EC2 failure keeps its code
-  (and classifies) instead of falling back to the raw body.
-- **The GCP key-file source declines a federated or user credential file**
-  (`Credentials.Gcp.foreignTypes`, `declaredType`): `external_account`, which
-  `google-github-actions/auth` points `GOOGLE_APPLICATION_CREDENTIALS` at, is
-  not a service-account key, and failing on it hid the token the next source
-  had. Moved from `infra` (`GcpAuth.foreignTypes`).
 - **More not-found codes**: `NoSuchEntity` (IAM), `DBInstanceNotFound` (RDS),
   `RepositoryNotFoundException` (ECR) and EC2's `InvalidAMIID.NotFound`,
   `InvalidGroup.NotFound`, `InvalidInstanceID.NotFound` — which EC2 answers
