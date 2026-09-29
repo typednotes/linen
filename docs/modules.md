@@ -1439,11 +1439,18 @@ layer:
 - `Network.TLS.Context` — opaque `TLSContext`/`TLSSession` handles over
   OpenSSL's `SSL_CTX`/`SSL` (`ffi/tls.c`, GC-finalized): server-side
   `createContext`/`setAlpn`/`acceptSocket`/`read`/`write`/`close`/
-  `getVersion`/`getAlpn`, non-blocking `*NB` variants, and client-side
-  `createClientContext` (system CA trust, plus a fallback system bundle — `fallbackCaBundle`) / `createClientContextWithCA`
+  `getVersion`/`getAlpn`; a **resumable** non-blocking API — a session is
+  created once (`newServerSession`/`newClientSession`) and its handshake
+  stepped on it (`handshakeNB`, the design of rust-openssl's
+  `MidHandshakeSslStream` and HsOpenSSL), with `readNB`/`writeNB` — and
+  `handshake`, which waits with `poll` so it works on any socket; and
+  client-side `createClientContext` (system CA trust, plus a fallback system bundle — `fallbackCaBundle`) / `createClientContextWithCA`
   (trust a specific CA file — e.g. a self-signed cert in tests) /
-  `connectSocket` (SNI + hostname verification, with a `while`-loop retry on
-  `WANT_READ`/`WANT_WRITE`, not `partial def`).
+  `connectSocket` (SNI + hostname verification).
+- `Network.TLS.Green` — TLS on green threads: `accept`/`connect`/`read`/
+  `write` over the `EventDispatcher`, trying each operation before waiting
+  (decrypted bytes may already be inside OpenSSL) and waiting in whichever
+  direction OpenSSL asks.
 
 ### `Network.QUIC` — QUIC transport protocol (RFC 9000)
 
@@ -1595,6 +1602,9 @@ convention.
   TLS session.
 - `Network.WebApp.Server.Run` — `runSettings`/`runSettingsEventLoop`: the
   accept loop and per-connection request/response cycle, keep-alive aware.
+  The event-loop mode buffers each request head on the green thread (no pool
+  thread held by a slow or idle client) and serves pipelined requests back
+  to back.
 - `Network.WebApp.Server.Conduit` — `ISource`: buffered incremental body
   reading for known-length and chunked request bodies.
 - `Network.WebApp.Server.IO` — low-level connection byte-sending helpers.
@@ -1613,8 +1623,10 @@ convention.
 - `Network.WebApp.Server.TLS` — HTTPS support via `Network.TLS.Context`
   (OpenSSL FFI): one thread per connection, requests read and responses
   written through the TLS session (`runTLS`, `runTLSSocket`). HTTP/1.1 only
-  (no ALPN answer, so clients fall back from `h2`); `OnInsecure.allowInsecure`
-  is **not implemented** and `runTLS` refuses it.
+  (no ALPN answer, so clients fall back from `h2`). Plain HTTP on the TLS
+  port is told apart by peeking at the first byte, and answered per
+  `OnInsecure`: `426 Upgrade Required` (`denyInsecure`) or served
+  (`allowInsecure`), as warp-tls does.
 - `Network.WebApp.Server.TLS.Internal` — re-exports `Server.TLS` for advanced
   usage.
 - `Network.WebApp.Server.WebSockets` — upgrades `Network.WebApp` requests to
@@ -2434,7 +2446,7 @@ the secrets, never their values.
 | `Linen.Network.HTTP3.QPACK.Encode` | static-only QPACK encoding: `encodeQInt`/`encodeStringLiteral` + `encodeHeaders`, round-trip tested |
 | `Linen.Network.Socket.Types` | phantom-typed `Socket` lifecycle, `Family`/`SockAddr`/`EventType`, non-blocking outcome types |
 | `Linen.Network.Socket.FFI` | `@[extern]` C bindings: sockets, options, UDP, `getAddrInfo`, kqueue/epoll event loop |
-| `Linen.Network.Socket` | safe phantom-typed lifecycle API, `withSocket`/`listenTCP`/`withEventLoop`, `EventLoop`, `sendAll`/`sendTo`/`recvFrom` |
+| `Linen.Network.Socket` | safe phantom-typed lifecycle API, `withSocket`/`listenTCP`/`withEventLoop`, `EventLoop`, `sendAll`/`sendTo`/`recvFrom`, `peek` |
 | `Linen.Network.Socket.EventDispatcher` | kqueue/epoll → `Green` bridge: `waitReadable`/`waitWritable`/`recvGreen`/`sendAllGreen` |
 | `Linen.Network.Socket.Blocking` | blocking-style `accept`/`connect`/`send`/`sendAll`/`recv` over the non-blocking API, retrying on `wouldBlock` |
 | `Linen.Network.Sendfile` | portable `sendFile`/`sendFileSimple` (chunked read + `Blocking.sendAll`, no zero-copy syscall); `sendFileWith` over any write action |
@@ -2660,7 +2672,8 @@ the secrets, never their values.
 | `Linen.PostgREST.CLI` | command-line parsing: `Command`, `parseArgs`, `printUsage` |
 | `Linen.PostgREST.Response.OpenAPI` | OpenAPI 3.0 spec generation: `pgTypeToOpenAPI`, `columnSchema`, `generateOpenAPISpec` |
 | `Linen.Network.TLS.Types` | `TLSVersion` (`tls10`–`tls13`), `CipherID`, `TLSOutcome` (`.ok`/`.wantRead`/`.wantWrite`/`.error`) |
-| `Linen.Network.TLS.Context` | OpenSSL `SSL_CTX`/`SSL` FFI (`ffi/tls.c`): `createContext`/`acceptSocket`/`read`/`write`/`getVersion`/`getAlpn`, `createClientContext(WithCA)`/`fallbackCaBundle`/`connectSocket` |
+| `Linen.Network.TLS.Context` | OpenSSL `SSL_CTX`/`SSL` FFI (`ffi/tls.c`): `createContext`/`acceptSocket`/`read`/`write`/`getVersion`/`getAlpn`, resumable `newServerSession`/`newClientSession`/`handshakeNB`/`readNB`/`writeNB`/`handshake`, `createClientContext(WithCA)`/`fallbackCaBundle`/`connectSocket` |
+| `Linen.Network.TLS.Green` | TLS on green threads over the `EventDispatcher`: `accept`/`connect`/`read`/`write` |
 | `Linen.Network.QUIC.Types` | QUIC (RFC 9000) core types: proof-carrying `ConnectionId`, `Version`, `TransportParams`, `StreamId`, `TransportError`, `TLSConfig` |
 | `Linen.Network.QUIC.Config` | `ServerConfig`/`ClientConfig` with TLS, transport-parameter, and host/port defaults |
 | `Linen.Network.QUIC.Connection` | opaque `Connection` handle, `ConnectionState`; stream/close/state ops stubbed pending TLS 1.3 FFI |
@@ -2729,11 +2742,11 @@ the secrets, never their values.
 | `Linen.Network.WebApp.Server.IO` | low-level connection byte-sending helpers |
 | `Linen.Network.WebApp.Server.SendFile` | portable `sendFile` response body streaming |
 | `Linen.Network.WebApp.Server.Internal` | re-exports the server's public surface |
-| `Linen.Network.WebApp.Server.Run` | `runSettings`/`runSettingsEventLoop`: the accept-loop/connection-handling core |
+| `Linen.Network.WebApp.Server.Run` | `runSettings`/`runSettingsEventLoop`: the accept-loop/connection-handling core; event-loop heads buffered on the green thread, pipelining |
 | `Linen.Network.WebApp.Server.WithApplication` | `withApplication`/`withApplicationSettings`: run a server for the duration of an `IO` action |
 | `Linen.Network.WebApp.Server` | the package aggregator plus `run`, a one-line server entry point |
 | `Linen.Network.WebApp.Server.QUIC` | bridges `Network.WebApp` to HTTP/3 over `Network.QUIC` |
-| `Linen.Network.WebApp.Server.TLS` | HTTPS via `Network.TLS.Context`, through the session, one thread per connection; HTTP/1.1 only, `allowInsecure` not implemented |
+| `Linen.Network.WebApp.Server.TLS` | HTTPS via `Network.TLS.Context`, through the session, one thread per connection; HTTP/1.1 only; `OnInsecure` by first-byte peek |
 | `Linen.Network.WebApp.Server.TLS.Internal` | re-exports `Server.TLS` for advanced use |
 | `Linen.Network.WebApp.Server.WebSockets` | upgrades `Network.WebApp` requests to `Network.WebSockets` connections via `responseRaw` |
 | `Linen.Network.WebSockets.Types` | `Opcode`/`CloseCode`/`ConnectionState`/`ConnectionOptions`/`Connection`/`PendingConnection`/`ServerApp` |

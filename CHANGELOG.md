@@ -30,6 +30,19 @@ does not have them.
 - **`Server.TLS.runTLSSocket`** — serve TLS on an already-listening socket
   until a cancellation token fires (what `runTLS` runs, and what the tests
   use).
+- **A resumable non-blocking TLS API** in `Network.TLS.Context`:
+  `newServerSession` / `newClientSession` create a session once, and
+  `handshakeNB` steps its handshake on that same `SSL` object — the design
+  of rust-openssl (`MidHandshakeSslStream::handshake`), HsOpenSSL
+  (`sslBlock`) and tokio-openssl; `handshake` drives it with `poll`.
+- **`Network.TLS.Green`** — `accept`, `connect`, `read`, `write` on green
+  threads over the `EventDispatcher`: each operation tried before waiting
+  (OpenSSL may already hold decrypted bytes the socket will not signal),
+  waiting in whichever direction OpenSSL asks. Tested on non-blocking
+  sockets at both ends, with multi-MiB transfers forcing `wantWrite`.
+- **`Network.Socket.peek`** (`MSG_PEEK`), and `ByteSource`'s `feed` /
+  `unread`, `headComplete`, `maxHeadBytes`, `Server.recvSuspending`,
+  `Response.filePartLength` / `fileBodyLength`.
 
 ### Changed
 
@@ -63,6 +76,16 @@ does not have them.
 
 ### Removed
 
+- **`Network.TLS.acceptSocketNB`, `connectSocketNB`, `connectSocketRaw`.**
+  The `*NB` pair created a fresh `SSL` per call and freed it on every
+  would-block, so a handshake needing a second read could never complete;
+  use `newServerSession`/`newClientSession` with `handshakeNB` (or
+  `Network.TLS.Green`). `acceptSocket` and `connectSocket` keep their
+  signatures and are now built on the resumable API, so they also work on
+  non-blocking sockets.
+- **`Network.Socket.FFI.recvBufReadLineNB` / `recvBufReadNNB`** — unused and
+  untested, and a partial line longer than the 4 KiB buffer was silently
+  dropped on `EAGAIN`.
 - **`Server.TLS.TLSSettings.alpn`.** `true` (the default) called
   `Network.TLS.setAlpn`, which *prefers `h2`*, so any browser would
   negotiate HTTP/2 with a server that speaks only HTTP/1.1. The server no
@@ -78,8 +101,29 @@ does not have them.
   handshake — `acceptSocketNB` cannot resume a handshake that would block.
   It is tested end to end with a real TLS client: keep-alive, a chunked
   body, a request split across TLS records, and plaintext on the TLS port.
-  `OnInsecure.allowInsecure` was never implemented either; `runTLS` now
-  refuses to start with it instead of silently behaving as `denyInsecure`.
+- **`OnInsecure` works.** It was never implemented: plaintext on the TLS
+  port just failed the handshake. The first byte is now peeked (`0x16` opens
+  a TLS record, as warp-tls tests): `denyInsecure message` answers
+  `426 Upgrade Required` with the message, `allowInsecure` serves plain
+  HTTP (with `isSecure = false`).
+- **TLS sessions are shut down safely.** The GC finalizer used to call
+  `SSL_shutdown`, writing a close_notify to whatever connection the fd
+  number belonged to by then; it now only frees. `close` shuts down once,
+  and never after a fatal error. Every context sets
+  `SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER`, so a retried write whose bytes moved
+  is not a "bad write retry"; the OpenSSL error queue is cleared before each
+  call; the blocking `read` no longer leaks its buffer at end of input.
+- **Event-loop mode serves pipelined requests and slow clients.**
+  `runConnectionEL` waited for readability before every request, even
+  with the next one already buffered, so pipelined requests hung; and it
+  parsed from the C `RecvBuffer`, which gives up after a few `EAGAIN`
+  retries, so a head or body arriving in pieces dropped the connection.
+  Heads are now buffered on the green thread (no pool thread held while
+  waiting) and parsed once complete; body reads wait up to
+  `settingsTimeout` — the first use of that setting.
+- **File responses carry `Content-Length`** (of the `FilePart`, when
+  given): without it a kept-alive client could not find the end of the
+  file.
 - **`Sendfile` with `FilePart.count = 0` sends to the end of the file**, as
   documented; it sent nothing.
 - **The WebSocket handshake works with real peers.** `computeAcceptKey`
