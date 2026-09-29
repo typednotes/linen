@@ -103,6 +103,97 @@ def parseHeaderLine (line : String) : Option Header :=
 def parseHeaders (lines : List String) : RequestHeaders :=
   lines.filterMap parseHeaderLine
 
+-- ── Byte sources ──────────────────────────────────────────────────
+
+/-- Where a request is read from: the two reads the parser needs. A plain
+    socket uses the C `RecvBuffer` (`ByteSource.ofRecvBuffer`); a TLS session, or a
+    test, uses a buffer over any chunk-receiving action (`ByteSource.buffered`). -/
+structure ByteSource where
+  /-- A CRLF-terminated line without its CRLF; the rest of the input when it
+      ends without one; `""` at the end of input. -/
+  readLine : IO String
+  /-- Between `1` and `n` bytes; empty only at the end of input. -/
+  readN : Nat → IO ByteArray
+
+/-- The source over a socket's C-side `RecvBuffer`. -/
+def ByteSource.ofRecvBuffer (buf : FFI.RecvBuffer) : ByteSource where
+  readLine := FFI.recvBufReadLine buf
+  readN n := FFI.recvBufReadN buf n.toUSize
+
+/-- The longest line `ByteSource.buffered` accepts, matching the C `RecvBuffer`'s
+    limit. -/
+def maxLineBytes : Nat := 8192
+
+/-- The first CRLF in `bytes` at or after `start`, by its index. -/
+def findCRLF (bytes : ByteArray) (start : Nat) : Option Nat := Id.run do
+  for i in [start:bytes.size] do
+    if bytes.get! i == 13 && i + 1 < bytes.size && bytes.get! (i + 1) == 10 then
+      return some i
+  return none
+
+/-- A buffered reader: a `ByteSource`, plus `readSome` for callers that take the
+    connection over after the head (a WebSocket upgrade), which must see any
+    bytes already buffered before new ones. -/
+structure BufferedSource where
+  source : ByteSource
+  /-- Whatever is buffered, or else one `recv`; empty only at end of input. -/
+  readSome : IO ByteArray
+
+/-- Buffer `recv` — which returns the next bytes available, empty at end of
+    input — into a `ByteSource`. A line longer than `maxLineBytes` is an error,
+    as it is for the C `RecvBuffer`, so a peer cannot grow the buffer without
+    bound by never sending CRLF. -/
+def ByteSource.buffered (recv : IO ByteArray) : IO BufferedSource := do
+  -- The buffer and the index of its first unread byte.
+  let state ← IO.mkRef (ByteArray.empty, 0)
+  -- Append one `recv` to the unread bytes; `false` at end of input.
+  let fill : IO Bool := do
+    let chunk ← recv
+    if chunk.isEmpty then return false
+    let (bytes, pos) ← state.get
+    state.set (bytes.extract pos bytes.size ++ chunk, 0)
+    return true
+  let decode (bytes : ByteArray) : IO String :=
+    match String.fromUTF8? bytes with
+    | some line => pure line
+    | none => throw (IO.userError "request head is not valid UTF-8")
+  let readLine : IO String := do
+    let mut scanned := 0  -- unread bytes already searched for a CRLF
+    repeat
+      let (bytes, pos) ← state.get
+      match findCRLF bytes (pos + scanned) with
+      | some i =>
+        state.set (bytes, i + 2)
+        return ← decode (bytes.extract pos i)
+      | none =>
+        let unread := bytes.size - pos
+        if unread > maxLineBytes then
+          throw (IO.userError s!"request line too long (>{maxLineBytes} bytes)")
+        -- A CR at the very end may be completed by the next byte.
+        scanned := unread - 1
+        unless ← fill do
+          state.set (bytes, bytes.size)
+          return ← decode (bytes.extract pos bytes.size)
+    return ""
+  let readN (n : Nat) : IO ByteArray := do
+    let (bytes, pos) ← state.get
+    if pos == bytes.size then
+      unless ← fill do return ByteArray.empty
+    let (bytes, pos) ← state.get
+    let stop := min bytes.size (pos + n)
+    state.set (bytes, stop)
+    return bytes.extract pos stop
+  let readSome : IO ByteArray := do
+    let (bytes, pos) ← state.get
+    if pos == bytes.size then
+      recv
+    else
+      state.set (ByteArray.empty, 0)
+      return bytes.extract pos bytes.size
+  return { source := { readLine, readN }, readSome }
+
+-- ── Request head ──────────────────────────────────────────────────
+
 /-- Header lines of one request, at most `maxHeaders` of them — the bound is
     part of the type, so it holds for every value `recvHeaders` can return. -/
 abbrev HeaderLines := { lines : List String // lines.length ≤ maxHeaders }
@@ -112,13 +203,13 @@ abbrev HeaderLines := { lines : List String // lines.length ≤ maxHeaders }
     lines: the request is rejected rather than truncated, since the unread
     header lines would otherwise be taken for the body or the next request.
     Reads at most `maxHeaders + 1` header lines, however long the head.
-    $$\text{recvHeaders} : \text{RecvBuffer} \to \text{IO}(\text{Option}(\text{String} \times \text{HeaderLines}))$$ -/
-def recvHeaders (buf : FFI.RecvBuffer) : IO (Option (String × HeaderLines)) := do
-  let requestLine ← FFI.recvBufReadLine buf
+    $$\text{recvHeadersFrom} : \text{ByteSource} \to \text{IO}(\text{Option}(\text{String} \times \text{HeaderLines}))$$ -/
+def recvHeadersFrom (src : ByteSource) : IO (Option (String × HeaderLines)) := do
+  let requestLine ← src.readLine
   let mut headers : List String := []
   let mut ended := false
   for _ in [0:maxHeaders + 1] do
-    let line ← FFI.recvBufReadLine buf
+    let line ← src.readLine
     if line.isEmpty then
       ended := true
       break
@@ -127,6 +218,10 @@ def recvHeaders (buf : FFI.RecvBuffer) : IO (Option (String × HeaderLines)) := 
     if h : headers.reverse.length ≤ maxHeaders then
       return some (requestLine, ⟨headers.reverse, h⟩)
   return none
+
+/-- `recvHeadersFrom` over a socket's `RecvBuffer`. -/
+def recvHeaders (buf : FFI.RecvBuffer) : IO (Option (String × HeaderLines)) :=
+  recvHeadersFrom (.ofRecvBuffer buf)
 
 /-- Find a header value by name in a header list. -/
 private def findHeader (name : HeaderName) (headers : RequestHeaders) : Option String :=
@@ -278,13 +373,13 @@ def drainBody (req : Network.WebApp.Request) : IO Unit := do
 
 -- ── Request parsing ───────────────────────────────────────────────
 
-/-- Parse a full HTTP request from a buffered reader.
+/-- Parse a full HTTP request from a byte source.
     Returns `none` — and the caller closes the connection — if the
     connection is closed, the request line is malformed, the head has too
     many header lines, or the body framing is rejected by `requestFraming`.
-    $$\text{parseRequest} : \text{RecvBuffer} \to \text{SockAddr} \to \text{IO}(\text{Option}(\text{Request}))$$ -/
-def parseRequest (buf : FFI.RecvBuffer) (remoteAddr : SockAddr) : IO (Option Request) := do
-  let some (requestLine, ⟨headerLines, _⟩) ← recvHeaders buf | return none
+    $$\text{parseRequestFrom} : \text{ByteSource} \to \text{SockAddr} \to \text{IO}(\text{Option}(\text{Request}))$$ -/
+def parseRequestFrom (src : ByteSource) (remoteAddr : SockAddr) : IO (Option Request) := do
+  let some (requestLine, ⟨headerLines, _⟩) ← recvHeadersFrom src | return none
   if requestLine.isEmpty then
     return none
   match parseRequestLine requestLine with
@@ -303,9 +398,9 @@ def parseRequest (buf : FFI.RecvBuffer) (remoteAddr : SockAddr) : IO (Option Req
       segs.filter (! ·.isEmpty)
     -- Parse query string
     let query := parseQuery rawQuery
-    let readN (n : Nat) : IO ByteArray := FFI.recvBufReadN buf n.toUSize
+    let readN := src.readN
     let bodyReader : IO ByteArray ← match framing with
-      | .chunked => chunkedBodyReader (FFI.recvBufReadLine buf) readN
+      | .chunked => chunkedBodyReader src.readLine readN
       | .length contentLength => do
         -- Returns at most `contentLength` bytes in total.
         let remainingRef ← IO.mkRef contentLength
@@ -335,5 +430,9 @@ def parseRequest (buf : FFI.RecvBuffer) (remoteAddr : SockAddr) : IO (Option Req
       requestHeaderReferer := refererHeader
       requestHeaderUserAgent := uaHeader
     }
+
+/-- `parseRequestFrom` over a socket's `RecvBuffer`. -/
+def parseRequest (buf : FFI.RecvBuffer) (remoteAddr : SockAddr) : IO (Option Request) :=
+  parseRequestFrom (.ofRecvBuffer buf) remoteAddr
 
 end Network.WebApp.Server

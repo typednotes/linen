@@ -588,7 +588,8 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   module needs no `partial def`.
 - `Network.Sendfile` — a portable `sendFile`/`sendFileSimple` for transferring
   a file (or `FilePart` range) over a connected socket, via chunked read +
-  `Blocking.sendAll` (no platform `sendfile(2)` zero-copy syscall).
+  `Blocking.sendAll` (no platform `sendfile(2)` zero-copy syscall);
+  `sendFileWith` takes the write action instead, for TLS.
 - `Data.Streaming.Network` — Haskell's `Data.Streaming.Network`: `AppData`,
   `bindPortTCP`/`getSocketTCP`/`mkAppData`/`runTCPServer`, and `acceptSafe`
   (retry-on-transient-accept-error), with its retry loop a plain `while`
@@ -1589,8 +1590,9 @@ convention.
   `drainBody` for keep-alive. The header-count bound is in the type
   (`HeaderLines`).
 - `Network.WebApp.Server.Response` — status-line/header rendering and
-  response transmission, both blocking (`sendResponse`) and event-driven
-  (`sendResponseEL`).
+  response transmission through a `ResponseSink` (`sendResponseTo`): a plain
+  socket, blocking (`sendResponse`) or event-driven (`sendResponseEL`), or a
+  TLS session.
 - `Network.WebApp.Server.Run` — `runSettings`/`runSettingsEventLoop`: the
   accept loop and per-connection request/response cycle, keep-alive aware.
 - `Network.WebApp.Server.Conduit` — `ISource`: buffered incremental body
@@ -1609,8 +1611,10 @@ convention.
   `Network.QUIC` + `Network.HTTP3`; TLS 1.3 is mandatory, so `certFile`/
   `keyFile` are required settings (not `Option`).
 - `Network.WebApp.Server.TLS` — HTTPS support via `Network.TLS.Context`
-  (OpenSSL FFI) over the `EventDispatcher`/`Green` runtime, with configurable
-  insecure-connection handling and optional ALPN negotiation.
+  (OpenSSL FFI): one thread per connection, requests read and responses
+  written through the TLS session (`runTLS`, `runTLSSocket`). HTTP/1.1 only
+  (no ALPN answer, so clients fall back from `h2`); `OnInsecure.allowInsecure`
+  is **not implemented** and `runTLS` refuses it.
 - `Network.WebApp.Server.TLS.Internal` — re-exports `Server.TLS` for advanced
   usage.
 - `Network.WebApp.Server.WebSockets` — upgrades `Network.WebApp` requests to
@@ -2433,7 +2437,7 @@ the secrets, never their values.
 | `Linen.Network.Socket` | safe phantom-typed lifecycle API, `withSocket`/`listenTCP`/`withEventLoop`, `EventLoop`, `sendAll`/`sendTo`/`recvFrom` |
 | `Linen.Network.Socket.EventDispatcher` | kqueue/epoll → `Green` bridge: `waitReadable`/`waitWritable`/`recvGreen`/`sendAllGreen` |
 | `Linen.Network.Socket.Blocking` | blocking-style `accept`/`connect`/`send`/`sendAll`/`recv` over the non-blocking API, retrying on `wouldBlock` |
-| `Linen.Network.Sendfile` | portable `sendFile`/`sendFileSimple` (chunked read + `Blocking.sendAll`, no zero-copy syscall) |
+| `Linen.Network.Sendfile` | portable `sendFile`/`sendFileSimple` (chunked read + `Blocking.sendAll`, no zero-copy syscall); `sendFileWith` over any write action |
 | `Linen.Data.Streaming.Network` | `AppData`, `bindPortTCP`/`getSocketTCP`/`mkAppData`/`runTCPServer`, `acceptSafe` (retry loop, no `partial`) |
 | `Linen.Network.Mime` | MIME lookup (`mime-types`): `defaultMimeMap`, `fileNameExtensions`, `mimeByExt`, `defaultMimeLookup` |
 | `Linen.Network.URI` | RFC 3986 URI parsing/rendering/resolution (`network-uri`): `parseURI`, percent-encoding, `relativeTo`/`relativeFrom` |
@@ -2719,7 +2723,7 @@ the secrets, never their values.
 | `Linen.Network.WebApp.Server.PackInt` | integer-to-`ByteArray` encoding for chunked transfer framing |
 | `Linen.Network.WebApp.Server.Date` | cached HTTP-date string generation for the `Date` response header |
 | `Linen.Network.WebApp.Server.Settings` | `Settings`/`defaultSettings`: port, host, timeouts, hooks |
-| `Linen.Network.WebApp.Server.Response` | status-line/header rendering and `sendResponse`/`sendResponseEL` connection writers |
+| `Linen.Network.WebApp.Server.Response` | status-line/header rendering; `sendResponseTo` over a `ResponseSink` (socket, event loop, TLS session) |
 | `Linen.Network.WebApp.Server.Request` | HTTP request-line and header parsing off a buffered socket reader; RFC 9112 body framing (`requestFraming`), chunked-body decoding, keep-alive `drainBody` |
 | `Linen.Network.WebApp.Server.Conduit` | `ISource`: buffered incremental body reading (`mkKnown`/`mkChunked`) |
 | `Linen.Network.WebApp.Server.IO` | low-level connection byte-sending helpers |
@@ -2729,7 +2733,7 @@ the secrets, never their values.
 | `Linen.Network.WebApp.Server.WithApplication` | `withApplication`/`withApplicationSettings`: run a server for the duration of an `IO` action |
 | `Linen.Network.WebApp.Server` | the package aggregator plus `run`, a one-line server entry point |
 | `Linen.Network.WebApp.Server.QUIC` | bridges `Network.WebApp` to HTTP/3 over `Network.QUIC` |
-| `Linen.Network.WebApp.Server.TLS` | HTTPS support via `Network.TLS.Context` |
+| `Linen.Network.WebApp.Server.TLS` | HTTPS via `Network.TLS.Context`, through the session, one thread per connection; HTTP/1.1 only, `allowInsecure` not implemented |
 | `Linen.Network.WebApp.Server.TLS.Internal` | re-exports `Server.TLS` for advanced use |
 | `Linen.Network.WebApp.Server.WebSockets` | upgrades `Network.WebApp` requests to `Network.WebSockets` connections via `responseRaw` |
 | `Linen.Network.WebSockets.Types` | `Opcode`/`CloseCode`/`ConnectionState`/`ConnectionOptions`/`Connection`/`PendingConnection`/`ServerApp` |

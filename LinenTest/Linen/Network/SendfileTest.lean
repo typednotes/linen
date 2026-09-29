@@ -81,4 +81,27 @@ def withConnection (addr : SockAddr) (action : Socket .connected → IO Unit) : 
   unless received == "456789".toUTF8 do
     throw (IO.userError s!"sendFile with FilePart: expected '456789', got {String.fromUTF8! received}")
 
+/-! ### `sendFileWith` — the transport-independent core -/
+
+/-- The bytes `sendFileWith` sends for `part` of a file holding `contents`. -/
+private def sentBytes (contents : String) (part : Option FilePart) : IO String := do
+  let (handle, path) ← IO.FS.createTempFile
+  handle.putStr contents
+  handle.flush
+  let sent ← IO.mkRef ByteArray.empty
+  sendFileWith (fun b => sent.modify (· ++ b)) path.toString part
+  IO.FS.removeFile path
+  return String.fromUTF8! (← sent.get)
+
+#eval show IO Unit from do
+  unless (← sentBytes "0123456789" none) == "0123456789" do throw (IO.userError "whole file")
+  unless (← sentBytes "0123456789" (some ⟨2, 3⟩)) == "234" do throw (IO.userError "a range")
+  -- `count = 0` means to the end of the file (it used to send nothing).
+  unless (← sentBytes "0123456789" (some ⟨7, 0⟩)) == "789" do throw (IO.userError "to the end")
+  -- A range past the end stops at the end.
+  unless (← sentBytes "0123456789" (some ⟨8, 100⟩)) == "89" do throw (IO.userError "past the end")
+  -- More than one 64 KiB piece.
+  let big := String.ofList (List.replicate 150000 'x')
+  unless (← sentBytes big none).length == 150000 do throw (IO.userError "several pieces")
+
 end Tests.Network.Sendfile

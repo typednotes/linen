@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen LinenTest --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen LinenTest --include='*.lean' | wc -l -->
-  <strong>793 modules</strong> · <strong>492 compile-time theorems</strong> · <strong>11497 <code>#guard</code> checks</strong>
+  <strong>793 modules</strong> · <strong>492 compile-time theorems</strong> · <strong>11496 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -124,7 +124,7 @@ for the full per-module feature list and module table.
   (client and server). QUIC connections are **not implemented**:
   `Network.QUIC.Client`/`Server` are stubs that throw.
 - **`Network.WebApp` / `Network.WebApp.Server`** — a WAI-style application
-  interface plus an HTTP server implementing it.
+  interface plus an HTTP/1.1 server implementing it, over plain TCP or TLS.
 - **`Web.Html` / `Web.Css`** — typed HTML5/CSS construction where illegal
   nesting and property/value mismatches are compile-time errors, with `elem!`
   and `rule!` macro sugar; `<script>`/`<style>` bodies carry a proof that they

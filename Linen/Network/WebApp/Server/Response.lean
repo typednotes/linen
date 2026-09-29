@@ -118,95 +118,78 @@ private theorem addAutoHeaders_length_ge (settings : Settings) (extra user : Res
     apply Nat.le_trans _ (ih _)
     split <;> simp_all [List.length_cons]
 
+/-- Where a response goes: the writes `sendResponseTo` needs, so the same
+    rendering serves a plain socket (blocking or event-driven) and a TLS
+    session, which must not be bypassed by writing to its socket. -/
+structure ResponseSink where
+  /-- Send all of these bytes (the head, a whole body). -/
+  send : ByteArray → Green Unit
+  /-- The same, from inside a streaming body's `IO` callback. -/
+  sendIO : ByteArray → IO Unit
+  /-- Send a file, or the `FilePart` of it. -/
+  sendFile : String → Option FilePart → IO Unit
+  /-- For `responseRaw`: read from the connection. -/
+  rawRecv : IO ByteArray
+  /-- For `responseRaw`: write to the connection. -/
+  rawSend : ByteArray → IO Unit
+
+/-- Send a full HTTP response to `sink`.
+    $$\text{sendResponseTo} : \text{ResponseSink} \to \text{Settings} \to \text{Request} \to \text{Response} \to \text{Green ResponseReceived}$$ -/
+def sendResponseTo (sink : ResponseSink) (settings : Settings) (req : Request)
+    (resp : Response) : Green ResponseReceived := do
+  let head (status : Status) (headers : ResponseHeaders) : ByteArray :=
+    renderStatusLineBytes req.httpVersion status ++ renderHeadersBytes headers ++ crlfBytes
+  match resp with
+  | .responseBuilder status userHeaders body =>
+    let allHeaders := addAutoHeaders settings [(hContentLength, toString body.size)] userHeaders
+    sink.send (head status allHeaders ++ body)
+    pure ResponseReceived.done
+
+  | .responseFile status userHeaders path part =>
+    sink.send (head status (addAutoHeaders settings [] userHeaders))
+    (sink.sendFile path part : IO _)
+    pure ResponseReceived.done
+
+  | .responseStream status userHeaders body =>
+    let allHeaders := addAutoHeaders settings [(hTransferEncoding, "chunked")] userHeaders
+    sink.send (head status allHeaders)
+    let writeChunk : ByteArray → IO Unit := fun chunk => do
+      if chunk.size > 0 then
+        let sizeStr := String.ofList (Nat.toDigits 16 chunk.size)
+        sink.sendIO ((sizeStr ++ "\r\n").toUTF8 ++ chunk ++ "\r\n".toUTF8)
+    (body writeChunk (pure ()) : IO _)
+    sink.send "0\r\n\r\n".toUTF8
+    pure ResponseReceived.done
+
+  | .responseRaw rawAction _fallback =>
+    (rawAction sink.rawRecv sink.rawSend : IO _)
+    pure ResponseReceived.done
+
+/-- The sink for a connected socket in blocking mode (`Blocking.sendAll`). -/
+def ResponseSink.ofSocket (sock : Socket .connected) : ResponseSink where
+  send bytes := do (Blocking.sendAll sock bytes : IO _)
+  sendIO := Blocking.sendAll sock
+  sendFile path part := Network.Sendfile.sendFile sock path part
+  rawRecv := Blocking.recv sock 4096
+  rawSend := Blocking.sendAll sock
+
+/-- The sink for a connected socket in EventDispatcher mode: whole writes go
+    through `sendAllGreen`, so the Green thread yields while the socket would
+    block. -/
+def ResponseSink.ofSocketEL (sock : Socket .connected) (disp : EventDispatcher) : ResponseSink :=
+  { ResponseSink.ofSocket sock with send := disp.sendAllGreen sock }
+
 /-- Send a full HTTP response over a connected socket (blocking mode).
     Uses `Blocking.sendAll` for reliable full writes.
     $$\text{sendResponse} : \text{Socket .connected} \to \text{Settings} \to \text{Request} \to \text{Response} \to \text{Green ResponseReceived}$$ -/
-def sendResponse (sock : Socket .connected) (settings : Settings) (_req : Request)
-    (resp : Response) : Green ResponseReceived := do
-  match resp with
-  | .responseBuilder status userHeaders body =>
-    let extraHeaders : ResponseHeaders :=
-      [(hContentLength, toString body.size)]
-    let allHeaders := addAutoHeaders settings extraHeaders userHeaders
-    let headBytes := renderStatusLineBytes _req.httpVersion status
-      ++ renderHeadersBytes allHeaders ++ crlfBytes
-    (Blocking.sendAll sock (headBytes ++ body) : IO _)
-    pure ResponseReceived.done
-
-  | .responseFile status userHeaders path part =>
-    let allHeaders := addAutoHeaders settings [] userHeaders
-    let headBytes := renderStatusLineBytes _req.httpVersion status
-      ++ renderHeadersBytes allHeaders ++ crlfBytes
-    (Blocking.sendAll sock headBytes : IO _)
-    (Network.Sendfile.sendFile sock path part : IO _)
-    pure ResponseReceived.done
-
-  | .responseStream status userHeaders body =>
-    let extraHeaders : ResponseHeaders :=
-      [(hTransferEncoding, "chunked")]
-    let allHeaders := addAutoHeaders settings extraHeaders userHeaders
-    let headBytes := renderStatusLineBytes _req.httpVersion status
-      ++ renderHeadersBytes allHeaders ++ crlfBytes
-    (Blocking.sendAll sock headBytes : IO _)
-    let writeChunk : ByteArray → IO Unit := fun chunk => do
-      if chunk.size > 0 then
-        let sizeStr := String.ofList (Nat.toDigits 16 chunk.size)
-        let frame := (sizeStr ++ "\r\n").toUTF8 ++ chunk ++ "\r\n".toUTF8
-        Blocking.sendAll sock frame
-    let flush : IO Unit := pure ()
-    (body writeChunk flush : IO _)
-    (Blocking.sendAll sock "0\r\n\r\n".toUTF8 : IO _)
-    pure ResponseReceived.done
-
-  | .responseRaw rawAction _fallback =>
-    let recvAction : IO ByteArray := Blocking.recv sock 4096
-    let sendAction : ByteArray → IO Unit := Blocking.sendAll sock
-    (rawAction recvAction sendAction : IO _)
-    pure ResponseReceived.done
+def sendResponse (sock : Socket .connected) (settings : Settings) (req : Request)
+    (resp : Response) : Green ResponseReceived :=
+  sendResponseTo (.ofSocket sock) settings req resp
 
 /-- Send a full HTTP response (EventDispatcher mode, non-blocking).
     Uses `sendAllGreen` for non-blocking sends via the event loop. -/
-def sendResponseEL (sock : Socket .connected) (settings : Settings) (_req : Request)
-    (resp : Response) (disp : EventDispatcher) : Green ResponseReceived := do
-  match resp with
-  | .responseBuilder status userHeaders body =>
-    let extraHeaders : ResponseHeaders :=
-      [(hContentLength, toString body.size)]
-    let allHeaders := addAutoHeaders settings extraHeaders userHeaders
-    let headBytes := renderStatusLineBytes _req.httpVersion status
-      ++ renderHeadersBytes allHeaders ++ crlfBytes
-    disp.sendAllGreen sock (headBytes ++ body)
-    pure ResponseReceived.done
-
-  | .responseFile status userHeaders path part =>
-    let allHeaders := addAutoHeaders settings [] userHeaders
-    let headBytes := renderStatusLineBytes _req.httpVersion status
-      ++ renderHeadersBytes allHeaders ++ crlfBytes
-    disp.sendAllGreen sock headBytes
-    (Network.Sendfile.sendFile sock path part : IO _)
-    pure ResponseReceived.done
-
-  | .responseStream status userHeaders body =>
-    let extraHeaders : ResponseHeaders :=
-      [(hTransferEncoding, "chunked")]
-    let allHeaders := addAutoHeaders settings extraHeaders userHeaders
-    let headBytes := renderStatusLineBytes _req.httpVersion status
-      ++ renderHeadersBytes allHeaders ++ crlfBytes
-    disp.sendAllGreen sock headBytes
-    let writeChunk : ByteArray → IO Unit := fun chunk => do
-      if chunk.size > 0 then
-        let sizeStr := String.ofList (Nat.toDigits 16 chunk.size)
-        let frame := (sizeStr ++ "\r\n").toUTF8 ++ chunk ++ "\r\n".toUTF8
-        Blocking.sendAll sock frame
-    let flush : IO Unit := pure ()
-    (body writeChunk flush : IO _)
-    disp.sendAllGreen sock "0\r\n\r\n".toUTF8
-    pure ResponseReceived.done
-
-  | .responseRaw rawAction _fallback =>
-    let recvAction : IO ByteArray := Blocking.recv sock 4096
-    let sendAction : ByteArray → IO Unit := Blocking.sendAll sock
-    (rawAction recvAction sendAction : IO _)
-    pure ResponseReceived.done
+def sendResponseEL (sock : Socket .connected) (settings : Settings) (req : Request)
+    (resp : Response) (disp : EventDispatcher) : Green ResponseReceived :=
+  sendResponseTo (.ofSocketEL sock disp) settings req resp
 
 end Network.WebApp.Server

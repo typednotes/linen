@@ -25,38 +25,41 @@ structure FilePart where
   count : Nat
 deriving BEq, Repr
 
+/-- Send a file (or the `FilePart` of it) through `send`, in 64 KiB pieces —
+    the transport-independent core of `sendFile`, used as-is over TLS, where
+    the bytes must go through the session rather than the socket. A
+    `FilePart` with `count = 0` sends to the end of the file, as documented
+    (through 1.8.0 it sent nothing).
+    $$\text{sendFileWith} : (\text{ByteArray} \to \text{IO}()) \to \text{String} \to \text{Option}(\text{FilePart}) \to \text{IO}()$$ -/
+def sendFileWith (send : ByteArray → IO Unit) (path : String) (part : Option FilePart := none) :
+    IO Unit := do
+  let handle ← IO.FS.Handle.mk path .read
+  let (offset, count) := match part with
+    | some fp => (fp.offset, if fp.count == 0 then none else some fp.count)
+    | none => (0, none)
+  -- Skip to offset by reading and discarding bytes
+  let mut skipped := 0
+  while skipped < offset do
+    let data ← handle.read (min (offset - skipped) 65536).toUSize
+    if data.size == 0 then break
+    skipped := skipped + data.size
+  -- Read and send in chunks, up to `count` bytes or the end of the file
+  let mut remaining := count
+  let mut done := remaining == some 0
+  while !done do
+    let data ← handle.read (min (remaining.getD 65536) 65536).toUSize
+    if data.size == 0 then
+      done := true
+    else
+      send data
+      remaining := remaining.map (· - data.size)
+      done := remaining == some 0
+
 /-- Send a file (or portion thereof) over a connected socket.
     Uses read+send fallback implementation.
     $$\text{sendFile} : \text{Socket}\ \texttt{.connected} \to \text{String} \to \text{Option}(\text{FilePart}) \to \text{IO}(\text{Unit})$$ -/
-def sendFile (sock : Socket .connected) (path : String) (part : Option FilePart := none) : IO Unit := do
-  let handle ← IO.FS.Handle.mk path .read
-  match part with
-  | some fp => do
-    -- Skip to offset by reading and discarding bytes
-    if fp.offset > 0 then
-      let mut skipped := 0
-      while skipped < fp.offset do
-        let chunkSize := min (fp.offset - skipped) 65536
-        let data ← handle.read chunkSize.toUSize
-        if data.size == 0 then break
-        skipped := skipped + data.size
-    -- Read and send in chunks
-    let mut remaining := fp.count
-    while remaining > 0 do
-      let chunkSize := min remaining 65536
-      let data ← handle.read chunkSize.toUSize
-      if data.size == 0 then break
-      Blocking.sendAll sock data
-      remaining := remaining - data.size
-  | none => do
-    -- Send entire file in chunks
-    let mut done := false
-    while !done do
-      let data ← handle.read 65536
-      if data.size == 0 then
-        done := true
-      else
-        Blocking.sendAll sock data
+def sendFile (sock : Socket .connected) (path : String) (part : Option FilePart := none) : IO Unit :=
+  sendFileWith (Blocking.sendAll sock) path part
 
 /-- Send an entire file over a connected socket.
     $$\text{sendFileSimple} : \text{Socket}\ \texttt{.connected} \to \text{String} \to \text{IO}(\text{Unit})$$ -/

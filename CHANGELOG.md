@@ -21,6 +21,15 @@ does not have them.
   `parseContentLength`, `parseChunkSize`, `chunkedBodyReader` and
   `drainBody` — the request-body framing decision and chunked decoder, pure or
   over injected readers so they are tested without a socket.
+- **`Network.WebApp.Server.ByteSource`** (`ofRecvBuffer`, `buffered`) and
+  `parseRequestFrom` / `recvHeadersFrom` — the request parser over any byte
+  source, not only the C `RecvBuffer`; **`ResponseSink`** (`ofSocket`,
+  `ofSocketEL`) and `sendResponseTo` — response writing over any transport;
+  `Network.Sendfile.sendFileWith`. What the TLS server now reads and writes
+  through.
+- **`Server.TLS.runTLSSocket`** — serve TLS on an already-listening socket
+  until a cancellation token fires (what `runTLS` runs, and what the tests
+  use).
 
 ### Changed
 
@@ -52,8 +61,27 @@ does not have them.
   not a service-account key, and failing on it hid the token the next source
   had. Moved from `infra` (`GcpAuth.foreignTypes`).
 
+### Removed
+
+- **`Server.TLS.TLSSettings.alpn`.** `true` (the default) called
+  `Network.TLS.setAlpn`, which *prefers `h2`*, so any browser would
+  negotiate HTTP/2 with a server that speaks only HTTP/1.1. The server no
+  longer answers ALPN at all, and clients fall back to HTTP/1.1.
+
 ### Fixed
 
+- **The HTTPS server works.** `Server.TLS.runTLS` performed the handshake and
+  then parsed requests from, and wrote responses to, the *raw socket*,
+  bypassing the TLS session — no HTTPS request could succeed, and no test
+  exercised it. Requests and responses now go through the session (files
+  and `responseRaw` included), one thread per connection with a blocking
+  handshake — `acceptSocketNB` cannot resume a handshake that would block.
+  It is tested end to end with a real TLS client: keep-alive, a chunked
+  body, a request split across TLS records, and plaintext on the TLS port.
+  `OnInsecure.allowInsecure` was never implemented either; `runTLS` now
+  refuses to start with it instead of silently behaving as `denyInsecure`.
+- **`Sendfile` with `FilePart.count = 0` sends to the end of the file**, as
+  documented; it sent nothing.
 - **The WebSocket handshake works with real peers.** `computeAcceptKey`
   used a placeholder SHA-1 that ignored its input, *and* `webSocketGUID` was
   garbled (`…-5AB5DC76B45B` for RFC 6455's `…-C5AB0DC85B11`), so every
