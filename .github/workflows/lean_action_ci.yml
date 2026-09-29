@@ -45,7 +45,7 @@ jobs:
       GITFN_DEPLOY_KEY: ${{ secrets.GITFN_DEPLOY_KEY }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # Installs libpq, OpenSSL and (on Linux) libsecret. Shared with the
       # release workflow, so the two cannot drift.
       - uses: ./.github/actions/setup-native-deps
@@ -133,7 +133,7 @@ jobs:
         os: [ubuntu-24.04, ubuntu-24.04-arm, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           path: linen
       - uses: ./linen/.github/actions/setup-native-deps
@@ -315,7 +315,7 @@ jobs:
             echo "g++ is present; this job exists to test its absence" >&2
             exit 1
           fi
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Install elan
         shell: bash
         run: |
