@@ -672,7 +672,7 @@ run_cmd do
 -- targets. OpenSSL needs none of them: Lean's toolchain ends every link with
 -- `-lssl -lcrypto` against its bundled static archives (see `nativeLinkArgs`).
 package linen where
-  version := v!"1.7.0"
+  version := v!"1.8.0"
   -- `lake test` builds `LinenTest`, whose `#guard`s run as it elaborates.
   testDriver := "LinenTest"
   moreLinkArgs := nativeLinkArgs

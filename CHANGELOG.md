@@ -7,6 +7,12 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-29
+
+The building blocks the sibling `infra` carried copies of — a JSON field
+update, switchable terminal colour, the consumer link-flag helpers, a CA
+fallback — and the error taxonomy split its move onto `Linen.Cloud` needed.
+
 ### Added
 
 - **`Data.Json.Value.setField`** — rewrite one field of an object, keeping
@@ -43,6 +49,19 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
   `classifyMessage`, and `unauthenticatedCodes` / `serviceDisabledMarkers`.
 
 ### Changed
+
+- **The keychain service is a parameter.** `Cloud.Credentials.Keychain`'s
+  `fromAccount`, `forProvider`, `storeInAccount`, `store`, `deleteAccount`,
+  `loadFrom` and `load`, `Chain.loadFrom`/`load`, and `loadWith`,
+  `sourceDescriptions` and `noCredentialsMessage` take the service (default
+  `keychainService`, `"linen"`), so a tool that stored credentials under its
+  own name keeps finding them — and its not-found message names the right
+  service. Asked for by `infra`, whose entries live under `"infra"`.
+- **More not-found codes**: `NoSuchEntity` (IAM), `DBInstanceNotFound` (RDS),
+  `RepositoryNotFoundException` (ECR) and EC2's `InvalidAMIID.NotFound`,
+  `InvalidGroup.NotFound`, `InvalidInstanceID.NotFound` — which EC2 answers
+  with a 400, so the status alone would have said `invalid`. `infra`
+  recognised all of them and now uses this taxonomy.
 
 - **`Cloud.Class.denied` now means one thing: authenticated, and refused for
   this resource.** A bad signature, an expired or missing token and an unknown

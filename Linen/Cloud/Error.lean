@@ -207,6 +207,11 @@ def notFoundCodes : List String :=
   , "QueueDoesNotExist", "AWS.SimpleQueueService.NonExistentQueue"
     -- AWS JSON protocols (Secrets Manager among them)
   , "ResourceNotFoundException", "ResourceNotFound", "NotFoundException"
+    -- The AWS Query and ECR spellings — IAM, RDS, EC2 (which answers 400 for
+    -- these, so the status alone would say `invalid`), ECR. Added with the
+    -- sibling `infra`'s move onto this taxonomy, which recognised them all.
+  , "NoSuchEntity", "DBInstanceNotFound", "RepositoryNotFoundException"
+  , "InvalidAMIID.NotFound", "InvalidGroup.NotFound", "InvalidInstanceID.NotFound"
     -- Scaleway
   , "not_found", "unknown_resource"
     -- Google

@@ -93,15 +93,17 @@ def parseBody (text : String) : Option Credentials :=
 
     Every failure — no such entry, no keychain service, an unparseable body — is
     `none`, so the chain falls through. See the module header. -/
-def fromAccount (account : String) : IO (Option Credentials) := do
-  let entry := System.Keychain.Entry.new keychainService account
+def fromAccount (account : String) (service : String := keychainService) :
+    IO (Option Credentials) := do
+  let entry := System.Keychain.Entry.new service account
   let raw ← try pure (some (← entry.getPassword)) catch _ => pure none
   let some text := raw | return none
   return parseBody text
 
 /-- Read the credentials stored for a cloud, under an account named after it. -/
-def forProvider (provider : Provider) : IO (Option Credentials) :=
-  fromAccount provider.name
+def forProvider (provider : Provider) (service : String := keychainService) :
+    IO (Option Credentials) :=
+  fromAccount provider.name service
 
 -- ── Writing ─────────────────────────────────────────────────────────────────
 
@@ -129,19 +131,21 @@ def render (c : Credentials) : String :=
     choose, and choosing one another tool already uses would take that tool's
     credential out from under it — so `forProvider`'s names (`aws`, `gcp`,
     `scaleway`) are the ones this library claims, and nothing else. -/
-def storeInAccount (account : String) (c : Credentials) : IO Unit := do
-  let entry := System.Keychain.Entry.new keychainService account
+def storeInAccount (account : String) (c : Credentials)
+    (service : String := keychainService) : IO Unit := do
+  let entry := System.Keychain.Entry.new service account
   entry.setPassword (render c)
 
 /-- Store the credentials for a cloud, under an account named after it. -/
-def store (provider : Provider) (c : Credentials) : IO Unit :=
-  storeInAccount provider.name c
+def store (provider : Provider) (c : Credentials) (service : String := keychainService) :
+    IO Unit :=
+  storeInAccount provider.name c service
 
 /-- Remove a named account's entry. `none` of the failure modes are errors, for
     the same reason reading's are not: a machine with no keychain service must
     not fail here. -/
-def deleteAccount (account : String) : IO Unit := do
-  let entry := System.Keychain.Entry.new keychainService account
+def deleteAccount (account : String) (service : String := keychainService) : IO Unit := do
+  let entry := System.Keychain.Entry.new service account
   try entry.deleteCredential catch _ => pure ()
 
 -- ── The full chain ──────────────────────────────────────────────────────────
@@ -151,12 +155,14 @@ def deleteAccount (account : String) : IO Unit := do
 
     This is `Cloud.Credentials.loadWith` with the keychain source supplied. It
     lives here rather than there so that the FFI stays opt-in. -/
-def loadFrom (paths : Paths) (provider : Provider) : IO (Except Error Credentials) :=
-  Cloud.loadWith paths provider forProvider
+def loadFrom (paths : Paths) (provider : Provider) (service : String := keychainService) :
+    IO (Except Error Credentials) :=
+  Cloud.loadWith paths provider (forProvider · service) (keychainService := service)
 
 /-- The full three-source chain, from the conventional file locations. -/
-def load (provider : Provider) : IO (Except Error Credentials) := do
-  loadFrom (← Paths.default) provider
+def load (provider : Provider) (service : String := keychainService) :
+    IO (Except Error Credentials) := do
+  loadFrom (← Paths.default) provider service
 
 -- ── Self-checks ─────────────────────────────────────────────────────────────
 

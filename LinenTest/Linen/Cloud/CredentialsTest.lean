@@ -146,6 +146,9 @@ def loud : Credentials :=
 
 /- The message quotes every source, so it is as long as the list. -/
 #guard ((noCredentialsMessage (Paths.under "/h") .gcp "default").splitOn "\n  - ").length == 5
+-- A tool keeping its entries under its own service is named as such.
+#guard (((sourceDescriptions (Paths.under "/h") .aws "default" "infra")[1]!).splitOn "'infra'").length == 2
+#guard ((noCredentialsMessage (Paths.under "/h") .aws "default" "infra").splitOn "'infra'").length == 2
 
 -- ── The file sources, against a scratch directory ───────────────────────────
 

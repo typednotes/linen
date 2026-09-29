@@ -249,10 +249,14 @@ def fromGcloud : IO (Option Credentials) := do
     string from here, so a diagnostic cannot name a variable no loader reads. -/
 def gcpKeyFileVar : String := "GOOGLE_APPLICATION_CREDENTIALS"
 
-/-- The keychain service `Cloud.Credentials.Keychain` stores entries under.
+/-- The keychain service `Cloud.Credentials.Keychain` stores entries under,
+    by default.
 
     Named here rather than there so that `sourceDescriptions` can quote it
-    without importing the keychain FFI. -/
+    without importing the keychain FFI. Every function that touches the store
+    — and the ones that describe it — takes the service as a parameter
+    defaulting to this, so a tool that has stored credentials under its own
+    name (the sibling `infra` uses `"infra"`) keeps finding them. -/
 def keychainService : String := "linen"
 
 -- ── Source 3: the environment ───────────────────────────────────────────────
@@ -312,8 +316,8 @@ def fromEnvironment (provider : Provider) : IO (Option Credentials) := do
     Naming every one is the difference between a usable error and a mystery, so
     this is public and asserted by the tests: a source the operator is never
     told about is a source they cannot use. -/
-def sourceDescriptions (paths : Paths) (provider : Provider) (profile : String) :
-    List String :=
+def sourceDescriptions (paths : Paths) (provider : Provider) (profile : String)
+    (keychainService : String := keychainService) : List String :=
   let (kv, sv, _, _) := envVars provider
   match provider with
   | .aws =>
@@ -331,10 +335,10 @@ def sourceDescriptions (paths : Paths) (provider : Provider) (profile : String) 
     , "environment GOOGLE_OAUTH_ACCESS_TOKEN" ]
 
 /-- The not-found message, listing every source that declined. -/
-def noCredentialsMessage (paths : Paths) (provider : Provider) (profile : String) :
-    String :=
+def noCredentialsMessage (paths : Paths) (provider : Provider) (profile : String)
+    (keychainService : String := keychainService) : String :=
   let tried :=
-    String.join ((sourceDescriptions paths provider profile).map (s!"\n  - {·}"))
+    String.join ((sourceDescriptions paths provider profile keychainService).map (s!"\n  - {·}"))
   s!"no {provider.name} credentials found; tried:{tried}"
 
 /-- Try each source in order and return the first that yields credentials.
@@ -346,7 +350,8 @@ def noCredentialsMessage (paths : Paths) (provider : Provider) (profile : String
 def loadWith (paths : Paths) (provider : Provider)
     (fromStore : Provider → IO (Option Credentials))
     (fromKeyFile : Provider → IO (Except Error (Option Credentials)) :=
-      fun _ => pure (.ok none)) :
+      fun _ => pure (.ok none))
+    (keychainService : String := keychainService) :
     IO (Except Error Credentials) := do
   let profile ← awsProfile
   -- The key-file source is tried first, matching the order
@@ -381,7 +386,7 @@ def loadWith (paths : Paths) (provider : Provider)
   | some c => return .ok c
   | none   =>
     return .error {
-        klass := .unbound, message := noCredentialsMessage paths provider profile }
+        klass := .unbound, message := noCredentialsMessage paths provider profile keychainService }
 
 /-- Try the file and environment sources, skipping the OS credential store.
 

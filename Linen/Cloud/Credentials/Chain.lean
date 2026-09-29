@@ -56,12 +56,16 @@ open Cloud
     expired key surfaces as itself. Every other source declines silently, since
     "no config file" and "no keychain entry" are ordinary states. -/
 def loadFrom (t : Transport) (paths : Paths) (provider : Provider)
-    (region : String := "") : IO (Except Error Credentials) :=
-  Cloud.loadWith paths provider Keychain.forProvider (Gcp.keyFileSource t region)
+    (region : String := "") (service : String := keychainService) :
+    IO (Except Error Credentials) :=
+  Cloud.loadWith paths provider (Keychain.forProvider · service) (Gcp.keyFileSource t region)
+    (keychainService := service)
 
-/-- The complete chain, from the conventional file locations. -/
-def load (t : Transport) (provider : Provider) (region : String := "") :
-    IO (Except Error Credentials) := do
-  loadFrom t (← Paths.default) provider region
+/-- The complete chain, from the conventional file locations. `service` is the
+    keychain service the store source reads, and the one the not-found message
+    names. -/
+def load (t : Transport) (provider : Provider) (region : String := "")
+    (service : String := keychainService) : IO (Except Error Credentials) := do
+  loadFrom t (← Paths.default) provider region service
 
 end Cloud.Credentials.Chain

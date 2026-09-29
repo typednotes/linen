@@ -109,6 +109,11 @@ def googleDenied : String :=
 #guard classify 400 "com.amazonaws.sqs#QueueDoesNotExist" == .notFound
 #guard classify 404 "not_found" == .notFound
 #guard classify 404 "NOT_FOUND" == .notFound
+#guard classify 404 "NoSuchEntity" == .notFound
+#guard classify 404 "DBInstanceNotFound" == .notFound
+#guard classify 400 "InvalidGroup.NotFound" == .notFound
+#guard classify 400 "InvalidInstanceID.NotFound" == .notFound
+#guard classify 400 "RepositoryNotFoundException" == .notFound
 
 #guard classify 403 "AccessDenied" == .denied
 #guard classify 403 "PERMISSION_DENIED" == .denied
