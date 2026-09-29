@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen LinenTest --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen LinenTest --include='*.lean' | wc -l -->
-  <strong>796 modules</strong> · <strong>492 compile-time theorems</strong> · <strong>11578 <code>#guard</code> checks</strong>
+  <strong>796 modules</strong> · <strong>492 compile-time theorems</strong> · <strong>11584 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview

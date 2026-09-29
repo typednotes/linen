@@ -153,16 +153,32 @@ private def cpuSeconds : IO Float := do
 
 /-! ### Timeouts -/
 
+/-- Millisecond-resolution timers may resolve less than one millisecond
+    before a nanosecond-measured duration reaches the requested integer.
+    Round up only for the lower bound; keep the exact upper bound so late
+    wakeups and the old 100 ms sweep are still caught. -/
+private def inTimerRange (elapsedNanos : Nat) (minMillis maxMillis : Nat) : Bool :=
+  (elapsedNanos + 999999) / 1000000 ≥ minMillis && elapsedNanos < maxMillis * 1000000
+
+-- A sub-millisecond rounding difference is permitted, not an entire
+-- millisecond or a widened upper bound.
+#guard inTimerRange 119500000 120 145
+#guard inTimerRange 120000000 120 145
+#guard !inTimerRange 119000000 120 145
+#guard !inTimerRange 118999999 120 145
+#guard inTimerRange 144999999 120 145
+#guard !inTimerRange 145000000 120 145
+
 #eval show IO Unit from do
   let (client, conn, server) ← socketPair
   let disp ← EventDispatcher.create
   let tok ← Std.CancellationToken.new
   -- Nothing to read: the Green wait times out, near its deadline.
-  let t0 ← IO.monoMsNow
+  let t0 ← IO.monoNanosNow
   let ready ← Green.block (disp.waitReadableFor conn 300) tok
-  let waited := (← IO.monoMsNow) - t0
-  unless !ready && waited ≥ 300 && waited < 300 + 50 do
-    throw (IO.userError s!"waitReadableFor: ready={ready} after {waited} ms")
+  let elapsed := (← IO.monoNanosNow) - t0
+  unless !ready && inTimerRange elapsed 300 350 do
+    throw (IO.userError s!"waitReadableFor: ready={ready} after {elapsed} ns")
   -- The IO form, likewise; then with data, it is ready at once.
   unless !(← disp.awaitReadableFor conn 200) do throw (IO.userError "awaitReadableFor timed out?")
   Blocking.sendAll client "x".toUTF8
@@ -202,9 +218,9 @@ private def cpuSeconds : IO Float := do
   for ms in [5, 20, 120] do
     let t0 ← IO.monoNanosNow
     let ready ← Green.block (disp.waitReadableFor conn ms) tok
-    let waited := ((← IO.monoNanosNow) - t0) / 1000000
-    unless !ready && waited ≥ ms && waited < ms + 25 do
-      throw (IO.userError s!"a {ms} ms wait timed out after {waited} ms (ready={ready})")
+    let elapsed := (← IO.monoNanosNow) - t0
+    unless !ready && inTimerRange elapsed ms (ms + 25) do
+      throw (IO.userError s!"a {ms} ms wait timed out after {elapsed} ns (ready={ready})")
   disp.shutdown
   for s in [client, conn] do let _ ← close s
   let _ ← close server
@@ -259,11 +275,11 @@ private def cpuSeconds : IO Float := do
 -- in about 300 ms. With `IO.sleep` they would queue behind each other.
 #eval show IO Unit from do
   let tok ← Std.CancellationToken.new
-  let t0 ← IO.monoMsNow
+  let t0 ← IO.monoNanosNow
   let sleepers ← (List.range 200).mapM fun _ => Green.run (Green.sleep 300) tok
   for t in sleepers do let _ ← IO.wait t
-  let elapsed := (← IO.monoMsNow) - t0
-  unless elapsed ≥ 300 && elapsed < 1000 do
-    throw (IO.userError s!"200 concurrent 300 ms sleeps took {elapsed} ms")
+  let elapsed := (← IO.monoNanosNow) - t0
+  unless inTimerRange elapsed 300 1000 do
+    throw (IO.userError s!"200 concurrent 300 ms sleeps took {elapsed} ns")
 
 end Tests.Network.Socket.EventDispatcher

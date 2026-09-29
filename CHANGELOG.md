@@ -7,6 +7,16 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-09-29
+
+### Fixed
+
+- **Timer test rounding matches libuv's millisecond resolution.** A 120 ms
+  timer could be measured as 119 ms after flooring a nanosecond duration,
+  failing release CI despite being within one timer tick. Lower bounds now
+  allow only a sub-millisecond difference; the existing upper bounds remain
+  unchanged, including the check that catches the old 100 ms sweep.
+
 ## [1.9.1] - 2026-09-29
 
 ### Fixed
