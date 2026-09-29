@@ -18,7 +18,10 @@ def pkgConfigFlags (args : Array String) : IO (Array String) := do
   try
     let out ← IO.Process.output { cmd := "pkg-config", args }
     if out.exitCode != 0 then return #[]
-    let normalized := (out.stdout.replace "\n" " ").replace "\t" " "
+    -- Whitespace folded to spaces with a `Char` predicate rather than a
+    -- `replace` of escape sequences: this block is also embedded in string
+    -- literals (a scaffolder's copy), and a backslash does not survive that.
+    let normalized := out.stdout.map fun c => if c.isWhitespace then ' ' else c
     return (normalized.splitOn " ").filter (· != "") |>.toArray
   catch _ => return #[]
 
