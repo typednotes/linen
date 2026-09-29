@@ -198,6 +198,12 @@ def googleDenied : String :=
 -- ── `describeError` end to end ───────────────────────────────────────────────────
 
 #guard (describeError 404 s3NoSuchKey).klass == .notFound
+-- Scaleway's `details` survive into the message: the generic "invalid
+-- argument(s)" says nothing about which argument.
+#guard (describeError 400 ("{\"type\":\"invalid_arguments\",\"message\":\"invalid argument(s)\"," ++
+  "\"details\":[{\"argument_name\":\"private_network_id\",\"reason\":\"constraint\"," ++
+  "\"help_message\":\"a Private Network is mandatory for this cluster type\"}]}")).message
+  == "invalid argument(s) (private_network_id: a Private Network is mandatory for this cluster type)"
 -- EC2 nests its error under `<Response><Errors>`, request id beside it, and
 -- answers a missing group with a 400: the code still decides.
 #guard (describeError 400 ("<Response><Errors><Error><Code>InvalidGroup.NotFound</Code>" ++

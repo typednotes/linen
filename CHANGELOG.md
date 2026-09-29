@@ -57,6 +57,9 @@ fallback — and the error taxonomy split its move onto `Linen.Cloud` needed.
   `keychainService`, `"linen"`), so a tool that stored credentials under its
   own name keeps finding them — and its not-found message names the right
   service. Asked for by `infra`, whose entries live under `"infra"`.
+- **A Scaleway error keeps its `details`**: `describeError` appends each
+  `argument_name: help_message` to the message, so "invalid argument(s)" says
+  which argument and why.
 - **`parseXmlError` reads EC2's `<Response><Errors><Error>` envelope**, and
   a request id beside the error element — so an EC2 failure keeps its code
   (and classifies) instead of falling back to the raw body.

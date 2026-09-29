@@ -348,7 +348,18 @@ def parseJsonError (body : String) : Option (String × String) :=
     let code :=
       (get "__type").orElse fun _ =>
         (get "type").orElse fun _ => (get "code").orElse fun _ => get "Code"
-    let msg := (get "message").orElse fun _ => get "Message"
+    -- Scaleway names the offending arguments in `details`
+    -- (`[{"argument_name": …, "help_message": …}]`) under a generic
+    -- "invalid argument(s)"; the detail is the diagnosis, so it is kept.
+    let details : List String :=
+      match fields.find? (·.1 == "details") with
+      | some (_, .array ds) => ds.toList.filterMap fun d =>
+          match d.lookup "argument_name", d.lookup "help_message" with
+          | some (.string a), some (.string h) => some s!"{a}: {h}"
+          | _, _ => none
+      | _ => []
+    let msg := ((get "message").orElse fun _ => get "Message").map fun m =>
+      if details.isEmpty then m else s!"{m} ({"; ".intercalate details})"
     -- OAuth2 (RFC 6749): `error` is a *string*, with the prose in
     -- `error_description`. Same field name as Google's nested object, so the
     -- value's type is what distinguishes them.
