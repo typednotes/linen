@@ -40,6 +40,25 @@ does not have them.
   (OpenSSL may already hold decrypted bytes the socket will not signal),
   waiting in whichever direction OpenSSL asks. Tested on non-blocking
   sockets at both ends, with multi-MiB transfers forcing `wantWrite`.
+- **HTTP/2 over TLS.** `Network.HTTP2.serve`, a new server connection
+  engine: multiplexed streams each handled concurrently, request bodies
+  delivered as the handler reads them, responses split to the peer's frame
+  size and paced by flow control in both directions, and RFC 9113's
+  validation and error handling — stream resets and GOAWAY, with
+  rapid-reset (CVE-2023-44487) protection. It passes all 146 cases of the
+  h2spec conformance suite, and is tested against curl (nghttp2).
+  `Network.WebApp.Server.HTTP2` (`serveHttp2`) serves a WebApp application
+  over it, and `Server.TLS` offers `h2` by ALPN (`TLSSettings.http2`, on by
+  default) in both of its modes.
+- **ALPN in the FFI**: `Network.TLS.setServerAlpn` (a server's protocol
+  list, in its order of preference), `setClientAlpn`, `alpnWire`.
+- **`HPACK.encodeHeadersStatic`** — encoding with no dynamic table, valid
+  whatever SETTINGS_HEADER_TABLE_SIZE the peer advertised.
+- **Timers.** Dispatcher deadlines are libuv timers
+  (`Std.Internal.UV.Timer`): a timeout is honoured to within about a
+  millisecond, and costs nothing while idle — the 100 ms sweep is gone.
+  `Green.sleep` suspends a green thread without holding a pool thread.
+- **`Server.acceptLoopUntil`** and `forkConnection`.
 - **`Server.TLS.runTLSEventLoop`** (`runTLSSocketEL`, `tlsConnectionEL`) —
   HTTPS on green threads: peek, handshake and head reads suspend the green
   thread, so idle and slow TLS connections hold no pool thread.
@@ -92,6 +111,15 @@ does not have them.
 
 ### Removed
 
+- **The old `Network.HTTP2.Server` internals**: `ConnectionState`,
+  `processSettings`, `processWindowUpdateFrame`, `processPing`,
+  `sendResponse`, `sendGoaway`, `sendRstStream`. The handler they served
+  answered a request as soon as its headers arrived (bodies were never
+  delivered), handled streams one at a time, sent a whole body as one DATA
+  frame whatever the peer's frame size and windows, never returned receive
+  window (an upload stalled after 64 KiB), and checked incoming frame sizes
+  against the peer's settings. `runHTTP2Connection` keeps its signature, on
+  the new engine.
 - **`Network.TLS.acceptSocketNB`, `connectSocketNB`, `connectSocketRaw`.**
   The `*NB` pair created a fresh `SSL` per call and freed it on every
   would-block, so a handshake needing a second read could never complete;
@@ -109,6 +137,20 @@ does not have them.
 
 ### Fixed
 
+- **HPACK**: table entry sizes are counted in octets, not characters (any
+  non-ASCII field desynchronised the table from the peer's); a string that
+  does not decode — bad Huffman padding, an encoded EOS, invalid UTF-8 — is
+  an error, where its raw bytes or `""` were silently substituted; a
+  dynamic table size update is refused above the advertised limit or after
+  the block's first field.
+- **Blocking-mode servers no longer starve on idle connections.** Each
+  connection ran on a pool thread (`forkIO`) and then waited in `poll`,
+  which the pool does not compensate for: 64 idle clients kept a new
+  request waiting 30 s, until one of them timed out. Each connection now
+  has a dedicated thread (`forkConnection`), in `runSettings` and `runTLS`.
+- **TLS server contexts use AEAD cipher suites with ephemeral key exchange
+  for TLS 1.2** (Mozilla's "intermediate" list, what RFC 9113 §9.2.2
+  requires of HTTP/2) and refuse renegotiation.
 - **The HTTPS server works.** `Server.TLS.runTLS` performed the handshake and
   then parsed requests from, and wrote responses to, the *raw socket*,
   bypassing the TLS session — no HTTPS request could succeed, and no test

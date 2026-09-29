@@ -518,10 +518,14 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   with `increment` (WINDOW_UPDATE, zero/overflow checks), `consume`/`available`,
   and signed `adjust` for SETTINGS changes; plus `ConnectionFlowControl` and
   per-stream window updates.
-- `Network.HTTP2.Server` — the server-side connection handler: preface
-  validation, SETTINGS/PING/WINDOW_UPDATE/GOAWAY handling, HEADERS + CONTINUATION
-  assembly and HPACK decode, response encoding (`sendResponse`), and the
-  `runHTTP2Connection` frame loop (driven by EOF/GOAWAY — no fuel counter).
+- `Network.HTTP2.Server` — the HTTP/2 server connection (`serve`) over any
+  byte transport: multiplexed streams each handled concurrently, request
+  bodies delivered as the handler reads them, responses split to the peer's
+  frame size and paced by flow control both ways (receive window returned as
+  bodies are consumed), and RFC 9113's validation and error handling
+  (stream resets, GOAWAY; rapid-reset protection). Passes all 146 cases of
+  the h2spec conformance suite. `runHTTP2Connection` remains for the earlier
+  whole-body API.
 
 ### `Network.HTTP3` — HTTP/3 over QUIC (RFC 9114)
 
@@ -1627,11 +1631,11 @@ convention.
   `Network.QUIC` + `Network.HTTP3`; TLS 1.3 is mandatory, so `certFile`/
   `keyFile` are required settings (not `Option`).
 - `Network.WebApp.Server.TLS` — HTTPS support via `Network.TLS.Context`
-  (OpenSSL FFI): one thread per connection, requests read and responses
-  written through the TLS session, by the same `serveHttp` loop; a thread per
-  connection (`runTLS`, `runTLSSocket`) or green threads
-  (`runTLSEventLoop`, `runTLSSocketEL`). HTTP/1.1 only
-  (no ALPN answer, so clients fall back from `h2`). Plain HTTP on the TLS
+  (OpenSSL FFI): requests read and responses written through the TLS
+  session; a thread per connection (`runTLS`, `runTLSSocket`) or green
+  threads (`runTLSEventLoop`, `runTLSSocketEL`). ALPN offers `h2` then
+  `http/1.1` (`TLSSettings.http2`): HTTP/2 connections are served by
+  `serveHttp2`, others by the HTTP/1.1 loop. Plain HTTP on the TLS
   port is told apart by peeking at the first byte, and answered per
   `OnInsecure`: `426 Upgrade Required` (`denyInsecure`) or served
   (`allowInsecure`), as warp-tls does.
@@ -2446,7 +2450,7 @@ the secrets, never their values.
 | `Linen.Network.HTTP2.Types` | HTTP/2 connection types: `ConnectionError`/`StreamError`, `HeaderBlockState` (CONTINUATION assembly), `HTTP2Result` |
 | `Linen.Network.HTTP2.Stream` | HTTP/2 stream lifecycle: `StreamState` machine, `StreamInfo`, `StreamTable` (`Std.HashMap`) with open/update/priority/active-count |
 | `Linen.Network.HTTP2.FlowControl` | HTTP/2 flow control: `FlowWindow` (`increment`/`consume`/`available`/signed `adjust`), `ConnectionFlowControl`, stream window updates |
-| `Linen.Network.HTTP2.Server` | HTTP/2 server connection handler: preface/SETTINGS/PING/WINDOW_UPDATE/GOAWAY, HEADERS+CONTINUATION+HPACK, `runHTTP2Connection` |
+| `Linen.Network.HTTP2.Server` | HTTP/2 server connection (`serve`): concurrent streams, streamed bodies, two-level flow control, RFC 9113 validation (h2spec: 146/146) |
 | `Linen.Network.HTTP3.Error` | HTTP/3 (RFC 9114 §8.1) `H3Error` codes with `toCode`/`fromCode` and round-trip laws |
 | `Linen.Network.HTTP3.Frame` | HTTP/3 framing: `FrameType`, QUIC varint codec (RFC 9000 §16), `Frame.encode`/`decode`, `H3Settings` |
 | `Linen.Network.HTTP3.QPACK.Table` | QPACK static table (RFC 9204 App. A, 99 entries, 0-indexed): `staticLookup`/`staticFind` |
@@ -2754,7 +2758,8 @@ the secrets, never their values.
 | `Linen.Network.WebApp.Server.WithApplication` | `withApplication`/`withApplicationSettings`: run a server for the duration of an `IO` action |
 | `Linen.Network.WebApp.Server` | the package aggregator plus `run`, a one-line server entry point |
 | `Linen.Network.WebApp.Server.QUIC` | bridges `Network.WebApp` to HTTP/3 over `Network.QUIC` |
-| `Linen.Network.WebApp.Server.TLS` | HTTPS through the session, thread-per-connection (`runTLS`) or green threads (`runTLSEventLoop`); HTTP/1.1 only; `OnInsecure` by first-byte peek |
+| `Linen.Network.WebApp.Server.HTTP2` | serving a `Network.WebApp.Application` over HTTP/2 (`serveHttp2`): request mapping, every `Response` kind on a stream |
+| `Linen.Network.WebApp.Server.TLS` | HTTPS through the session, thread-per-connection (`runTLS`) or green threads (`runTLSEventLoop`); HTTP/2 or HTTP/1.1 by ALPN; `OnInsecure` by first-byte peek |
 | `Linen.Network.WebApp.Server.TLS.Internal` | re-exports `Server.TLS` for advanced use |
 | `Linen.Network.WebApp.Server.WebSockets` | upgrades `Network.WebApp` requests to `Network.WebSockets` connections via `responseRaw` |
 | `Linen.Network.WebSockets.Types` | `Opcode`/`CloseCode`/`ConnectionState`/`ConnectionOptions`/`Connection`/`PendingConnection`/`ServerApp` |

@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen LinenTest --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen LinenTest --include='*.lean' | wc -l -->
-  <strong>794 modules</strong> · <strong>492 compile-time theorems</strong> · <strong>11505 <code>#guard</code> checks</strong>
+  <strong>795 modules</strong> · <strong>492 compile-time theorems</strong> · <strong>11545 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -118,13 +118,15 @@ for the full per-module feature list and module table.
   day/UTC-instant/time-of-day types are `Std.Time.Date.PlainDate`/
   `Std.Time.Duration`/`Std.Time.Zoned` underneath.
 - **`Network.HTTP` / `HTTP2` / `HTTP3` / `Socket` / `TLS` / `QUIC` /
-  `WebSockets`** — a network stack: HTTP/1.1 client & wire types,
-  HTTP/2 framing + HPACK, HTTP/3 + QPACK wire formats, POSIX sockets with a
-  green-thread event dispatcher, TLS 1.2/1.3 over OpenSSL, and WebSockets
-  (client and server). QUIC connections are **not implemented**:
+  `WebSockets`** — a network stack: HTTP/1.1 client & wire types, an
+  HTTP/2 server (multiplexed, flow-controlled; passes all 146 h2spec
+  conformance cases) with HPACK, HTTP/3 + QPACK wire formats, POSIX sockets
+  with a green-thread event dispatcher and millisecond timers, TLS 1.2/1.3
+  over OpenSSL with ALPN, and WebSockets (client and server). QUIC connections are **not implemented**:
   `Network.QUIC.Client`/`Server` are stubs that throw.
 - **`Network.WebApp` / `Network.WebApp.Server`** — a WAI-style application
-  interface plus an HTTP/1.1 server implementing it, over plain TCP or TLS.
+  interface plus a server implementing it: HTTP/1.1 over plain TCP or TLS,
+  and HTTP/2 over TLS (chosen by ALPN).
 - **`Web.Html` / `Web.Css`** — typed HTML5/CSS construction where illegal
   nesting and property/value mismatches are compile-time errors, with `elem!`
   and `rule!` macro sugar; `<script>`/`<style>` bodies carry a proof that they
@@ -421,7 +423,7 @@ you imported only pure-Lean modules.
 
 ## Modules
 
-See **[docs/modules.md](docs/modules.md)** for the full module table (all 794 modules).
+See **[docs/modules.md](docs/modules.md)** for the full module table (all 795 modules).
 
 ## Build & Test
 
