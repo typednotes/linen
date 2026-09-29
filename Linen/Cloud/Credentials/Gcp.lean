@@ -126,6 +126,34 @@ an authorized-user credential cannot mint a token this way" }
     , tokenUri     := (str "token_uri").getD
         ("https://" ++ Gcp.oauthTokenHost ++ Gcp.oauthTokenPath) }
 
+/-- Credential files that are perfectly valid, and **not a service-account
+    key** — so not this source's to read.
+
+    `GOOGLE_APPLICATION_CREDENTIALS` is a general "where are my Google
+    credentials" variable, and several kinds of file live under it. The one
+    that matters most is `external_account`: Workload Identity Federation
+    writes it, and `google-github-actions/auth` points the variable at it on
+    every federated CI run. Meeting one is not an error — federation is in
+    use, the token arrives by another route (`gcloud`, or
+    `GOOGLE_OAUTH_ACCESS_TOKEN`), and this source declines so the chain moves
+    on. Treating it as a failure broke the sibling `infra`'s GCP CI outright:
+    the file existed, the type was wrong, it threw, and the token two sources
+    later was never reached. Moved from `infra` (`GcpAuth.foreignTypes`). -/
+def foreignTypes : List String :=
+  [ "external_account"                  -- Workload Identity Federation
+  , "external_account_authorized_user"  -- federated user credentials
+  , "impersonated_service_account"      -- impersonation chain
+  , "authorized_user"                   -- `gcloud auth application-default login`
+  , "gdch_service_account" ]            -- Google Distributed Cloud Hosted
+
+/-- The `type` a Google credentials file declares, if it is a JSON object with
+    one. Separate from `parseKeyFile`, because "is this mine to read?" wants a
+    different answer on failure than "is this a valid key?". -/
+def declaredType (text : String) : Option String :=
+  match Data.Json.Decode.decode text with
+  | .ok v => (v.lookup "type").bind Data.Json.Value.asString
+  | .error _ => none
+
 /-- Read and parse the key file named by `GOOGLE_APPLICATION_CREDENTIALS`.
 
     `none` when the variable is unset or empty — a source with nothing to
@@ -144,7 +172,12 @@ def fromKeyFileEnv : IO (Except Error (Option ServiceAccount)) := do
     catch e => pure (Except.error (Error.transport s!"reading '{path}': {toString e}"))
   match text with
   | .error e => return .error e
-  | .ok text => return (parseKeyFile text).map some
+  | .ok text =>
+    -- A federated or user credential file is someone else's: decline, so the
+    -- chain reaches the source that has the token. See `foreignTypes`.
+    if let some t := declaredType text then
+      if foreignTypes.contains t then return .ok none
+    return (parseKeyFile text).map some
 
 -- ── The assertion ───────────────────────────────────────────────────────────
 

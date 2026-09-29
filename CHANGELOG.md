@@ -57,6 +57,14 @@ fallback — and the error taxonomy split its move onto `Linen.Cloud` needed.
   `keychainService`, `"linen"`), so a tool that stored credentials under its
   own name keeps finding them — and its not-found message names the right
   service. Asked for by `infra`, whose entries live under `"infra"`.
+- **`parseXmlError` reads EC2's `<Response><Errors><Error>` envelope**, and
+  a request id beside the error element — so an EC2 failure keeps its code
+  (and classifies) instead of falling back to the raw body.
+- **The GCP key-file source declines a federated or user credential file**
+  (`Credentials.Gcp.foreignTypes`, `declaredType`): `external_account`, which
+  `google-github-actions/auth` points `GOOGLE_APPLICATION_CREDENTIALS` at, is
+  not a service-account key, and failing on it hid the token the next source
+  had. Moved from `infra` (`GcpAuth.foreignTypes`).
 - **More not-found codes**: `NoSuchEntity` (IAM), `DBInstanceNotFound` (RDS),
   `RepositoryNotFoundException` (ECR) and EC2's `InvalidAMIID.NotFound`,
   `InvalidGroup.NotFound`, `InvalidInstanceID.NotFound` — which EC2 answers

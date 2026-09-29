@@ -254,4 +254,14 @@ def minted : Token := { accessToken := "ya29.secret", expiresAt := 10 }
   | .error e => return e.klass == .invalid && (← log.get).isEmpty
   | .ok _    => return false
 
+
+-- A federated credential file is recognised as someone else's business: the
+-- key-file source declines for it rather than failing the chain.
+#guard declaredType "{\"type\":\"external_account\",\"audience\":\"//iam.googleapis.com/x\"}"
+  = some "external_account"
+#guard foreignTypes.contains "external_account"
+#guard foreignTypes.contains "authorized_user"
+#guard !foreignTypes.contains "service_account"
+#guard declaredType "not json" = none
+
 end Tests.Cloud.Credentials.Gcp

@@ -314,18 +314,24 @@ def classifyMessage (status : Nat) (code message : String) : Class :=
 
 /-- Read an AWS/S3-style `<Error><Code/><Message/></Error>` document.
 
-    Accepts the element at the root or one level in, because some services wrap
-    it. Returns the code, the message and the request id, the last under either
-    of the two spellings AWS uses. -/
+    Accepts the element at the root (S3), one level in (the Query services'
+    `<ErrorResponse><Error>`), or under `<Response><Errors>` — EC2's shape,
+    which carries its request id beside `Errors` rather than inside `Error`.
+    Returns the code, the message and the request id, the last under either of
+    the two spellings AWS uses, from the error element or its envelope. -/
 def parseXmlError (body : String) : Option (String × String × Option String) :=
   match Text.XML.parse body with
   | .error _ => none
   | .ok root =>
-    let err := if root.name.local' == "Error" then some root else root.child "Error"
+    let err :=
+      if root.name.local' == "Error" then some root
+      else (root.child "Error").orElse fun _ => (root.child "Errors").bind (·.child "Error")
+    let rid (el : Text.XML.Element) : Option String :=
+      (el.childText "RequestId").orElse fun _ => el.childText "RequestID"
     err.map fun e =>
       ( (e.childText "Code").getD ""
       , (e.childText "Message").getD ""
-      , (e.childText "RequestId").orElse fun _ => e.childText "RequestID" )
+      , (rid e).orElse fun _ => rid root )
 
 /-- Read a JSON error body in any of the three JSON dialects.
 

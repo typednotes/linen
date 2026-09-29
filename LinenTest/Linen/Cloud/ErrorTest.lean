@@ -198,6 +198,13 @@ def googleDenied : String :=
 -- ── `describeError` end to end ───────────────────────────────────────────────────
 
 #guard (describeError 404 s3NoSuchKey).klass == .notFound
+-- EC2 nests its error under `<Response><Errors>`, request id beside it, and
+-- answers a missing group with a 400: the code still decides.
+#guard (describeError 400 ("<Response><Errors><Error><Code>InvalidGroup.NotFound</Code>" ++
+  "<Message>The security group 'x' does not exist</Message></Error></Errors>" ++
+  "<RequestID>ea96</RequestID></Response>")).klass == .notFound
+#guard (parseXmlError ("<Response><Errors><Error><Code>C</Code><Message>M</Message></Error>" ++
+  "</Errors><RequestID>R</RequestID></Response>")) == some ("C", "M", some "R")
 #guard (describeError 404 s3NoSuchKey).code == "NoSuchKey"
 #guard (describeError 404 s3NoSuchKey).requestId == some "656c76696e6727732072657175657374"
 
