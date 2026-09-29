@@ -109,6 +109,34 @@ private def sample : Value :=
 #guard ((FromJSON.parseJSON (.array #[.number 1, .number 2]) : Except String (Array Int)) = .ok #[1, 2])
 #guard ((FromJSON.parseJSON (.array #[.number 1, .string "x"]) : Except String (List Int)).toOption = none)
 
+-- ── Object field update ───────────────────────────────────────────────
+
+-- Every other field survives, in its order: the property a read-modify-write
+-- of a whole policy object rests on.
+#guard (Value.object [("a", .string "1"), ("b", .string "2"), ("c", .null)]).setField "b" (.string "9")
+     = .object [("a", .string "1"), ("b", .string "9"), ("c", .null)]
+-- Absent: appended at the end.
+#guard (Value.object [("a", .string "1")]).setField "b" (.string "2")
+     = .object [("a", .string "1"), ("b", .string "2")]
+-- Not an object: unchanged.
+#guard (Value.array #[.null]).setField "b" (.string "2") = .array #[.null]
+-- A rewritten field is what `lookup` then reads.
+#guard ((Value.object [("k", .number 1)]).setField "k" (.number 2)).lookup "k" = some (.number 2)
+
+-- ── Lenient scalar reads ──────────────────────────────────────────────
+
+#guard (Value.object [("id", .string "x")]).lookupText "id" = some "x"
+#guard (Value.object [("id", .bool true)]).lookupText "id" = some "true"
+#guard ((Value.object [("id", .number 3)]).lookupText "id").isSome
+#guard (Value.object [("id", .null)]).lookupText "id" = none
+#guard (Value.object []).lookupText "id" = none
+#guard (Value.object [("n", .number 3)]).lookupNat "n" = some 3
+#guard (Value.object [("n", .string "3")]).lookupNat "n" = some 3
+#guard (Value.object [("n", .string "x")]).lookupNat "n" = none
+#guard (Value.object [("b", .string "true")]).lookupBool "b" = some true
+#guard (Value.object [("b", .bool false)]).lookupBool "b" = some false
+#guard (Value.object [("b", .string "yes")]).lookupBool "b" = none
+
 -- ── Construction helpers ──────────────────────────────────────────────
 
 #guard object [("a", .number 1)] = Value.object [("a", .number 1)]

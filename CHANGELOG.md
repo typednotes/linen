@@ -7,6 +7,17 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+### Added
+
+- **`Data.Json.Value.setField`** — rewrite one field of an object, keeping
+  every other field and their order; appends when absent. Moved from the
+  siblings `infra` (`JsonRead.setField`) and `liaison`
+  (`Egress/Credential.lean`), which each carried a copy; their halves of the
+  move land once they pin a release carrying it.
+- **`Data.Json.Value.lookupText` / `lookupNat` / `lookupBool`** — lenient
+  scalar reads (a quoted number is a number, an unquoted one is text), moved
+  from `infra`'s `JsonRead.stringField` / `natField` / `boolField`.
+
 ## [1.7.0] - 2026-09-28
 
 Building blocks moved from the sibling services `lode` and `lun`, which

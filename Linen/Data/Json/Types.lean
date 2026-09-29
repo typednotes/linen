@@ -80,6 +80,61 @@ def getFieldOpt (obj : Value) (key : String) : Except String (Option Value) :=
   | some v => .ok (some v)
   | none => .ok none
 
+-- ── Object field update ───────────────────────────────────────────────
+
+/-- Rewrite one field of a JSON object, leaving every other field — and their
+    order — exactly as they were. Appends the field if it is absent; a value
+    that is not an object is returned unchanged.
+
+    The operation a read-modify-write needs when the object round-trips
+    through an API that takes back *the whole thing it handed out*: Google's
+    `setIamPolicy` takes the policy with its `etag`, `auditConfigs` and any
+    field the caller has never heard of, and a rewrite that reconstructs the
+    object from the fields it understands deletes the rest. Moved from the
+    sibling `infra` (`Infra/Providers/JsonRead.lean`) and `liaison`
+    (`Liaison/Egress/Credential.lean`), which each carried a copy.
+    $$\text{setField} : \text{Value} \to \text{String} \to \text{Value} \to \text{Value}$$ -/
+def setField (obj : Value) (key : String) (v : Value) : Value :=
+  match obj with
+  | .object fields =>
+    if fields.any (·.1 == key) then
+      .object (fields.map fun f => if f.1 == key then (key, v) else f)
+    else
+      .object (fields ++ [(key, v)])
+  | other => other
+
+-- ── Lenient scalar reads ──────────────────────────────────────────────
+
+/-- A field as text, rendering a number or a boolean rather than rejecting it.
+
+    Lenient on purpose: cloud APIs are inconsistent about whether a number or
+    a boolean arrives quoted, and a caller reading an identifier should not
+    have to care. `none` for a missing key, a non-object, or a field holding
+    an object, an array or `null`. -/
+def lookupText (key : String) (obj : Value) : Option String :=
+  match obj.lookup key with
+  | some (.string s) => some s
+  | some (.number n) => some (toString n)
+  | some (.bool b)   => some (if b then "true" else "false")
+  | _                => none
+
+/-- A field as a natural number, accepting both `3` and `"3"`. A negative or
+    fractional number saturates the way `Float.toUInt64` does. -/
+def lookupNat (key : String) (obj : Value) : Option Nat :=
+  match obj.lookup key with
+  | some (.number n) => some n.toUInt64.toNat
+  | some (.string s) => s.toNat?
+  | _                => none
+
+/-- A field as a boolean, accepting both `true` and `"true"`. -/
+def lookupBool (key : String) (obj : Value) : Option Bool :=
+  match obj.lookup key with
+  | some (.bool b)   => some b
+  | some (.string s) => if s == "true" then some true
+                        else if s == "false" then some false
+                        else none
+  | _                => none
+
 /-- A successful `List.lookup` witnesses membership of the `(key, value)` pair. -/
 private theorem _list_lookup_mem {α : Type} {key : String} {fields : List (String × α)} {v : α}
     (h : fields.lookup key = some v) : (key, v) ∈ fields := by
