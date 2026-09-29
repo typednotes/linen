@@ -136,6 +136,14 @@ def writable : EventType := ⟨2⟩
 /-- Error/hangup event flag (bit 2). -/
 def error : EventType := ⟨4⟩
 
+/-- Registration flag (bit 3), not an event: arm the registration for **one**
+    notification (`EV_ONESHOT` / `EPOLLONESHOT`), after which it must be
+    re-added. Without it registrations are level-triggered and stay armed, so
+    a socket that stays writable (almost always) or readable reports itself
+    on every wait. With `epoll`, one-shot re-arming replaces the fd's whole
+    mask, so pass every direction still wanted. -/
+def oneshot : EventType := ⟨8⟩
+
 /-- Combine event flags. -/
 def merge (a b : EventType) : EventType := ⟨a.flags ||| b.flags⟩
 
@@ -146,6 +154,7 @@ instance : OrOp EventType where
 def hasReadable (e : EventType) : Bool := (e.flags &&& 1) != 0
 def hasWritable (e : EventType) : Bool := (e.flags &&& 2) != 0
 def hasError (e : EventType) : Bool := (e.flags &&& 4) != 0
+def hasOneshot (e : EventType) : Bool := (e.flags &&& 8) != 0
 
 end EventType
 

@@ -1248,6 +1248,7 @@ LEAN_EXPORT lean_obj_res linen_socket_get_fd(b_lean_obj_arg sock) {
 #define LINEN_EV_READABLE 1
 #define LINEN_EV_WRITABLE 2
 #define LINEN_EV_ERROR    4
+#define LINEN_EV_ONESHOT  8  /* registration flag: one notification, then re-add */
 
 /**
  * Create an event loop fd (kqueue on macOS, epoll on Linux)
@@ -1280,12 +1281,13 @@ LEAN_EXPORT lean_obj_res linen_event_loop_add(b_lean_obj_arg loop, b_lean_obj_ar
 #ifdef __APPLE__
     struct kevent changes[2];
     int nchanges = 0;
+    unsigned short kflags = EV_ADD | EV_ENABLE | ((events & LINEN_EV_ONESHOT) ? EV_ONESHOT : 0);
     if (events & LINEN_EV_READABLE) {
-        EV_SET(&changes[nchanges], (uintptr_t)socket_fd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);
+        EV_SET(&changes[nchanges], (uintptr_t)socket_fd, EVFILT_READ, kflags, 0, 0, NULL);
         nchanges++;
     }
     if (events & LINEN_EV_WRITABLE) {
-        EV_SET(&changes[nchanges], (uintptr_t)socket_fd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, NULL);
+        EV_SET(&changes[nchanges], (uintptr_t)socket_fd, EVFILT_WRITE, kflags, 0, 0, NULL);
         nchanges++;
     }
     if (nchanges == 0) {
@@ -1301,6 +1303,7 @@ LEAN_EXPORT lean_obj_res linen_event_loop_add(b_lean_obj_arg loop, b_lean_obj_ar
     ev.data.fd = socket_fd;
     if (events & LINEN_EV_READABLE) ev.events |= EPOLLIN;
     if (events & LINEN_EV_WRITABLE) ev.events |= EPOLLOUT;
+    if (events & LINEN_EV_ONESHOT) ev.events |= EPOLLONESHOT;
     if (epoll_ctl(loop_fd, EPOLL_CTL_ADD, socket_fd, &ev) < 0) {
         /* If already registered, try MOD */
         if (errno == EEXIST) {

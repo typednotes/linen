@@ -12,6 +12,7 @@
   available to the interpreter via `precompileModules`.
 -/
 import Linen.Network.Socket.EventDispatcher
+import Linen.Network.Socket.Blocking
 
 open Network.Socket Control.Concurrent.Green
 
@@ -65,5 +66,129 @@ example : EventDispatcher → Socket .connected → Green RecvOutcome :=
     let _ ← close server
   finally
     EventDispatcher.shutdown disp
+
+/-! ### One-shot registrations -/
+
+/-- A connected loopback pair: (client, server side). -/
+private def socketPair : IO (Socket .connected × Socket .connected × Socket .listening) := do
+  let server ← listenTCP "127.0.0.1" 0
+  let addr ← getSockName server
+  let client ← Blocking.connect (← socket .inet .stream) { host := "127.0.0.1", port := addr.port }
+  let (conn, _) ← Blocking.accept server
+  return (client, conn, server)
+
+-- At the FFI: a level-triggered registration of a writable socket reports it
+-- on every wait; a one-shot one reports it once, until re-added.
+#eval show IO Unit from do
+  let (client, conn, server) ← socketPair
+  let level ← EventLoop.create
+  FFI.eventLoopAdd level conn.raw EventType.writable.flags
+  let l1 ← EventLoop.wait level 50
+  let l2 ← EventLoop.wait level 50
+  EventLoop.close level
+  let once ← EventLoop.create
+  FFI.eventLoopAdd once conn.raw (EventType.writable ||| EventType.oneshot).flags
+  let o1 ← EventLoop.wait once 50
+  let o2 ← EventLoop.wait once 50
+  FFI.eventLoopAdd once conn.raw (EventType.writable ||| EventType.oneshot).flags
+  let o3 ← EventLoop.wait once 50
+  EventLoop.close once
+  for s in [client, conn] do let _ ← close s
+  let _ ← close server
+  unless l1.length == 1 && l2.length == 1 do
+    throw (IO.userError s!"level-triggered: {l1.length}, {l2.length} events")
+  unless o1.length == 1 && o2.isEmpty && o3.length == 1 do
+    throw (IO.userError s!"one-shot: {o1.length}, {o2.length}, {o3.length} events (want 1, 0, 1)")
+
+/-- This process's CPU time in seconds, from `ps` (`[[DD-]HH:]MM:SS[.ss]`). -/
+private def cpuSeconds : IO Float := do
+  let out ← IO.Process.output
+    { cmd := "ps", args := #["-o", "cputime=", "-p", toString (← IO.Process.getPID)] }
+  let fields := ((out.stdout.trimAscii.toString.splitOn "-").getLast!.splitOn ":")
+  let num (t : String) : Float :=
+    match t.trimAscii.toString.splitOn "." with
+    | [w, f] => w.toNat!.toFloat + f.toNat!.toFloat / (10.0 ^ f.length.toFloat)
+    | [w] => w.toNat!.toFloat
+    | _ => 0
+  return fields.foldl (fun acc t => acc * 60 + num t) 0
+
+-- The regression itself: after one `waitWritable` (and one `waitReadable`
+-- that leaves data unread), an idle dispatcher must not spin. Through 1.8.0
+-- this burnt a full core: 2.0 s of CPU in 2 s.
+#eval show IO Unit from do
+  let (client, conn, server) ← socketPair
+  let disp ← EventDispatcher.create (shards := 1)
+  let tok ← Std.CancellationToken.new
+  Green.block (disp.waitWritable conn) tok
+  Blocking.sendAll client "left unread".toUTF8
+  Green.block (disp.waitReadable conn) tok
+  let before ← cpuSeconds
+  IO.sleep 2000
+  let used := (← cpuSeconds) - before
+  disp.shutdown
+  for s in [client, conn] do let _ ← close s
+  let _ ← close server
+  if used > 1.0 then
+    throw (IO.userError s!"idle dispatcher used {used} s of CPU in 2 s")
+
+-- Waiting for both directions on one fd: a reader and a writer are both
+-- woken, whichever direction fires first (with epoll, arming the second
+-- registration used to replace the first's mask).
+#eval show IO Unit from do
+  let (client, conn, server) ← socketPair
+  let disp ← EventDispatcher.create (shards := 1)
+  let tok ← Std.CancellationToken.new
+  let reader ← Green.run (disp.waitReadable conn) tok
+  let writer ← Green.run (disp.waitWritable conn) tok
+  IO.sleep 100
+  Blocking.sendAll client "x".toUTF8
+  let mut done := false
+  for _ in [0:200] do
+    if (← IO.hasFinished reader) && (← IO.hasFinished writer) then done := true; break
+    IO.sleep 10
+  disp.shutdown
+  for s in [client, conn] do let _ ← close s
+  let _ ← close server
+  unless done do throw (IO.userError "a reader and a writer on one fd were not both woken")
+
+/-! ### Timeouts -/
+
+#eval show IO Unit from do
+  let (client, conn, server) ← socketPair
+  let disp ← EventDispatcher.create
+  let tok ← Std.CancellationToken.new
+  -- Nothing to read: the Green wait times out, near its deadline.
+  let t0 ← IO.monoMsNow
+  let ready ← Green.block (disp.waitReadableFor conn 300) tok
+  let waited := (← IO.monoMsNow) - t0
+  unless !ready && waited ≥ 300 && waited < 300 + 5 * EventDispatcher.sweepIntervalMillis do
+    throw (IO.userError s!"waitReadableFor: ready={ready} after {waited} ms")
+  -- The IO form, likewise; then with data, it is ready at once.
+  unless !(← disp.awaitReadableFor conn 200) do throw (IO.userError "awaitReadableFor timed out?")
+  Blocking.sendAll client "x".toUTF8
+  unless ← disp.awaitReadableFor conn 5000 do throw (IO.userError "awaitReadableFor with data")
+  unless ← Green.block (disp.waitWritableFor conn 5000) tok do
+    throw (IO.userError "waitWritableFor on a writable socket")
+  disp.shutdown
+  for s in [client, conn] do let _ ← close s
+  let _ ← close server
+
+-- Waiting from `IO` does not starve the pool: 64 body-style waits blocked in
+-- `awaitReadableFor` at once (more than the pool has workers), and a pool
+-- task that wakes them still runs.
+#eval show IO Unit from do
+  let (client, conn, server) ← socketPair
+  let disp ← EventDispatcher.create
+  let waiters ← (List.range 64).mapM fun _ => IO.asTask (disp.awaitReadableFor conn 10000)
+  IO.sleep 100
+  let waker ← IO.asTask (Blocking.sendAll client "wake".toUTF8)
+  let mut allReady := true
+  for w in waiters do
+    allReady := allReady && ((← IO.wait w).toOption.getD false)
+  let _ ← IO.wait waker
+  disp.shutdown
+  for s in [client, conn] do let _ ← close s
+  let _ ← close server
+  unless allReady do throw (IO.userError "some IO waiters were not woken")
 
 end Tests.Network.Socket.EventDispatcher
