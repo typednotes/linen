@@ -138,6 +138,12 @@ structure BufferedSource where
   source : ByteSource
   /-- Whatever is buffered, or else one `recv`; empty only at end of input. -/
   readSome : IO ByteArray
+  /-- Append bytes received some other way — e.g. on a green thread, which
+      is how the event-loop server buffers a request head without blocking a
+      pool thread — so that reads see them next. -/
+  feed : ByteArray → IO Unit
+  /-- The bytes buffered and not yet read. -/
+  unread : IO ByteArray
 
 /-- Buffer `recv` — which returns the next bytes available, empty at end of
     input — into a `ByteSource`. A line longer than `maxLineBytes` is an error,
@@ -190,9 +196,31 @@ def ByteSource.buffered (recv : IO ByteArray) : IO BufferedSource := do
     else
       state.set (ByteArray.empty, 0)
       return bytes.extract pos bytes.size
-  return { source := { readLine, readN }, readSome }
+  let feed (chunk : ByteArray) : IO Unit := do
+    let (bytes, pos) ← state.get
+    state.set (bytes.extract pos bytes.size ++ chunk, 0)
+  let unread : IO ByteArray := do
+    let (bytes, pos) ← state.get
+    return bytes.extract pos bytes.size
+  return { source := { readLine, readN }, readSome, feed, unread }
 
 -- ── Request head ──────────────────────────────────────────────────
+
+/-- The most a request head may take, as bytes: every line the parser
+    accepts at its longest. What the event-loop server buffers at most
+    before giving up on a head. -/
+def maxHeadBytes : Nat := (maxHeaders + 1) * (maxLineBytes + 2) + 2
+
+/-- Whether `bytes` holds a complete request head — its blank line — or
+    already more than any head the parser accepts (so waiting for more is
+    pointless). Either way the parser can run without waiting for input. -/
+def headComplete (bytes : ByteArray) : Bool :=
+  bytes.size > maxHeadBytes || Id.run do
+    for i in [0:bytes.size] do
+      if i + 3 < bytes.size && bytes.get! i == 13 && bytes.get! (i + 1) == 10 &&
+          bytes.get! (i + 2) == 13 && bytes.get! (i + 3) == 10 then
+        return true
+    return false
 
 /-- Header lines of one request, at most `maxHeaders` of them — the bound is
     part of the type, so it holds for every value `recvHeaders` can return. -/

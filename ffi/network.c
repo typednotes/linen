@@ -1192,6 +1192,37 @@ LEAN_EXPORT lean_obj_res linen_socket_recv_nb(b_lean_obj_arg sock, size_t maxlen
 }
 
 /**
+ * Non-blocking peek: like linen_socket_recv_nb, but the bytes stay in the
+ * socket's receive queue (MSG_PEEK) — what TLS-or-plaintext detection needs,
+ * since OpenSSL then reads the fd itself from the first byte.
+ * Same RecvOutcome tags as recv.
+ */
+LEAN_EXPORT lean_obj_res linen_socket_peek_nb(b_lean_obj_arg sock, size_t maxlen) {
+    int fd = get_socket_fd(sock);
+    if (maxlen == 0) maxlen = 1;
+    lean_object *arr = lean_alloc_sarray(1, 0, maxlen);
+    ssize_t n = recv(fd, lean_sarray_cptr(arr), maxlen, MSG_PEEK | MSG_DONTWAIT);
+    if (n < 0) {
+        lean_dec(arr);
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return lean_io_result_mk_ok(lean_alloc_ctor(1, 0, 0));
+        }
+        lean_obj_res err = mk_io_errno_error_obj();
+        lean_obj_res r = lean_alloc_ctor(3, 1, 0);
+        lean_ctor_set(r, 0, err);
+        return lean_io_result_mk_ok(r);
+    }
+    if (n == 0) {
+        lean_dec(arr);
+        return lean_io_result_mk_ok(lean_alloc_ctor(2, 0, 0));
+    }
+    lean_sarray_set_size(arr, (size_t)n);
+    lean_obj_res r = lean_alloc_ctor(0, 1, 0);
+    lean_ctor_set(r, 0, arr);
+    return lean_io_result_mk_ok(r);
+}
+
+/**
  * Extract raw fd from a socket external object. For EventLoop correlation.
  */
 LEAN_EXPORT lean_obj_res linen_socket_get_fd(b_lean_obj_arg sock) {
@@ -1199,147 +1230,10 @@ LEAN_EXPORT lean_obj_res linen_socket_get_fd(b_lean_obj_arg sock) {
     return lean_io_result_mk_ok(lean_box((size_t)(unsigned)fd));
 }
 
-/* ================================================================
- * NON-BLOCKING RECVBUFFER
- * ================================================================ */
-
-/**
- * Non-blocking refill. Returns:
- *   > 0 : bytes read
- *     0 : EOF
- *    -1 : EAGAIN (no data available)
- *    -2 : real error
- */
-static ssize_t recvbuf_fill_nb(linen_recvbuf_t *rb) {
-    /* Compact: move remaining bytes to front */
-    if (rb->pos > 0 && rb->len > rb->pos) {
-        size_t remaining = rb->len - rb->pos;
-        memmove(rb->buf, rb->buf + rb->pos, remaining);
-        rb->len = remaining;
-        rb->pos = 0;
-    } else if (rb->pos > 0) {
-        rb->pos = 0;
-        rb->len = 0;
-    }
-    size_t space = RECVBUF_SIZE - rb->len;
-    if (space == 0) return 0;
-    ssize_t n = recv(rb->fd, rb->buf + rb->len, space, MSG_DONTWAIT);
-    if (n > 0) rb->len += (size_t)n;
-    if (n < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) return -1;
-        return -2;
-    }
-    return n;
-}
-
-/**
- * Non-blocking readline. Returns Option String:
- *   some line  — complete CRLF-terminated line (without CRLF)
- *   none       — need more data (EAGAIN on underlying socket)
- *
- * Encoding: Option α = none (box 0) | some a (ctor(1,1,0)[a])
- */
-LEAN_EXPORT lean_obj_res linen_recvbuf_readline_nb(b_lean_obj_arg buf) {
-    linen_recvbuf_t *rb = get_recvbuf(buf);
-    uint8_t line[8192];
-    size_t line_len = 0;
-
-    for (;;) {
-        while (rb->pos < rb->len) {
-            uint8_t c = rb->buf[rb->pos++];
-            if (line_len > 0 && line[line_len - 1] == '\r' && c == '\n') {
-                lean_object *s = lean_mk_string_from_bytes(
-                    (const char *)line, line_len - 1);
-                lean_obj_res opt = lean_alloc_ctor(1, 1, 0);
-                lean_ctor_set(opt, 0, s);
-                return lean_io_result_mk_ok(opt);
-            }
-            if (line_len < sizeof(line) - 1) {
-                line[line_len++] = c;
-            } else {
-                return mk_io_error("recvbuf_readline_nb: line too long (>8KB)");
-            }
-        }
-        ssize_t n = recvbuf_fill_nb(rb);
-        if (n == -1) {
-            /* EAGAIN — rewind partial line back into buffer for next call */
-            /* The partial data is already consumed from buf, so we need to
-             * save it. Push partial line bytes back by adjusting pos. */
-            /* Actually, the bytes are already consumed. We need to save
-             * partial state. For simplicity, push them back into buf. */
-            if (line_len > 0) {
-                /* Compact buffer first */
-                if (rb->pos > 0 && rb->len > rb->pos) {
-                    size_t remaining = rb->len - rb->pos;
-                    memmove(rb->buf, rb->buf + rb->pos, remaining);
-                    rb->len = remaining;
-                    rb->pos = 0;
-                } else if (rb->pos > 0) {
-                    rb->pos = 0;
-                    rb->len = 0;
-                }
-                /* Prepend partial line back into buffer */
-                if (line_len + rb->len <= RECVBUF_SIZE) {
-                    memmove(rb->buf + line_len, rb->buf, rb->len);
-                    memcpy(rb->buf, line, line_len);
-                    rb->len += line_len;
-                    rb->pos = 0;
-                }
-                /* else: buffer overflow, data lost — shouldn't happen with 4KB buf + 8KB line */
-            }
-            return lean_io_result_mk_ok(lean_box(0)); /* none */
-        }
-        if (n == -2) return mk_io_errno_error();
-        if (n == 0) {
-            /* EOF */
-            if (line_len == 0)
-                return lean_io_result_mk_ok(lean_alloc_ctor(1, 1, 0)); /* some "" */
-            lean_object *s = lean_mk_string_from_bytes(
-                (const char *)line, line_len);
-            lean_obj_res opt = lean_alloc_ctor(1, 1, 0);
-            lean_ctor_set(opt, 0, s);
-            return lean_io_result_mk_ok(opt);
-        }
-    }
-}
-
-/**
- * Non-blocking readn. Returns (ByteArray × Bool) where Bool = all bytes read.
- * Encoding: (ByteArray × Bool) = ctor(0,2,0)[arr, box(0 or 1)]
- */
-LEAN_EXPORT lean_obj_res linen_recvbuf_readn_nb(b_lean_obj_arg buf, size_t n) {
-    linen_recvbuf_t *rb = get_recvbuf(buf);
-    lean_object *arr = lean_alloc_sarray(1, n, n);
-    uint8_t *dst = lean_sarray_cptr(arr);
-    size_t total = 0;
-
-    while (total < n) {
-        size_t avail = rb->len - rb->pos;
-        if (avail > 0) {
-            size_t to_copy = avail < (n - total) ? avail : (n - total);
-            memcpy(dst + total, rb->buf + rb->pos, to_copy);
-            rb->pos += to_copy;
-            total += to_copy;
-        }
-        if (total >= n) break;
-        ssize_t nr = recvbuf_fill_nb(rb);
-        if (nr == -1) {
-            /* EAGAIN — return partial data with complete=false */
-            lean_sarray_set_size(arr, total);
-            lean_obj_res pair = mk_pair(arr, lean_box(0)); /* false */
-            return lean_io_result_mk_ok(pair);
-        }
-        if (nr == -2) { lean_dec(arr); return mk_io_errno_error(); }
-        if (nr == 0) {
-            /* EOF — return what we have with complete=(total==n) */
-            lean_sarray_set_size(arr, total);
-            lean_obj_res pair = mk_pair(arr, lean_box(total >= n ? 1 : 0));
-            return lean_io_result_mk_ok(pair);
-        }
-    }
-    lean_obj_res pair = mk_pair(arr, lean_box(1)); /* true = complete */
-    return lean_io_result_mk_ok(pair);
-}
+/* (The non-blocking RecvBuffer reads, recvbuf_readline_nb/readn_nb, were
+ * removed: unused, untested, and a partial line longer than the 4 KiB
+ * buffer was silently dropped on EAGAIN. The event-loop server buffers in
+ * Lean — Network.WebApp.Server.ByteSource.buffered — instead.) */
 
 /* ================================================================
  * EVENT MULTIPLEXING: kqueue (macOS) / epoll (Linux)

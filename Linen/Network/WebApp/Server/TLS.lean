@@ -13,17 +13,19 @@
   hands each connection to a dedicated thread, which performs the TLS
   handshake and then serves HTTP/1.1 requests *through the session* — a
   `ByteSource.buffered` over `TLS.read` for requests, a `ResponseSink` over
-  `TLS.write` for responses.
+  `TLS.write` for responses. (`Network.TLS.Green` now makes an
+  event-loop TLS server possible — the handshake is resumable — but this
+  server does not use it yet.)
 
   Through 1.8.0 this module ran the handshake and then parsed and answered
   requests on the raw socket, bypassing the session entirely, so no HTTPS
   request could succeed; nothing tested it. It is now tested end to end
   with a real TLS client.
 
-  Why not the EventDispatcher: `Network.TLS.acceptSocketNB` frees its
-  `SSL` object whenever the handshake would block, so a handshake needing
-  more than one read — every real one — cannot be resumed. A blocking
-  handshake on a per-connection thread is correct today.
+  Before the handshake, the first byte the client sends is *peeked*
+  (`MSG_PEEK`, so OpenSSL still reads it): `0x16` opens a TLS handshake
+  record; anything else is plain HTTP, handled per `OnInsecure` — the
+  detection warp-tls uses (which consumes and replays the bytes instead).
 
   ## What is not supported (say it loudly)
 
@@ -31,11 +33,6 @@
     a client offering `h2, http/1.1` falls back to HTTP/1.1. (It used to
     call `Network.TLS.setAlpn`, which *prefers `h2`* — every browser would
     have negotiated a protocol this server cannot speak.)
-  - **`OnInsecure.allowInsecure`.** Serving plain HTTP on the TLS port needs
-    to peek at the first byte, which is not implemented. `runTLS` refuses to
-    start with it rather than silently behaving as `denyInsecure`. With
-    `denyInsecure` a plaintext connection fails the handshake and is closed;
-    its message is not sent.
 
   ## No `partial`
 
@@ -71,14 +68,13 @@ open Network.TLS
 open Network.WebApp.Server
 open Control.Concurrent.Green (Green)
 
-/-- How to handle non-TLS (plain HTTP) connections.
-    Only `denyInsecure` is supported — see the module header. -/
+/-- How to handle non-TLS (plain HTTP) connections on the TLS port. -/
 inductive OnInsecure where
-  /-- Refuse plain HTTP: the connection fails the handshake and is closed.
-      The message is **not** sent. -/
+  /-- Answer `426 Upgrade Required` with this message, then close
+      (`insecureDenial`). -/
   | denyInsecure (message : String)
-  /-- Serve plain HTTP on the TLS port. **Not implemented**: `runTLS`
-      refuses to start with it. -/
+  /-- Serve plain HTTP on the TLS port too, as `Server.runConnection` would
+      (the application sees `isSecure = false`). -/
   | allowInsecure
 deriving BEq, Repr
 
@@ -92,6 +88,40 @@ structure TLSSettings where
   certSettings : CertSettings
   onInsecure : OnInsecure := .denyInsecure "This server requires HTTPS"
 
+/-- Whether the first byte of a connection opens a TLS handshake record
+    (content type 22, RFC 8446 §5.1). -/
+def isTlsHandshakeByte (b : UInt8) : Bool := b == 0x16
+
+/-- The answer to plain HTTP under `denyInsecure message`: RFC 2817 §4.2's
+    `426 Upgrade Required`, as warp-tls sends it, with a `Content-Length`. -/
+def insecureDenial (message : String) : ByteArray :=
+  let body := message.toUTF8
+  ("HTTP/1.1 426 Upgrade Required\r\nUpgrade: TLS/1.0, HTTP/1.1\r\n" ++
+   "Connection: Upgrade\r\nContent-Type: text/plain\r\n" ++
+   s!"Content-Length: {body.size}\r\n\r\n").toUTF8 ++ body
+
+/-- What the first byte a client sends says about its connection. -/
+inductive FirstByte where
+  | tls
+  | plain
+  | closed
+deriving BEq, Repr
+
+/-- Wait (at most `timeoutMillis`) for the client's first byte and peek at
+    it, leaving it unread. -/
+def peekFirstByte (sock : Socket .connected) (timeoutMillis : Nat) : IO FirstByte := do
+  for _ in [0:100] do
+    match ← Network.Socket.poll sock .read timeoutMillis with
+    | .timeout => throw (IO.userError s!"no data from the client after {timeoutMillis}ms")
+    | .error e => throw e
+    | .ready =>
+      match ← Network.Socket.peek sock 1 with
+      | .data bytes => return if isTlsHandshakeByte (bytes.get! 0) then .tls else .plain
+      | .eof => return .closed
+      | .error e => throw e
+      | .wouldBlock => pure ()  -- a spurious wake-up: poll again
+  throw (IO.userError "the client's socket keeps waking without data")
+
 /-- The sink writing a response through a TLS session. -/
 def tlsSink (session : TLSSession) (reader : BufferedSource) : ResponseSink where
   send bytes := do (Network.TLS.write session bytes : IO _)
@@ -101,10 +131,31 @@ def tlsSink (session : TLSSession) (reader : BufferedSource) : ResponseSink wher
   rawSend := Network.TLS.write session
 
 /-- Serve one connection: the TLS handshake, then HTTP/1.1 requests through
-    the session, with keep-alive, until either side closes. Every error ends
-    the connection only, reported through `settingsOnException`. -/
+    the session, with keep-alive, until either side closes. A connection
+    that does not open with a TLS record is handled per `onInsecure`. Every
+    error ends the connection only, reported through `settingsOnException`. -/
 def tlsConnection (ctx : TLSContext) (clientSock : Socket .connected)
-    (remoteAddr : SockAddr) (settings : Settings) (app : Application) : IO Unit := do
+    (remoteAddr : SockAddr) (settings : Settings) (app : Application)
+    (onInsecure : OnInsecure := .denyInsecure "This server requires HTTPS") : IO Unit := do
+  let firstByte ← try peekFirstByte clientSock (settings.settingsTimeout * 1000)
+    catch _ => pure .closed
+  match firstByte, onInsecure with
+  | .tls, _ => pure ()
+  | .closed, _ =>
+    let _ ← Network.Socket.close clientSock
+    return
+  | .plain, .allowInsecure =>
+    -- Plain HTTP on this socket, exactly as the plain server serves it.
+    return ← runConnection clientSock remoteAddr settings app
+  | .plain, .denyInsecure message =>
+    try
+      -- Read the head first: closing with a request unread makes the
+      -- kernel reset the connection, which can destroy the answer.
+      let _ ← recvHeaders (← FFI.recvBufCreate clientSock.raw)
+      Network.Socket.Blocking.sendAll clientSock (insecureDenial message)
+    catch _ => pure ()
+    let _ ← Network.Socket.close clientSock
+    return
   try
     let session ← Network.TLS.acceptSocket ctx clientSock.raw
     try
@@ -140,22 +191,20 @@ def tlsConnection (ctx : TLSContext) (clientSock : Socket .connected)
     so a stopped loop exits on the next connection attempt (the test's way
     of stopping it is to cancel and then connect once). -/
 def runTLSSocket (ctx : TLSContext) (serverSock : Socket .listening) (settings : Settings)
-    (app : Application) (stop : Std.CancellationToken) : IO Unit := do
+    (app : Application) (stop : Std.CancellationToken)
+    (onInsecure : OnInsecure := .denyInsecure "This server requires HTTPS") : IO Unit := do
   while !(← stop.isCancelled) do
     let (clientSock, remoteAddr) ← Network.Socket.Blocking.accept serverSock (timeoutMillis := 0)
     if ← stop.isCancelled then
       let _ ← Network.Socket.close clientSock
     else
-      let _tid ← Control.Concurrent.forkIO (tlsConnection ctx clientSock remoteAddr settings app)
+      let _tid ← Control.Concurrent.forkIO
+        (tlsConnection ctx clientSock remoteAddr settings app onInsecure)
 
-/-- Run a web application with TLS on the given port. Throws at startup for
-    `OnInsecure.allowInsecure`, which is not implemented.
+/-- Run a web application with TLS on the given port.
     $$\text{runTLS} : \text{TLSSettings} \to \text{Settings} \to \text{Application} \to \text{IO}()$$ -/
 def runTLS (tlsSettings : TLSSettings) (settings : Settings)
     (app : Application) : IO Unit := do
-  if tlsSettings.onInsecure == .allowInsecure then
-    throw (IO.userError
-      "Server.TLS: OnInsecure.allowInsecure is not implemented (plain HTTP on the TLS port)")
   let (certPath, keyPath) := match tlsSettings.certSettings with
     | .certFile c k => (c, k)
   let ctx ← Network.TLS.createContext certPath keyPath
@@ -163,7 +212,7 @@ def runTLS (tlsSettings : TLSSettings) (settings : Settings)
     settings.settingsHost settings.settingsPort settings.settingsBacklog
   try
     settings.settingsBeforeMainLoop
-    runTLSSocket ctx serverSock settings app (← Std.CancellationToken.new)
+    runTLSSocket ctx serverSock settings app (← Std.CancellationToken.new) tlsSettings.onInsecure
   finally
     let _ ← Network.Socket.close serverSock
 

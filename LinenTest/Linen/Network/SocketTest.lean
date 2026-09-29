@@ -193,4 +193,33 @@ example : Socket .connected → IO (Socket .closed)       := (close ·)
   setSendTimeout s 0
   let _ ← close s
 
+/-! ### `peek` — look without consuming (`MSG_PEEK`) -/
+
+#eval show IO Unit from do
+  let server ← listenTCP "127.0.0.1" 0
+  let addr ← getSockName server
+  let client ← Blocking.connect (← socket .inet .stream) { host := "127.0.0.1", port := addr.port }
+  let (conn, _) ← Blocking.accept server
+  -- Nothing sent yet: would block, and consumes nothing.
+  unless (← peek conn 4) matches .wouldBlock do throw (IO.userError "peek before data")
+  Blocking.sendAll client "abcdef".toUTF8
+  let _ ← poll conn .read 5000
+  -- Peeking twice sees the same bytes; `recv` then still gets all of them.
+  let first ← peek conn 2
+  let second ← peek conn 2
+  unless first matches .data _ do throw (IO.userError "peek after data")
+  match first, second with
+  | .data a, .data b =>
+    unless a == "ab".toUTF8 && b == "ab".toUTF8 do
+      throw (IO.userError s!"peeked {String.fromUTF8! a}, {String.fromUTF8! b}")
+  | _, _ => throw (IO.userError "peek did not return data")
+  let got ← Blocking.recv conn 16
+  unless got == "abcdef".toUTF8 do throw (IO.userError s!"recv after peek: {String.fromUTF8! got}")
+  -- End of input peeks as `.eof`.
+  let _ ← close client
+  let _ ← poll conn .read 5000
+  unless (← peek conn 1) matches .eof do throw (IO.userError "peek at end of input")
+  let _ ← close conn
+  let _ ← close server
+
 end Tests.Network.Socket

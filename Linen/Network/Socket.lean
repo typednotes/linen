@@ -185,6 +185,12 @@ def connectFinish (s : Socket .connecting) : IO ConnectOutcome :=
 @[inline] def recv (s : Socket .connected) (maxlen : Nat := 4096) : IO RecvOutcome :=
   socketRecvNB s.raw maxlen.toUSize
 
+/-- Peek at up to `maxlen` bytes without consuming them (non-blocking,
+    `MSG_PEEK`): the next `recv` returns them again.
+    $$\text{peek} : \text{Socket}\ \texttt{.connected} \to \mathbb{N} \to \text{IO RecvOutcome}$$ -/
+@[inline] def peek (s : Socket .connected) (maxlen : Nat := 1) : IO RecvOutcome :=
+  socketPeekNB s.raw maxlen.toUSize
+
 /-- Send all bytes from a `ByteArray` on a connected socket, looping until
     complete. The retry loop runs in C (avoiding round-trips through the
     non-blocking `send` above), so prefer this over `Blocking.sendAll` when

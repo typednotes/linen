@@ -118,6 +118,24 @@ private theorem addAutoHeaders_length_ge (settings : Settings) (extra user : Res
     apply Nat.le_trans _ (ih _)
     split <;> simp_all [List.length_cons]
 
+/-- The number of bytes `sendFile path part` sends: the file's size, or
+    the part of it that exists — `count = 0` meaning to the end, as in
+    `Network.Sendfile.FilePart`.
+    $$\text{filePartLength}(size, part) = \min(count, size - offset)$$ -/
+def filePartLength (size : Nat) : Option FilePart → Nat
+  | none => size
+  | some fp =>
+    let available := size - fp.offset
+    if fp.count == 0 then available else min fp.count available
+
+/-- The body length of a file response, from the file's metadata. A file
+    response always carries `Content-Length`: without it (as through 1.8.0)
+    a kept-alive client cannot tell where the file ends and the next
+    response begins. -/
+def fileBodyLength (path : String) (part : Option FilePart) : IO Nat := do
+  let size := (← System.FilePath.metadata path).byteSize.toNat
+  return filePartLength size part
+
 /-- Where a response goes: the writes `sendResponseTo` needs, so the same
     rendering serves a plain socket (blocking or event-driven) and a TLS
     session, which must not be bypassed by writing to its socket. -/
@@ -146,7 +164,9 @@ def sendResponseTo (sink : ResponseSink) (settings : Settings) (req : Request)
     pure ResponseReceived.done
 
   | .responseFile status userHeaders path part =>
-    sink.send (head status (addAutoHeaders settings [] userHeaders))
+    let length ← (fileBodyLength path part : IO _)
+    let allHeaders := addAutoHeaders settings [(hContentLength, toString length)] userHeaders
+    sink.send (head status allHeaders)
     (sink.sendFile path part : IO _)
     pure ResponseReceived.done
 
@@ -176,8 +196,9 @@ def ResponseSink.ofSocket (sock : Socket .connected) : ResponseSink where
 /-- The sink for a connected socket in EventDispatcher mode: whole writes go
     through `sendAllGreen`, so the Green thread yields while the socket would
     block. -/
-def ResponseSink.ofSocketEL (sock : Socket .connected) (disp : EventDispatcher) : ResponseSink :=
-  { ResponseSink.ofSocket sock with send := disp.sendAllGreen sock }
+def ResponseSink.ofSocketEL (sock : Socket .connected) (disp : EventDispatcher)
+    (rawRecv : IO ByteArray := Blocking.recv sock 4096) : ResponseSink :=
+  { ResponseSink.ofSocket sock with send := disp.sendAllGreen sock, rawRecv }
 
 /-- Send a full HTTP response over a connected socket (blocking mode).
     Uses `Blocking.sendAll` for reliable full writes.

@@ -29,17 +29,15 @@ private def sampleTLSSettings : TLSSettings where
 
 #guard sampleTLSSettings.onInsecure == OnInsecure.denyInsecure "This server requires HTTPS"
 
--- `allowInsecure` is not implemented, so `runTLS` refuses to start with it —
--- before touching the (here nonexistent) certificate files.
-#eval show IO Unit from do
-  let settings := { sampleTLSSettings with onInsecure := .allowInsecure }
-  let app : Application := fun _ respond => AppM.respond respond (responseLBS status200 [] "")
-  try
-    runTLS settings Network.WebApp.Server.defaultSettings app
-    throw (IO.userError "runTLS started with allowInsecure")
-  catch e =>
-    unless (toString e).startsWith "Server.TLS: OnInsecure.allowInsecure is not implemented" do
-      throw e
+/-! ### Telling TLS from plain HTTP -/
+
+#guard isTlsHandshakeByte 0x16
+#guard !isTlsHandshakeByte 'G'.toUInt8  -- "GET …"
+#guard !isTlsHandshakeByte 'P'.toUInt8  -- "POST …"
+
+#guard insecureDenial "go away" ==
+  ("HTTP/1.1 426 Upgrade Required\r\nUpgrade: TLS/1.0, HTTP/1.1\r\nConnection: Upgrade\r\n" ++
+   "Content-Type: text/plain\r\nContent-Length: 7\r\n\r\ngo away").toUTF8
 
 /-! ### End to end over TLS -/
 
@@ -71,13 +69,14 @@ private def contains (s part : String) : Bool := (s.splitOn part).length > 1
     port, then stop the server (cancel, and connect once so the blocked
     `accept` returns and sees it). -/
 private def withTLSServer (certPath keyPath : String) (app : Application)
-    (client : UInt16 → IO α) : IO α := do
+    (client : UInt16 → IO α)
+    (onInsecure : OnInsecure := .denyInsecure "This server requires HTTPS") : IO α := do
   let ctx ← Network.TLS.createContext certPath keyPath
   let server ← listenTCP "127.0.0.1" 0
   let port := (← getSockName server).port
   let stop ← Std.CancellationToken.new
   let serverTask ← IO.asTask (prio := .dedicated)
-    (runTLSSocket ctx server Network.WebApp.Server.defaultSettings app stop)
+    (runTLSSocket ctx server Network.WebApp.Server.defaultSettings app stop onInsecure)
   try
     client port
   finally
@@ -133,28 +132,56 @@ private def tlsConnect (certPath : String) (port : UInt16) :
     unless contains reply "POST /split secure=true body=abc;" do
       throw (IO.userError s!"split: {repr reply}")
 
--- A plaintext HTTP request on the TLS port gets no HTTP answer: the
--- handshake fails and the connection is closed (`denyInsecure`), and the
--- server keeps serving TLS afterwards.
+/-- Send `request` in plaintext to `port` and return everything answered. -/
+private def plainExchange (port : UInt16) (request : String) : IO String := do
+  let plain ← Blocking.connect (← socket .inet .stream) { host := "127.0.0.1", port }
+  Blocking.sendAll plain request.toUTF8
+  let mut reply := ByteArray.empty
+  for _ in [0:100] do
+    let piece ← try Blocking.recv plain catch _ => pure ByteArray.empty
+    if piece.isEmpty then break
+    reply := reply ++ piece
+  let _ ← close plain
+  return String.fromUTF8! reply
+
+/-- A TLS request that closes, and its answer. -/
+private def tlsExchange (certPath : String) (port : UInt16) (path : String) : IO String := do
+  let (conn, session) ← tlsConnect certPath port
+  Network.TLS.write session
+    s!"GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".toUTF8
+  let reply ← readUntil session (fun _ => false)
+  Network.TLS.close session
+  let _ ← close conn
+  return reply
+
+-- `denyInsecure`: plain HTTP on the TLS port is answered `426` with the
+-- message — and TLS keeps working on the same port.
+#eval show IO Unit from withTestCert fun certPath keyPath => do
+  withTLSServer certPath keyPath echoApp (onInsecure := .denyInsecure "use https") fun port => do
+    let reply ← plainExchange port "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"
+    unless reply.startsWith "HTTP/1.1 426 Upgrade Required\r\n" && reply.endsWith "\r\n\r\nuse https" do
+      throw (IO.userError s!"denied: {repr reply}")
+    unless contains (← tlsExchange certPath port "/after") "GET /after secure=true" do
+      throw (IO.userError "TLS after a denied plaintext request")
+
+-- `allowInsecure`: plain HTTP is served too, and says it is not secure;
+-- TLS on the same port still says it is.
+#eval show IO Unit from withTestCert fun certPath keyPath => do
+  withTLSServer certPath keyPath echoApp (onInsecure := .allowInsecure) fun port => do
+    let reply ← plainExchange port
+      "POST /plain HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\nConnection: close\r\n\r\nhi"
+    unless reply.startsWith "HTTP/1.1 200" && contains reply "POST /plain secure=false body=hi;" do
+      throw (IO.userError s!"allowed: {repr reply}")
+    unless contains (← tlsExchange certPath port "/tls") "GET /tls secure=true" do
+      throw (IO.userError "TLS beside allowed plaintext")
+
+-- A client that connects and closes without a byte costs nothing.
 #eval show IO Unit from withTestCert fun certPath keyPath => do
   withTLSServer certPath keyPath echoApp fun port => do
-    let plain ← Blocking.connect (← socket .inet .stream) { host := "127.0.0.1", port }
-    Blocking.sendAll plain "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n".toUTF8
-    let mut reply := ByteArray.empty
-    for _ in [0:100] do
-      let piece ← try Blocking.recv plain catch _ => pure ByteArray.empty
-      if piece.isEmpty then break
-      reply := reply ++ piece
-    let _ ← close plain
-    if (String.fromUTF8? reply).any (·.startsWith "HTTP/") then
-      throw (IO.userError "answered plain HTTP on the TLS port")
-    let (conn, session) ← tlsConnect certPath port
-    Network.TLS.write session "GET /after HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".toUTF8
-    let after ← readUntil session (fun _ => false)
-    Network.TLS.close session
-    let _ ← close conn
-    unless contains after "GET /after secure=true" do
-      throw (IO.userError s!"after: {repr after}")
+    let quiet ← Blocking.connect (← socket .inet .stream) { host := "127.0.0.1", port }
+    let _ ← close quiet
+    unless contains (← tlsExchange certPath port "/still") "GET /still secure=true" do
+      throw (IO.userError "TLS after a silent client")
 
 /-! ### Signatures -/
 

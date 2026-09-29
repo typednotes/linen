@@ -40,6 +40,7 @@ import Linen.Network.HTTP.Types.Header
 import Linen.Network.HTTP.Types.Version
 import Linen.Network.Socket
 import Linen.Network.Socket.EventDispatcher
+import Linen.Network.Socket.Blocking
 import Linen.Control.Concurrent
 import Linen.Control.Concurrent.Green
 import Linen.Network.WebApp.Server.Settings
@@ -141,20 +142,47 @@ def runSettings (settings : Settings) (app : Application) : IO Unit := do
 -- EventDispatcher mode (high-concurrency, non-blocking)
 -- ══════════════════════════════════════════════════════════════
 
+/-- Receive from a connected socket, suspending the green thread (not a
+    pool thread) until data arrives; empty at end of input. The receive is
+    tried first, so data already waiting costs no dispatcher round trip. -/
+def recvSuspending (disp : EventDispatcher) (sock : Socket .connected) : Green ByteArray := do
+  repeat
+    match ← (Network.Socket.recv sock 16384 : IO _) with
+    | .data bytes => return bytes
+    | .eof => return ByteArray.empty
+    | .error e => throw e
+    | .wouldBlock => disp.waitReadable sock
+  return ByteArray.empty
+
 /-- Handle a single HTTP connection (EventDispatcher mode).
-    Uses an optimistic try-first pattern: attempts parseRequest immediately
-    (data is often already buffered), only falls back to waitReadable on EAGAIN.
-    This avoids EventDispatcher overhead for the common case. -/
+
+    Each request head is buffered **on the green thread** — waiting through
+    the dispatcher, so an idle or slow client holds no pool thread — until a
+    complete head is buffered (`headComplete`) or the peer closes; only then
+    does the parser run, and it never waits. Bytes already buffered are
+    looked at before waiting, so pipelined requests are served back to back.
+
+    Body reads are the application's `IO` calls (`requestBody`), so they
+    cannot suspend the green thread; they wait with `poll` for at most
+    `settingsTimeout` seconds each.
+
+    Through 1.8.0 this parsed from the C `RecvBuffer`, whose reads fail after
+    a few `EAGAIN` retries — a head or body split across packets dropped the
+    connection — and it waited for readability before each request even when
+    the next one was already buffered, so pipelined requests hung. -/
 def runConnectionEL (clientSock : Socket .connected) (remoteAddr : SockAddr)
     (settings : Settings) (app : Application) (disp : EventDispatcher) : Green Unit := do
-  let buf ← (FFI.recvBufCreate clientSock.raw : IO _)
-  -- Wait for first data (the initial request headers always need a wait)
-  disp.waitReadable clientSock
+  let timeoutMillis := settings.settingsTimeout * 1000
+  let reader ← (ByteSource.buffered (Blocking.recv clientSock 16384 timeoutMillis) : IO _)
+  let sink := ResponseSink.ofSocketEL clientSock disp reader.readSome
   try
     let mut keepGoing := true
     while keepGoing do
-      -- Optimistic: try parseRequest directly (RecvBuffer retries on EAGAIN)
-      let reqOpt ← (parseRequest buf remoteAddr : IO _)
+      let mut ended := false
+      while !ended && !headComplete (← (reader.unread : IO _)) do
+        let chunk ← recvSuspending disp clientSock
+        if chunk.isEmpty then ended := true else (reader.feed chunk : IO _)
+      let reqOpt ← (parseRequestFrom reader.source remoteAddr : IO _)
       match reqOpt with
       | none => keepGoing := false
       | some req =>
@@ -163,11 +191,9 @@ def runConnectionEL (clientSock : Socket .connected) (remoteAddr : SockAddr)
           let resp' := if action == .close then
             resp.mapResponseHeaders ((hConnection, "close") :: ·)
           else resp
-          sendResponseEL clientSock settings req resp' disp).run
+          sendResponseTo sink settings req resp').run
         if action == .keepAlive then
           (drainBody req : IO _)
-          -- Wait for next request's data before looping
-          disp.waitReadable clientSock
         else
           keepGoing := false
   catch e =>

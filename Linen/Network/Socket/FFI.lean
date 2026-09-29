@@ -251,25 +251,17 @@ opaque socketSendNB (sock : @& RawSocket) (data : @& ByteArray) : IO SendOutcome
 @[extern "linen_socket_recv_nb"]
 opaque socketRecvNB (sock : @& RawSocket) (maxlen : USize) : IO RecvOutcome
 
+/-- Non-blocking peek: up to `maxlen` bytes that stay unread (`MSG_PEEK`).
+    Same outcomes as `socketRecvNB`.
+    $$\text{socketPeekNB} : \text{Socket} \to \text{USize} \to \text{IO RecvOutcome}$$ -/
+@[extern "linen_socket_peek_nb"]
+opaque socketPeekNB (sock : @& RawSocket) (maxlen : USize) : IO RecvOutcome
+
 /-- Extract the raw file descriptor from a socket handle. For EventLoop correlation.
     Returns a Nat (boxed) to avoid compiled-mode ABI issues with `IO USize`.
     $$\text{socketGetFd} : \text{Socket} \to \text{IO Nat}$$ -/
 @[extern "linen_socket_get_fd"]
 opaque socketGetFd (sock : @& RawSocket) : IO Nat
-
--- ── Non-blocking RecvBuffer operations ──
-
-/-- Non-blocking readline. Returns `none` on EAGAIN, `some line` when complete.
-    Partial line state is preserved in the buffer between calls.
-    $$\text{recvBufReadLineNB} : \text{RecvBuffer} \to \text{IO (Option String)}$$ -/
-@[extern "linen_recvbuf_readline_nb"]
-opaque recvBufReadLineNB (buf : @& RecvBuffer) : IO (Option String)
-
-/-- Non-blocking readn. Returns `(data, complete)` where complete indicates
-    all n bytes were read.
-    $$\text{recvBufReadNNB} : \text{RecvBuffer} \to \text{USize} \to \text{IO (ByteArray × Bool)}$$ -/
-@[extern "linen_recvbuf_readn_nb"]
-opaque recvBufReadNNB (buf : @& RecvBuffer) (n : USize) : IO (ByteArray × Bool)
 
 -- ── Socket readiness polling (select) ──
 
