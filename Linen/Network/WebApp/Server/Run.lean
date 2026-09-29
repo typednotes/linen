@@ -186,14 +186,30 @@ def runConnection (clientSock : Socket .connected) (remoteAddr : SockAddr)
   finally
     let _ ← Network.Socket.close clientSock
 
-/-- Accept loop (blocking mode): blocking accept + forkIO per connection.
-    A `while true` loop, not self-recursion — no `partial` needed. -/
+/-- Run `action` on a thread of its own. Blocking mode's connections wait in
+    `poll`, a blocking syscall the task pool does not compensate for; on
+    pool threads (`Control.Concurrent.forkIO`, as through 1.8.0) as many
+    idle connections as the pool has workers stopped every new one from
+    being served until one timed out. -/
+def forkConnection (action : IO Unit) : IO Unit := do
+  let _ ← IO.asTask (prio := .dedicated) action
+
+/-- Accept loop (blocking mode): blocking accept, a dedicated thread per
+    connection, until `stop` is cancelled (checked after every accept, so a
+    stopped loop exits on the next connection attempt). -/
+def acceptLoopUntil (serverSock : Socket .listening) (settings : Settings)
+    (app : Application) (stop : Std.CancellationToken) : IO Unit := do
+  while !(← stop.isCancelled) do
+    let (clientSock, remoteAddr) ← Network.Socket.Blocking.accept serverSock (timeoutMillis := 0)
+    if ← stop.isCancelled then
+      let _ ← Network.Socket.close clientSock
+    else
+      forkConnection (runConnection clientSock remoteAddr settings app)
+
+/-- Accept loop (blocking mode), forever. -/
 def acceptLoop (serverSock : Socket .listening) (settings : Settings)
     (app : Application) : IO Unit := do
-  while true do
-    let (clientSock, remoteAddr) ← Network.Socket.Blocking.accept serverSock (timeoutMillis := 0)
-    let _tid ← Control.Concurrent.forkIO (runConnection clientSock remoteAddr settings app)
-    pure ()
+  acceptLoopUntil serverSock settings app (← Std.CancellationToken.new)
 
 /-- Run a WAI application with the given settings (blocking mode, default).
     Maximum throughput for I/O-bound workloads. -/

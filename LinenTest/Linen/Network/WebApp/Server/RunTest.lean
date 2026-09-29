@@ -86,13 +86,7 @@ private def withServer (mode : Mode) (app : Application) (client : UInt16 → IO
     let server ← Network.Socket.listenTCP "127.0.0.1" 0
     let port := (← Network.Socket.getSockName server).port
     let stop ← Std.CancellationToken.new
-    let loop ← IO.asTask (prio := .dedicated) do
-      while !(← stop.isCancelled) do
-        let (conn, addr) ← Network.Socket.Blocking.accept server (timeoutMillis := 0)
-        if ← stop.isCancelled then
-          let _ ← Network.Socket.close conn
-        else
-          let _ ← Control.Concurrent.forkIO (runConnection conn addr settings app)
+    let loop ← IO.asTask (prio := .dedicated) (acceptLoopUntil server settings app stop)
     try
       client port
     finally
@@ -192,6 +186,22 @@ private def bothModes (test : Mode → IO Unit) : IO Unit := do
   let _ ← Network.Socket.close conn
   unless !contains got "200" && waited ≥ 900 && waited < 5000 do
     throw (IO.userError s!"stalled body: closed after {waited} ms, got {repr got}")
+
+-- Idle connections do not starve new ones: 64 connected clients that send
+-- nothing (more than the task pool has workers) and then a real request,
+-- which must be answered at once — not when an idle one times out.
+#eval bothModes fun mode => withServer mode echoApp fun port => do
+  let idle ← (List.range 64).mapM fun _ => connectTo port
+  IO.sleep 200
+  let t0 ← IO.monoMsNow
+  let conn ← connectTo port
+  Network.Socket.Blocking.sendAll conn "GET /busy HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n".toUTF8
+  let reply ← recvAll conn
+  let waited := (← IO.monoMsNow) - t0
+  let _ ← Network.Socket.close conn
+  for c in idle do let _ ← Network.Socket.close c
+  unless contains reply "GET /busy body=;" && waited < 3000 do
+    throw (IO.userError s!"answered after {waited} ms with 64 idle connections: {repr reply}")
 
 open _root_.Network.WebApp (AppM Response) in
 /-- Takes the connection over (as a WebSocket upgrade does) and echoes the
