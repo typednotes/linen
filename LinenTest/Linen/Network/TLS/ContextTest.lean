@@ -97,4 +97,61 @@ namespace Tests.Network.TLS.Context
   let _ ← createClientContext
   pure ()
 
+/-! ### ALPN -/
+
+#guard alpnWire ["h2", "http/1.1"] == ByteArray.mk #[2, 104, 50, 8, 104, 116, 116, 112, 47, 49, 46, 49]
+#guard alpnWire [] == ByteArray.empty
+#guard alpnWire ["", "h2"] == ByteArray.mk #[2, 104, 50]  -- empty names are not encodable
+
+/-- The protocol a handshake settles on, seen from both ends, when the server
+    prefers `server` and the client offers `client`. -/
+private def negotiate (certPath keyPath : String) (server client : List String) :
+    IO (Option String × Option String) := do
+  let serverCtx ← createContext certPath keyPath
+  setServerAlpn serverCtx server
+  let clientCtx ← createClientContextWithCA certPath
+  setClientAlpn clientCtx client
+  let listener ← listenTCP "127.0.0.1" 0
+  let addr ← getSockName listener
+  let serverTask ← IO.asTask (prio := .dedicated) do
+    let (conn, _) ← Blocking.accept listener
+    let session ← acceptSocket serverCtx conn.raw
+    let chosen ← getAlpn session
+    close session
+    let _ ← Network.Socket.close conn
+    pure chosen
+  let conn ← Blocking.connect (← socket .inet .stream) { host := "127.0.0.1", port := addr.port }
+  let session ← connectSocket clientCtx conn.raw "localhost"
+  let clientSees ← getAlpn session
+  close session
+  let _ ← Network.Socket.close conn
+  let serverSees ← IO.ofExcept (← IO.wait serverTask)
+  let _ ← Network.Socket.close listener
+  return (serverSees, clientSees)
+
+#eval show IO Unit from do
+  let (certHandle, certPath) ← IO.FS.createTempFile
+  certHandle.putStr testCertPem
+  certHandle.flush
+  let (keyHandle, keyPath) ← IO.FS.createTempFile
+  keyHandle.putStr testKeyPem
+  keyHandle.flush
+  let cases : List (List String × List String × Option String) := [
+    -- The server's preference wins, whatever the client's order.
+    (["h2", "http/1.1"], ["http/1.1", "h2"], some "h2"),
+    (["http/1.1", "h2"], ["h2", "http/1.1"], some "http/1.1"),
+    -- Only the overlap counts.
+    (["h2", "http/1.1"], ["http/1.1"], some "http/1.1"),
+    -- No overlap, no offer, or no server list: no protocol, and the
+    -- handshake still succeeds.
+    (["h2"], ["spdy/3"], none),
+    (["h2", "http/1.1"], [], none),
+    ([], ["h2"], none)]
+  for (server, client, expected) in cases do
+    let (s, c) ← negotiate certPath.toString keyPath.toString server client
+    unless s == expected && c == expected do
+      throw (IO.userError s!"server {server}, client {client}: server saw {s}, client saw {c}")
+  IO.FS.removeFile certPath
+  IO.FS.removeFile keyPath
+
 end Tests.Network.TLS.Context

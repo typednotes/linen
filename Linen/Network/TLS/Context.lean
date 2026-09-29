@@ -50,9 +50,41 @@ instance : Nonempty TLSSession := TLSSessionHandle.property
 @[extern "linen_tls_ctx_create"]
 opaque createContext (certPath : @& String) (keyPath : @& String) : IO TLSContext
 
-/-- Enable ALPN negotiation on the context (for HTTP/2 support). -/
+/-- Enable ALPN on a server context, preferring `h2` then `http/1.1`
+    (`setServerAlpn ctx ["h2", "http/1.1"]`). Only for a server that speaks
+    both. -/
 @[extern "linen_tls_ctx_set_alpn"]
 opaque setAlpn (ctx : @& TLSContext) : IO Unit
+
+-- ── ALPN (RFC 7301) ──
+
+/-- ALPN's wire format for a protocol list: each name prefixed by its length
+    in one byte. Names must be 1–255 bytes; others are dropped.
+    $$\text{alpnWire}([p_1, \dots, p_n]) = |p_1| \cdot p_1 \cdots |p_n| \cdot p_n$$ -/
+def alpnWire (protocols : List String) : ByteArray :=
+  protocols.foldl (fun acc p =>
+    let name := p.toUTF8
+    if name.size == 0 || name.size > 255 then acc
+    else (acc.push name.size.toUInt8) ++ name) ByteArray.empty
+
+@[extern "linen_tls_ctx_set_alpn_protocols"]
+private opaque setServerAlpnWire (ctx : @& TLSContext) (wire : @& ByteArray) : IO Unit
+
+@[extern "linen_tls_ctx_set_alpn_offer"]
+private opaque setClientAlpnWire (ctx : @& TLSContext) (wire : @& ByteArray) : IO Unit
+
+/-- Answer ALPN on a server context from `protocols`, in the server's order
+    of preference: the first of them the client also offers is selected
+    (`getAlpn` then reports it); with no overlap, none is. `[]` stops
+    answering ALPN.
+    $$\text{setServerAlpn} : \text{TLSContext} \to \text{List String} \to \text{IO Unit}$$ -/
+def setServerAlpn (ctx : TLSContext) (protocols : List String) : IO Unit :=
+  setServerAlpnWire ctx (alpnWire protocols)
+
+/-- Offer `protocols` by ALPN from a client context (e.g. `["h2", "http/1.1"]`).
+    $$\text{setClientAlpn} : \text{TLSContext} \to \text{List String} \to \text{IO Unit}$$ -/
+def setClientAlpn (ctx : TLSContext) (protocols : List String) : IO Unit :=
+  setClientAlpnWire ctx (alpnWire protocols)
 
 -- ── Sessions and the resumable handshake ──
 

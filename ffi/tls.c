@@ -32,6 +32,8 @@ static lean_external_class *g_linen_ssl_class = NULL;
 
 typedef struct {
     SSL_CTX *ctx;
+    unsigned char *alpn;      /* server ALPN preference list, wire format, or NULL */
+    unsigned int alpn_len;
 } linen_ssl_ctx_t;
 
 typedef struct {
@@ -44,6 +46,7 @@ static void linen_ssl_ctx_finalizer(void *ptr) {
     linen_ssl_ctx_t *c = (linen_ssl_ctx_t *)ptr;
     if (c) {
         if (c->ctx) SSL_CTX_free(c->ctx);
+        free(c->alpn);
         free(c);
     }
 }
@@ -127,6 +130,22 @@ LEAN_EXPORT lean_obj_res linen_tls_ctx_create(
     SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
     linen_tls_set_modes(ctx);
 
+    /* TLS 1.2 cipher suites: ephemeral key exchange and AEAD only — the
+     * Mozilla "intermediate" set, and what RFC 9113 §9.2.2 requires of a
+     * connection carrying HTTP/2 (its blocklist is every other suite).
+     * TLS 1.3 suites all qualify already. Renegotiation is off (§9.2.1). */
+    if (SSL_CTX_set_cipher_list(ctx,
+            "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:"
+            "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:"
+            "ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:"
+            "DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384") != 1) {
+        SSL_CTX_free(ctx);
+        return lean_io_result_mk_error(mk_io_error("SSL_CTX_set_cipher_list failed"));
+    }
+#ifdef SSL_OP_NO_RENEGOTIATION
+    SSL_CTX_set_options(ctx, SSL_OP_NO_RENEGOTIATION);
+#endif
+
     /* Load certificate and private key */
     if (SSL_CTX_use_certificate_chain_file(ctx, cert_path) != 1) {
         SSL_CTX_free(ctx);
@@ -149,6 +168,8 @@ LEAN_EXPORT lean_obj_res linen_tls_ctx_create(
         return lean_io_result_mk_error(mk_io_error("malloc failed"));
     }
     wrapper->ctx = ctx;
+    wrapper->alpn = NULL;
+    wrapper->alpn_len = 0;
 
     lean_obj_res obj = lean_alloc_external(g_linen_ssl_ctx_class, wrapper);
     return lean_io_result_mk_ok(obj);
@@ -160,31 +181,74 @@ LEAN_EXPORT lean_obj_res linen_tls_ctx_create(
 
 static int alpn_select_cb(SSL *ssl, const unsigned char **out, unsigned char *outlen,
                           const unsigned char *in, unsigned int inlen, void *arg) {
-    /* Prefer h2, fall back to http/1.1 */
-    static const unsigned char h2[] = "\x02h2";
-    static const unsigned char http11[] = "\x08http/1.1";
-
-    if (SSL_select_next_proto((unsigned char **)out, outlen,
-                              h2, sizeof(h2) - 1, in, inlen) == OPENSSL_NPN_NEGOTIATED) {
-        return SSL_TLSEXT_ERR_OK;
-    }
-    if (SSL_select_next_proto((unsigned char **)out, outlen,
-                              http11, sizeof(http11) - 1, in, inlen) == OPENSSL_NPN_NEGOTIATED) {
+    /* The context's list, in the server's order of preference: the first of
+     * ours the client also offers. No overlap: no ALPN (the client decides
+     * whether it can live without it). */
+    linen_ssl_ctx_t *c = (linen_ssl_ctx_t *)arg;
+    if (!c || !c->alpn) return SSL_TLSEXT_ERR_NOACK;
+    if (SSL_select_next_proto((unsigned char **)out, outlen, c->alpn, c->alpn_len,
+                              in, inlen) == OPENSSL_NPN_NEGOTIATED) {
         return SSL_TLSEXT_ERR_OK;
     }
     return SSL_TLSEXT_ERR_NOACK;
 }
 
 /*
+ * @[extern "linen_tls_ctx_set_alpn_protocols"]
+ * opaque setServerAlpnWire : @& TLSContext → @& ByteArray → IO Unit
+ *
+ * Answer ALPN from this list (wire format: length-prefixed names), preferring
+ * earlier entries. An empty list stops answering ALPN.
+ */
+LEAN_EXPORT lean_obj_res linen_tls_ctx_set_alpn_protocols(
+    b_lean_obj_arg ctx_obj, b_lean_obj_arg wire_obj, lean_obj_arg world) {
+    linen_ssl_ctx_t *wrapper = lean_get_external_data(ctx_obj);
+    size_t len = lean_sarray_size(wire_obj);
+    unsigned char *copy = NULL;
+    if (len > 0) {
+        copy = malloc(len);
+        if (!copy) return lean_io_result_mk_error(mk_io_error("malloc failed"));
+        memcpy(copy, lean_sarray_cptr(wire_obj), len);
+    }
+    free(wrapper->alpn);
+    wrapper->alpn = copy;
+    wrapper->alpn_len = (unsigned int)len;
+    SSL_CTX_set_alpn_select_cb(wrapper->ctx, copy ? alpn_select_cb : NULL, copy ? wrapper : NULL);
+    return lean_io_result_mk_ok(lean_box(0));
+}
+
+/*
  * @[extern "linen_tls_ctx_set_alpn"]
  * opaque tlsCtxSetAlpnImpl : @& TLSContextHandle.type → IO Unit
+ *
+ * The historical entry point: prefer h2, then http/1.1.
  */
 LEAN_EXPORT lean_obj_res linen_tls_ctx_set_alpn(
     b_lean_obj_arg ctx_obj,
     lean_obj_arg world
 ) {
+    static const unsigned char h2_http11[] = "\x02h2\x08http/1.1";
+    lean_obj_res wire = lean_alloc_sarray(1, sizeof(h2_http11) - 1, sizeof(h2_http11) - 1);
+    memcpy(lean_sarray_cptr(wire), h2_http11, sizeof(h2_http11) - 1);
+    lean_obj_res r = linen_tls_ctx_set_alpn_protocols(ctx_obj, wire, world);
+    lean_dec(wire);
+    return r;
+}
+
+/*
+ * @[extern "linen_tls_ctx_set_alpn_offer"]
+ * opaque setClientAlpnWire : @& TLSContext → @& ByteArray → IO Unit
+ *
+ * What a client context offers in its ClientHello (wire format).
+ */
+LEAN_EXPORT lean_obj_res linen_tls_ctx_set_alpn_offer(
+    b_lean_obj_arg ctx_obj, b_lean_obj_arg wire_obj, lean_obj_arg world) {
     linen_ssl_ctx_t *wrapper = lean_get_external_data(ctx_obj);
-    SSL_CTX_set_alpn_select_cb(wrapper->ctx, alpn_select_cb, NULL);
+    /* SSL_CTX_set_alpn_protos returns 0 on success (unlike most of OpenSSL). */
+    if (SSL_CTX_set_alpn_protos(wrapper->ctx, lean_sarray_cptr(wire_obj),
+                                (unsigned int)lean_sarray_size(wire_obj)) != 0) {
+        return lean_io_result_mk_error(mk_io_error("SSL_CTX_set_alpn_protos failed"));
+    }
     return lean_io_result_mk_ok(lean_box(0));
 }
 
@@ -634,6 +698,8 @@ LEAN_EXPORT lean_obj_res linen_tls_client_ctx_create(
         return lean_io_result_mk_error(mk_io_error("malloc failed"));
     }
     wrapper->ctx = ctx;
+    wrapper->alpn = NULL;
+    wrapper->alpn_len = 0;
 
     lean_obj_res obj = lean_alloc_external(g_linen_ssl_ctx_class, wrapper);
     return lean_io_result_mk_ok(obj);
@@ -676,6 +742,8 @@ LEAN_EXPORT lean_obj_res linen_tls_client_ctx_create_with_ca(
         return lean_io_result_mk_error(mk_io_error("malloc failed"));
     }
     wrapper->ctx = ctx;
+    wrapper->alpn = NULL;
+    wrapper->alpn_len = 0;
 
     lean_obj_res obj = lean_alloc_external(g_linen_ssl_ctx_class, wrapper);
     return lean_io_result_mk_ok(obj);
