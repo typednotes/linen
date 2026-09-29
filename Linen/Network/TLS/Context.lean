@@ -150,6 +150,45 @@ opaque readNB (session : @& TLSSession) (maxLen : USize) : IO (TLSOutcome ByteAr
 @[extern "linen_tls_write_nb"]
 opaque writeNB (session : @& TLSSession) (data : @& ByteArray) : IO (TLSOutcome Unit)
 
+-- ── Reads and writes with timeouts ──
+
+/-- Wait up to `timeoutMillis` for `sock` in `mode`; `false` on timeout. -/
+private def pollFor (sock : Network.Socket.RawSocket) (mode : Network.Socket.PollMode)
+    (timeoutMillis : Nat) : IO Bool := do
+  match ← Network.Socket.FFI.socketPoll sock mode.toUInt8 timeoutMillis.toUInt32 with
+  | .ready => return true
+  | .timeout => return false
+  | .error e => throw e
+
+/-- Read up to `maxLen` decrypted bytes from a session over a **non-blocking**
+    socket, waiting with `poll` in whichever direction OpenSSL asks (each wait
+    at most `timeoutMillis`). `some` bytes, `some` empty at end of input,
+    `none` when a wait timed out. The read is tried before any wait.
+    $$\text{readWithin} : \text{TLSSession} \to \text{RawSocket} \to \mathbb{N} \to \mathbb{N} \to \text{IO (Option ByteArray)}$$ -/
+def readWithin (session : TLSSession) (sock : Network.Socket.RawSocket) (timeoutMillis : Nat)
+    (maxLen : Nat := 16384) : IO (Option ByteArray) := do
+  repeat
+    match ← readNB session maxLen.toUSize with
+    | .ok bytes => return some bytes
+    | .error e => throw e
+    | .wantRead => unless ← pollFor sock .read timeoutMillis do return none
+    | .wantWrite => unless ← pollFor sock .write timeoutMillis do return none
+  return none
+
+/-- Write all of `data` to a session over a **non-blocking** socket, repeating
+    the same write after each wait; throws when a wait exceeds
+    `timeoutMillis`.
+    $$\text{writeWithin} : \text{TLSSession} \to \text{RawSocket} \to \mathbb{N} \to \text{ByteArray} \to \text{IO Unit}$$ -/
+def writeWithin (session : TLSSession) (sock : Network.Socket.RawSocket) (timeoutMillis : Nat)
+    (data : ByteArray) : IO Unit := do
+  repeat
+    let waited ← match ← writeNB session data with
+      | .ok () => return
+      | .error e => throw e
+      | .wantRead => pollFor sock .read timeoutMillis
+      | .wantWrite => pollFor sock .write timeoutMillis
+    unless waited do throw (IO.userError s!"TLS write timed out after {timeoutMillis}ms")
+
 -- ── Client-side TLS ──
 
 /-- Create a TLS client context with system CA trust for server verification.
