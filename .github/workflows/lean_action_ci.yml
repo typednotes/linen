@@ -153,39 +153,13 @@ jobs:
           open System Lake DSL
 
           require linen from ".." / "linen"
-
-          /-- Run `pkg-config <args>`, splitting stdout on whitespace. -/
-          def pkgConfig (args : Array String) : IO (Array String) := do
-            let out ← IO.Process.output { cmd := "pkg-config", args }
-            if out.exitCode != 0 then return #[]
-            let normalized := (out.stdout.replace "\n" " ").replace "\t" " "
-            return (normalized.splitOn " ").filter (· != "") |>.toArray
-
-          /-- Link flags that name each library file outright rather than adding
-              its directory to `-L`. On Linux that directory is
-              `/usr/lib/<multiarch>`, which holds the system `libc.so`; adding
-              it shadows the glibc Lean bundles and the executable fails with
-              `undefined symbol: __libc_csu_init` from Lean's vendored
-              `Scrt1.o`. This is the recipe `linen` hands consumers. -/
-          def pkgAbsoluteLibs (pkg : String) : IO (Array String) := do
-            let libs ← pkgConfig #["--libs", pkg]
-            let dirs ← pkgConfig #["--variable=libdir", pkg]
-            let dir : Option String := (dirs.filter (· != ""))[0]?
-            let ext := if System.Platform.isOSX then "dylib" else "so"
-            let mut out : Array String := #[]
-            for tok in libs do
-              if tok.startsWith "-L" then
-                continue
-              else if tok.startsWith "-l" then
-                let name := (tok.drop 2).toString
-                match dir with
-                | some d =>
-                  let c : FilePath := (d : FilePath) / s!"lib{name}.{ext}"
-                  if ← c.pathExists then out := out.push c.toString else out := out.push tok
-                | none => out := out.push tok
-              else
-                out := out.push tok
-            return out
+          LAKE
+          # The link helpers are the canonical block consumers copy
+          # (`ci/consumer/link-helpers.lean`), spliced in rather than written
+          # out here, so this job's executable link is what tests that block —
+          # and the checker is run on the result, so it is tested too.
+          cat ../linen/ci/consumer/link-helpers.lean >> lakefile.lean
+          cat >> lakefile.lean <<'LAKE'
 
           open Lean Elab Command in
           run_cmd do
@@ -296,6 +270,7 @@ jobs:
             let _ ← Crypto.JOSE.FFI.hmac "key".toUTF8 "data".toUTF8 0
             pure ()
           SRC
+          ../linen/ci/consumer/check-link-helpers.sh lakefile.lean
           lake build Consumer
           # The regression tests: with the old `-L<libdir> -lpq` recipe this
           # executable link fails on Linux with an undefined `__libc_csu_init`

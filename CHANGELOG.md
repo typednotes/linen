@@ -22,6 +22,22 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
   switchable SGR wrapper and the `NO_COLOR` / `FORCE_COLOR` / terminal rule,
   moved from `infra` (`Infra/Core/Ansi.lean`); `typednotes-compiler` reads
   `NO_COLOR` too.
+- **`ci/consumer/link-helpers.lean` and `ci/consumer/check-link-helpers.sh`**
+  — the canonical, versioned block of link-flag helpers an executable that
+  requires `linen` needs (`pkgConfigFlags`, `pkgAbsoluteLibs`, `macSdkArgs`,
+  `keychainLinkArgs`), and a checker a consumer runs against the tag it pins.
+  The CI `consumer` job now splices the block in and checks it, so the
+  executable link it performs is what tests the canonical copy. Lake links an
+  executable with its own package's `moreLinkArgs` only, so the copy cannot
+  go away; six repositories carried a hand-maintained one.
+- **A fallback CA bundle for TLS clients.** `createClientContext` also loads
+  the first readable of `/etc/ssl/certs/ca-certificates.crt`,
+  `/etc/pki/tls/certs/ca-bundle.crt`, `/etc/ssl/ca-bundle.pem` and
+  `/etc/ssl/cert.pem` when `SSL_CERT_FILE` is unset and OpenSSL's compiled-in
+  default file does not exist — the usual case for the static OpenSSL a Lean
+  toolchain links in, whose paths are the build machine's.
+  `Network.TLS.fallbackCaBundle` reports which. Consumers can drop their
+  "point OpenSSL at the runner's CA bundle" CI steps.
 - **`Cloud.Class.unauthenticated` and `Cloud.Class.serviceDisabled`**, split
   out of `denied`; `Class.isAuthFailure` for the old, coarse question;
   `classifyMessage`, and `unauthenticatedCodes` / `serviceDisabledMarkers`.

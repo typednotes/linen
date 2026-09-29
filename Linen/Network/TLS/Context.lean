@@ -93,9 +93,25 @@ opaque writeNB (session : @& TLSSession) (data : @& ByteArray) : IO (TLSOutcome 
 
 /-- Create a TLS client context with system CA trust for server verification.
     No client certificate needed. Used for outgoing HTTPS connections.
+
+    OpenSSL's defaults are loaded (`SSL_CERT_FILE` / `SSL_CERT_DIR` honoured),
+    and, when the compiled-in default file does not exist and `SSL_CERT_FILE`
+    is unset, the first readable well-known system bundle as well —
+    `fallbackCaBundle` says which. That is the usual situation for the static
+    OpenSSL a Lean toolchain links into an executable, whose compiled-in paths
+    are the build machine's.
     $$\text{createClientContext} : \text{IO TLSContext}$$ -/
 @[extern "linen_tls_client_ctx_create"]
 opaque createClientContext : IO TLSContext
+
+/-- The CA bundle `createClientContext` loads in addition to OpenSSL's
+    defaults, or `""` when none is needed (`SSL_CERT_FILE` is set, or the
+    compiled-in default file exists) or none of the known locations exists
+    (`/etc/ssl/certs/ca-certificates.crt`, `/etc/pki/tls/certs/ca-bundle.crt`,
+    `/etc/ssl/ca-bundle.pem`, `/etc/ssl/cert.pem`, in that order).
+    $$\text{fallbackCaBundle} : \text{IO String}$$ -/
+@[extern "linen_tls_fallback_ca_bundle"]
+opaque fallbackCaBundle : IO String
 
 /-- Create a TLS client context trusting only the CA certificate(s) at
     `caPath`, instead of the system default trust store. Useful for

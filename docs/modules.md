@@ -1436,7 +1436,7 @@ layer:
   OpenSSL's `SSL_CTX`/`SSL` (`ffi/tls.c`, GC-finalized): server-side
   `createContext`/`setAlpn`/`acceptSocket`/`read`/`write`/`close`/
   `getVersion`/`getAlpn`, non-blocking `*NB` variants, and client-side
-  `createClientContext` (system CA trust) / `createClientContextWithCA`
+  `createClientContext` (system CA trust, plus a fallback system bundle — `fallbackCaBundle`) / `createClientContextWithCA`
   (trust a specific CA file — e.g. a self-signed cert in tests) /
   `connectSocket` (SNI + hostname verification, with a `while`-loop retry on
   `WANT_READ`/`WANT_WRITE`, not `partial def`).
@@ -2648,7 +2648,7 @@ the secrets, never their values.
 | `Linen.PostgREST.CLI` | command-line parsing: `Command`, `parseArgs`, `printUsage` |
 | `Linen.PostgREST.Response.OpenAPI` | OpenAPI 3.0 spec generation: `pgTypeToOpenAPI`, `columnSchema`, `generateOpenAPISpec` |
 | `Linen.Network.TLS.Types` | `TLSVersion` (`tls10`–`tls13`), `CipherID`, `TLSOutcome` (`.ok`/`.wantRead`/`.wantWrite`/`.error`) |
-| `Linen.Network.TLS.Context` | OpenSSL `SSL_CTX`/`SSL` FFI (`ffi/tls.c`): `createContext`/`acceptSocket`/`read`/`write`/`getVersion`/`getAlpn`, `createClientContext(WithCA)`/`connectSocket` |
+| `Linen.Network.TLS.Context` | OpenSSL `SSL_CTX`/`SSL` FFI (`ffi/tls.c`): `createContext`/`acceptSocket`/`read`/`write`/`getVersion`/`getAlpn`, `createClientContext(WithCA)`/`fallbackCaBundle`/`connectSocket` |
 | `Linen.Network.QUIC.Types` | QUIC (RFC 9000) core types: proof-carrying `ConnectionId`, `Version`, `TransportParams`, `StreamId`, `TransportError`, `TLSConfig` |
 | `Linen.Network.QUIC.Config` | `ServerConfig`/`ClientConfig` with TLS, transport-parameter, and host/port defaults |
 | `Linen.Network.QUIC.Connection` | opaque `Connection` handle, `ConnectionState`; stream/close/state ops stubbed pending TLS 1.3 FFI |

@@ -340,77 +340,32 @@ Lake does not propagate a dependency's `moreLinkArgs` to a dependent's
 executable: `liblinenffi.a` lands on your link line, but the flags its members
 need do not, so you get `undefined symbol: SecItemCopyMatching` or similar.
 Because the flags are platform-conditional, this needs `lakefile.lean` rather
-than `lakefile.toml`. Take only the lines for the features you use:
+than `lakefile.toml`.
+
+The helpers are one canonical block, **`ci/consumer/link-helpers.lean`**:
+paste it — markers included — into your lakefile, and check it against the
+tag you pin with `ci/consumer/check-link-helpers.sh lakefile.lean`, run from
+that checkout (`.lake/packages/linen`). A copy is unavoidable, since Lake gives
+an executable only its own package's `moreLinkArgs`; a *checked* copy is what
+keeps six of them from drifting. Then choose the libraries yourself:
 
 ```lean
 import Lake
 open System Lake DSL
 
-def pkgConfigFlags (args : Array String) : IO (Array String) := do
-  try
-    let out ← IO.Process.output { cmd := "pkg-config", args }
-    if out.exitCode != 0 then return #[]
-    return (out.stdout.trimAscii.copy.splitOn " ").toArray.map (·.trimAscii.copy)
-      |>.filter (· != "")
-  catch _ => return #[]
-
-def pkgLinkFlags (pkg : String) : IO (Array String) := do
-  let libs ← pkgConfigFlags #["--libs", pkg]
-  let libdir ← pkgConfigFlags #["--variable=libdir", pkg]
-  return (libdir.filter (· != "")).map ("-L" ++ ·) ++ libs
-
-/-- The executable-safe form of `pkgLinkFlags`: name each library file
-    outright instead of adding its directory to the linker's search path.
-    See the note after the snippet for why this is the one to use on Linux. -/
-def pkgAbsoluteLibs (pkg : String) : IO (Array String) := do
-  let libs ← pkgConfigFlags #["--libs", pkg]
-  let dirs ← pkgConfigFlags #["--variable=libdir", pkg]
-  let dir : Option String := (dirs.filter (· != ""))[0]?
-  let ext := if System.Platform.isOSX then "dylib" else "so"
-  let mut out : Array String := #[]
-  for tok in libs do
-    if tok.startsWith "-L" then
-      continue
-    else if tok.startsWith "-l" then
-      let name := (tok.drop 2).toString
-      match dir with
-      | some d =>
-        let c : FilePath := (d : FilePath) / s!"lib{name}.{ext}"
-        if ← c.pathExists then out := out.push c.toString else out := out.push tok
-      | none => out := out.push tok
-    else
-      out := out.push tok
-  return out
-
-/-- Lean ships its own `lld`, which has no default framework search path. -/
-def macSdkArgs : IO (Array String) := do
-  try
-    let out ← IO.Process.output { cmd := "xcrun", args := #["--show-sdk-path"] }
-    if out.exitCode != 0 then return #[]
-    let sdk := out.stdout.trimAscii.copy
-    if sdk.isEmpty then return #[]
-    return #["-F", sdk ++ "/System/Library/Frameworks", "-L", sdk ++ "/usr/lib"]
-  catch _ => return #[]
+-- ⟪linen-link-helpers:begin⟫
+-- … the block from ci/consumer/link-helpers.lean …
+-- ⟪linen-link-helpers:end⟫
 
 open Lean Elab Command in
 run_cmd do
   let mkDef (n : Name) (flags : Array String) : CommandElabM Unit := do
     let lits : Array (TSyntax `term) := flags.map (fun s => quote s)
     elabCommand (← `(def $(mkIdent n) : Array String := #[$lits,*]))
-  -- `System.Keychain`
-  let keychain : Array String ←
-    if System.Platform.isOSX then
-      (macSdkArgs).map (· ++ #["-framework", "Security", "-framework", "CoreFoundation"])
-    else if System.Platform.isWindows then pure #["-ladvapi32", "-lcredui"]
-    else pkgAbsoluteLibs "libsecret-1"
-  -- No OpenSSL flags, on any platform: Lean's toolchain already ends every
-  -- link with `-lssl -lcrypto`, resolving to its bundled static
-  -- `libssl.a`/`libcrypto.a`. Naming the system `.so` as well breaks the
-  -- executable link on Linux (its GLIBC symbol versions are newer than the
-  -- glibc Lean bundles), and a static archive cannot be re-bound at load time
-  -- to macOS's incompatible `libboringssl` — the crash the old `-L` guarded
-  -- against is gone rather than avoided.
-  mkDef `nativeLinkArgs keychain
+  -- `System.Keychain`. No OpenSSL flags, on any platform: Lean's toolchain
+  -- already ends every link with its bundled static `libssl.a`/`libcrypto.a`,
+  -- and naming the system `.so` as well breaks the executable link on Linux.
+  mkDef `nativeLinkArgs (← keychainLinkArgs)
 
 package myapp where
   moreLinkArgs := nativeLinkArgs

@@ -130,4 +130,24 @@ HIMkqR8qDNJUuwo0pbfk0h8=
   unless alpn == none do
     throw (IO.userError s!"expected no ALPN protocol negotiated, got {alpn}")
 
+/- The fallback CA bundle is either none (`""`) or one of the four known
+   locations — and then a file this process can actually read, since that is
+   the test the C side applies before loading it. Which one depends on the
+   host, so the check is the invariant rather than a value. `SSL_CERT_FILE`
+   set means no fallback at all. -/
+#eval show IO Unit from do
+  let path ← fallbackCaBundle
+  let known := ["/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt",
+                "/etc/ssl/ca-bundle.pem", "/etc/ssl/cert.pem"]
+  unless path.isEmpty || known.contains path do
+    throw (IO.userError s!"fallbackCaBundle returned an unknown path: {path}")
+  unless path.isEmpty || (← System.FilePath.pathExists path) do
+    throw (IO.userError s!"fallbackCaBundle returned a path that does not exist: {path}")
+  if let some v := (← IO.getEnv "SSL_CERT_FILE") then
+    unless v.isEmpty || path.isEmpty do
+      throw (IO.userError "fallbackCaBundle must defer to SSL_CERT_FILE")
+  -- And a client context still builds with it loaded.
+  let _ ← createClientContext
+  pure ()
+
 end Tests.Network.TLS.Context

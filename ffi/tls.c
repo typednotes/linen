@@ -21,6 +21,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <unistd.h>
 
 /* ────────────────────────────────────────────────────────────
  * External classes for SSL_CTX and SSL
@@ -529,11 +530,70 @@ LEAN_EXPORT lean_obj_res linen_tls_get_alpn(
  * ──────────────────────────────────────────────────────────── */
 
 /*
+ * CA bundles to fall back on when OpenSSL's compiled-in default file does not
+ * exist — the usual case for the static OpenSSL a Lean toolchain links into
+ * every executable, whose default paths are those of the machine it was built
+ * on. Without this, every HTTPS call from a CI runner fails with "certificate
+ * verify failed" until something exports SSL_CERT_FILE, and every consumer
+ * ends up carrying its own copy of that step. Checked in order; the first
+ * readable one is loaded *in addition to* the defaults.
+ */
+static const char *linen_ca_bundle_candidates[] = {
+    "/etc/ssl/certs/ca-certificates.crt", /* Debian, Ubuntu, Alpine (ca-certificates) */
+    "/etc/pki/tls/certs/ca-bundle.crt",   /* Fedora, RHEL, CentOS */
+    "/etc/ssl/ca-bundle.pem",             /* openSUSE */
+    "/etc/ssl/cert.pem",                  /* macOS, Alpine, the BSDs */
+    NULL
+};
+
+/*
+ * The bundle `linen_tls_add_fallback_ca` would load, or NULL when none is
+ * needed or none exists: SSL_CERT_FILE set (non-empty) means the caller has
+ * chosen, and an existing compiled-in default file means OpenSSL already has
+ * one.
+ */
+static const char *linen_tls_fallback_ca_path(void) {
+    const char *env = getenv(X509_get_default_cert_file_env());
+    if (env && *env) return NULL;
+    const char *def = X509_get_default_cert_file();
+    if (def && access(def, R_OK) == 0) return NULL;
+    for (int i = 0; linen_ca_bundle_candidates[i]; i++) {
+        if (access(linen_ca_bundle_candidates[i], R_OK) == 0)
+            return linen_ca_bundle_candidates[i];
+    }
+    return NULL;
+}
+
+/* Load the fallback bundle, if any. A failure to parse it is not fatal: the
+ * defaults are still loaded, and verification reports what is missing. */
+static void linen_tls_add_fallback_ca(SSL_CTX *ctx) {
+    const char *path = linen_tls_fallback_ca_path();
+    if (path) {
+        if (SSL_CTX_load_verify_locations(ctx, path, NULL) != 1) ERR_clear_error();
+    }
+}
+
+/*
+ * @[extern "linen_tls_fallback_ca_bundle"]
+ * opaque fallbackCaBundle : IO String
+ *
+ * The CA bundle client contexts load in addition to OpenSSL's defaults, or ""
+ * when none is needed (SSL_CERT_FILE set, or the compiled-in default file
+ * exists) or none of the known locations exists. For diagnostics and tests.
+ */
+LEAN_EXPORT lean_obj_res linen_tls_fallback_ca_bundle(lean_obj_arg world) {
+    const char *path = linen_tls_fallback_ca_path();
+    return lean_io_result_mk_ok(lean_mk_string(path ? path : ""));
+}
+
+/*
  * @[extern "linen_tls_client_ctx_create"]
  * opaque createClientContext : IO TLSContext
  *
  * Creates an SSL_CTX configured for TLS client mode.
- * Loads system default CA certificates for server verification.
+ * Loads system default CA certificates for server verification, plus a
+ * well-known system bundle when OpenSSL's compiled-in default file does not
+ * exist (see linen_ca_bundle_candidates).
  * No client certificate is configured (mutual TLS not supported yet).
  */
 LEAN_EXPORT lean_obj_res linen_tls_client_ctx_create(
@@ -554,6 +614,8 @@ LEAN_EXPORT lean_obj_res linen_tls_client_ctx_create(
         SSL_CTX_free(ctx);
         return lean_io_result_mk_error(mk_io_error("Failed to load system CA certificates"));
     }
+    /* ...and a system bundle, when the compiled-in default does not exist */
+    linen_tls_add_fallback_ca(ctx);
 
     /* Enable server certificate verification */
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
