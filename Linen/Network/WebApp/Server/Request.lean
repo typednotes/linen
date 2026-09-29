@@ -438,6 +438,11 @@ def parseRequestFrom (src : ByteSource) (remoteAddr : SockAddr) : IO (Option Req
             pure ByteArray.empty
           else
             let chunk ← readN (min remaining 4096)
+            -- End of input before `Content-Length` bytes is an error, not
+            -- the body's end (an empty read would look like one).
+            if chunk.isEmpty then
+              throw (IO.userError
+                s!"request body: end of input with {remaining} of {contentLength} bytes unread")
             remainingRef.set (remaining - chunk.size)
             pure chunk
     return some {

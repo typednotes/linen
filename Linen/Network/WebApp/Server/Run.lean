@@ -86,32 +86,100 @@ theorem connAction_http11_default (req : Network.WebApp.Request)
   unfold connAction; simp [hVer, hNoConn]
 
 -- ══════════════════════════════════════════════════════════════
--- Blocking mode (default, maximum throughput)
+-- The HTTP/1.1 connection loop, over any transport
 -- ══════════════════════════════════════════════════════════════
 
-/-- Handle a single HTTP connection with keep-alive support (blocking mode).
-    Uses blocking RecvBuffer and `Blocking.sendAll` for maximum throughput. -/
-def runConnection (clientSock : Socket .connected) (remoteAddr : SockAddr)
-    (settings : Settings) (app : Application) : IO Unit := do
-  let buf ← FFI.recvBufCreate clientSock.raw
-  let token ← Std.CancellationToken.new
-  try
-    let mut keepGoing := true
-    while keepGoing do
-      let reqOpt ← parseRequest buf remoteAddr
-      match reqOpt with
+/-- A connection as the HTTP/1.1 loop sees it — the same for plain and TLS
+    sockets, in blocking and event-loop mode. -/
+structure HttpTransport where
+  /-- The next bytes towards a request head: `some` bytes, `some` empty at
+      end of input, `none` when `settingsTimeout` passed without any. The
+      event-loop transports suspend the green thread here. -/
+  nextChunk : Green (Option ByteArray)
+  /-- The connection's buffered reader: request heads are parsed from it,
+      and bodies read through it (in `IO`, throwing on timeout). -/
+  reader : BufferedSource
+  /-- Where responses go. -/
+  sink : ResponseSink
+  /-- Whether the connection is TLS (`Request.isSecure`). -/
+  isSecure : Bool := false
+
+/-- Receive until `t.reader` holds a complete request head, or the peer
+    closes: `true` then; `false` when `settingsTimeout` passed first. -/
+def HttpTransport.bufferHead (t : HttpTransport) : Green Bool := do
+  let mut ended := false
+  while !ended && !headComplete (← (t.reader.unread : IO _)) do
+    match ← t.nextChunk with
+    | none => return false
+    | some chunk => if chunk.isEmpty then ended := true else (t.reader.feed chunk : IO _)
+  return true
+
+/-- Serve HTTP/1.1 requests on a transport until the peer closes, a request
+    asks to close, or `settingsTimeout` passes waiting for a request head.
+
+    Each head is buffered until complete (`headComplete`) before the parser
+    runs, so the parser never waits, and bytes already buffered — pipelined
+    requests — are served before any new wait. A timeout while waiting for a
+    head (between requests, or a client sending one too slowly) closes the
+    connection quietly, as Warp's does; one while reading a body is an error
+    the application sees. After each response the unread body is drained, so
+    the next head starts where it should. -/
+def serveHttp (t : HttpTransport) (remoteAddr : SockAddr) (settings : Settings)
+    (app : Application) : Green Unit := do
+  let mut keepGoing := true
+  while keepGoing do
+    if !(← t.bufferHead) then
+      keepGoing := false
+    else
+      match ← (parseRequestFrom t.reader.source remoteAddr : IO _) with
       | none => keepGoing := false
       | some req =>
+        let req := { req with isSecure := t.isSecure }
         let action := connAction req
-        let _received ← Green.block (app req fun resp => do
+        let _received ← (app req fun resp => do
           let resp' := if action == .close then
             resp.mapResponseHeaders ((hConnection, "close") :: ·)
           else resp
-          sendResponse clientSock settings req resp').run token
+          sendResponseTo t.sink settings req resp').run
         if action == .keepAlive then
-          drainBody req
+          (drainBody req : IO _)
         else
           keepGoing := false
+
+/-- `settingsTimeout`, in milliseconds. -/
+def Settings.timeoutMillis (settings : Settings) : Nat := settings.settingsTimeout * 1000
+
+-- ══════════════════════════════════════════════════════════════
+-- Blocking mode (default, maximum throughput)
+-- ══════════════════════════════════════════════════════════════
+
+/-- The transport of a connected socket in blocking mode: every wait is a
+    `poll` of at most `settingsTimeout`, on this connection's own thread. -/
+def blockingTransport (sock : Socket .connected) (settings : Settings) : IO HttpTransport := do
+  let timeout := settings.timeoutMillis
+  let reader ← ByteSource.buffered (Blocking.recv sock 16384 timeout)
+  return {
+    nextChunk := do
+      match ← (Network.Socket.poll sock .read timeout : IO _) with
+      | .timeout => return none
+      | .error e => throw e
+      | .ready => return some (← (Blocking.recv sock 16384 timeout : IO _))
+    reader
+    sink := ResponseSink.ofSocket sock timeout reader.readSome }
+
+/-- Handle a single HTTP connection with keep-alive support (blocking mode),
+    on the calling thread.
+
+    Through 1.8.0 this read through the C `RecvBuffer` with no timeout — an
+    idle or stalled client held its thread forever — and `responseRaw`
+    handlers (a WebSocket upgrade) read the socket directly, skipping bytes
+    already buffered after the request. Both now go through
+    `blockingTransport`. -/
+def runConnection (clientSock : Socket .connected) (remoteAddr : SockAddr)
+    (settings : Settings) (app : Application) : IO Unit := do
+  try
+    let transport ← blockingTransport clientSock settings
+    Green.block (serveHttp transport remoteAddr settings app) (← Std.CancellationToken.new)
   catch e =>
     settings.settingsOnException (some remoteAddr)
     IO.eprintln s!"Server: connection error from {remoteAddr}: {e}"
@@ -123,7 +191,7 @@ def runConnection (clientSock : Socket .connected) (remoteAddr : SockAddr)
 def acceptLoop (serverSock : Socket .listening) (settings : Settings)
     (app : Application) : IO Unit := do
   while true do
-    let (clientSock, remoteAddr) ← Network.Socket.Blocking.accept serverSock
+    let (clientSock, remoteAddr) ← Network.Socket.Blocking.accept serverSock (timeoutMillis := 0)
     let _tid ← Control.Concurrent.forkIO (runConnection clientSock remoteAddr settings app)
     pure ()
 
@@ -142,29 +210,22 @@ def runSettings (settings : Settings) (app : Application) : IO Unit := do
 -- EventDispatcher mode (high-concurrency, non-blocking)
 -- ══════════════════════════════════════════════════════════════
 
-/-- Receive from a connected socket, suspending the green thread (not a
-    pool thread) until data arrives; empty at end of input. The receive is
-    tried first, so data already waiting costs no dispatcher round trip. -/
-def recvSuspending (disp : EventDispatcher) (sock : Socket .connected) : Green ByteArray := do
-  repeat
-    match ← (Network.Socket.recv sock 16384 : IO _) with
-    | .data bytes => return bytes
-    | .eof => return ByteArray.empty
-    | .error e => throw e
-    | .wouldBlock => disp.waitReadable sock
-  return ByteArray.empty
+/-- The transport of a connected socket in EventDispatcher mode: heads are
+    received on the green thread (`recvFor`, suspending it), bodies from the
+    application's `IO` through the dispatcher (`recvAwait`: `IO.wait`, which
+    the task manager compensates for, so a slow body does not starve the
+    pool as a `poll` would), responses through `ResponseSink.ofSocketEL`.
+    Every wait is at most `settingsTimeout`. -/
+def eventLoopTransport (sock : Socket .connected) (settings : Settings)
+    (disp : EventDispatcher) : IO HttpTransport := do
+  let timeout := settings.timeoutMillis
+  let reader ← ByteSource.buffered (disp.recvAwait sock timeout)
+  return {
+    nextChunk := disp.recvFor sock timeout
+    reader
+    sink := ResponseSink.ofSocketEL sock disp timeout reader.readSome }
 
 /-- Handle a single HTTP connection (EventDispatcher mode).
-
-    Each request head is buffered **on the green thread** — waiting through
-    the dispatcher, so an idle or slow client holds no pool thread — until a
-    complete head is buffered (`headComplete`) or the peer closes; only then
-    does the parser run, and it never waits. Bytes already buffered are
-    looked at before waiting, so pipelined requests are served back to back.
-
-    Body reads are the application's `IO` calls (`requestBody`), so they
-    cannot suspend the green thread; they wait with `poll` for at most
-    `settingsTimeout` seconds each.
 
     Through 1.8.0 this parsed from the C `RecvBuffer`, whose reads fail after
     a few `EAGAIN` retries — a head or body split across packets dropped the
@@ -172,30 +233,9 @@ def recvSuspending (disp : EventDispatcher) (sock : Socket .connected) : Green B
     the next one was already buffered, so pipelined requests hung. -/
 def runConnectionEL (clientSock : Socket .connected) (remoteAddr : SockAddr)
     (settings : Settings) (app : Application) (disp : EventDispatcher) : Green Unit := do
-  let timeoutMillis := settings.settingsTimeout * 1000
-  let reader ← (ByteSource.buffered (Blocking.recv clientSock 16384 timeoutMillis) : IO _)
-  let sink := ResponseSink.ofSocketEL clientSock disp reader.readSome
   try
-    let mut keepGoing := true
-    while keepGoing do
-      let mut ended := false
-      while !ended && !headComplete (← (reader.unread : IO _)) do
-        let chunk ← recvSuspending disp clientSock
-        if chunk.isEmpty then ended := true else (reader.feed chunk : IO _)
-      let reqOpt ← (parseRequestFrom reader.source remoteAddr : IO _)
-      match reqOpt with
-      | none => keepGoing := false
-      | some req =>
-        let action := connAction req
-        let _received ← (app req fun resp => do
-          let resp' := if action == .close then
-            resp.mapResponseHeaders ((hConnection, "close") :: ·)
-          else resp
-          sendResponseTo sink settings req resp').run
-        if action == .keepAlive then
-          (drainBody req : IO _)
-        else
-          keepGoing := false
+    let transport ← (eventLoopTransport clientSock settings disp : IO _)
+    serveHttp transport remoteAddr settings app
   catch e =>
     (settings.settingsOnException (some remoteAddr) : IO _)
     (IO.eprintln s!"Server: connection error from {remoteAddr}: {e}" : IO _)
@@ -222,7 +262,10 @@ def acceptLoopEL (serverSock : Socket .listening) (settings : Settings)
     | .wouldBlock =>
       -- No pending connections — wait for readability then retry
       disp.waitReadable serverSock
-    | .error _ => pure ()
+    | .error _ =>
+      -- e.g. `EMFILE`: the listener stays readable, so retrying at once
+      -- would spin; back off briefly.
+      (IO.sleep 10 : IO _)
 
 /-- Run a WAI application with non-blocking EventDispatcher mode.
     Better for high-concurrency scenarios with many idle connections. -/

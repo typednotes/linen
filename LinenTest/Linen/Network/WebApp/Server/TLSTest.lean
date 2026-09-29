@@ -68,23 +68,50 @@ private def contains (s part : String) : Bool := (s.splitOn part).length > 1
 /-- Run a TLS server for `app` on a loopback port, run `client` against the
     port, then stop the server (cancel, and connect once so the blocked
     `accept` returns and sees it). -/
-private def withTLSServer (certPath keyPath : String) (app : Application)
+inductive Mode where
+  | blocking   -- `runTLSSocket`: a thread per connection
+  | eventLoop  -- `runTLSSocketEL`: green threads on an `EventDispatcher`
+deriving Repr
+
+private def withTLSServer (mode : Mode) (certPath keyPath : String) (app : Application)
     (client : UInt16 → IO α)
-    (onInsecure : OnInsecure := .denyInsecure "This server requires HTTPS") : IO α := do
+    (onInsecure : OnInsecure := .denyInsecure "This server requires HTTPS")
+    (settings : Network.WebApp.Server.Settings := Network.WebApp.Server.defaultSettings) :
+    IO α := do
   let ctx ← Network.TLS.createContext certPath keyPath
   let server ← listenTCP "127.0.0.1" 0
   let port := (← getSockName server).port
-  let stop ← Std.CancellationToken.new
-  let serverTask ← IO.asTask (prio := .dedicated)
-    (runTLSSocket ctx server Network.WebApp.Server.defaultSettings app stop onInsecure)
-  try
-    client port
-  finally
-    stop.cancel .cancel
-    let wake ← Blocking.connect (← socket .inet .stream) { host := "127.0.0.1", port }
-    let _ ← close wake
-    let _ ← IO.wait serverTask
-    let _ ← close server
+  match mode with
+  | .blocking =>
+    let stop ← Std.CancellationToken.new
+    let serverTask ← IO.asTask (prio := .dedicated)
+      (runTLSSocket ctx server settings app stop onInsecure)
+    try
+      client port
+    finally
+      stop.cancel .cancel
+      let wake ← Blocking.connect (← socket .inet .stream) { host := "127.0.0.1", port }
+      let _ ← close wake
+      let _ ← IO.wait serverTask
+      let _ ← close server
+  | .eventLoop =>
+    setNonBlocking server
+    let disp ← EventDispatcher.create
+    let token ← Std.CancellationToken.new
+    let serverTask ← IO.asTask (prio := .dedicated) do
+      let loop := runTLSSocketEL ctx server settings app disp onInsecure
+      try Control.Concurrent.Green.Green.block loop token catch _ => pure ()
+    try
+      client port
+    finally
+      token.cancel .cancel
+      disp.shutdown
+      let _ ← IO.wait serverTask
+      let _ ← close server
+
+private def bothModes (test : Mode → IO Unit) : IO Unit := do
+  for mode in [Mode.blocking, .eventLoop] do
+    try test mode catch e => throw (IO.userError s!"{repr mode}: {e}")
 
 /-- A TLS client connection to `port`, verifying the test certificate. -/
 private def tlsConnect (certPath : String) (port : UInt16) :
@@ -97,8 +124,8 @@ private def tlsConnect (certPath : String) (port : UInt16) :
 -- Three requests on one kept-alive TLS connection: a GET, a chunked POST
 -- whose body looks like a request, and a final GET that closes. Each answer
 -- must be to the request the client sent, and the app must see `isSecure`.
-#eval show IO Unit from withTestCert fun certPath keyPath => do
-  withTLSServer certPath keyPath echoApp fun port => do
+#eval bothModes fun mode => withTestCert fun certPath keyPath => do
+  withTLSServer mode certPath keyPath echoApp fun port => do
     let (conn, session) ← tlsConnect certPath port
     Network.TLS.write session "GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n".toUTF8
     let first ← readUntil session (contains · ";")
@@ -119,8 +146,8 @@ private def tlsConnect (certPath : String) (port : UInt16) :
       throw (IO.userError s!"third: {repr third}")
 
 -- A request split across TLS records, byte by byte, is reassembled.
-#eval show IO Unit from withTestCert fun certPath keyPath => do
-  withTLSServer certPath keyPath echoApp fun port => do
+#eval bothModes fun mode => withTestCert fun certPath keyPath => do
+  withTLSServer mode certPath keyPath echoApp fun port => do
     let (conn, session) ← tlsConnect certPath port
     let request := "POST /split HTTP/1.1\r\nHost: localhost\r\nContent-Length: 3\r\n\
                     Connection: close\r\n\r\nabc"
@@ -156,8 +183,8 @@ private def tlsExchange (certPath : String) (port : UInt16) (path : String) : IO
 
 -- `denyInsecure`: plain HTTP on the TLS port is answered `426` with the
 -- message — and TLS keeps working on the same port.
-#eval show IO Unit from withTestCert fun certPath keyPath => do
-  withTLSServer certPath keyPath echoApp (onInsecure := .denyInsecure "use https") fun port => do
+#eval bothModes fun mode => withTestCert fun certPath keyPath => do
+  withTLSServer mode certPath keyPath echoApp (onInsecure := .denyInsecure "use https") fun port => do
     let reply ← plainExchange port "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"
     unless reply.startsWith "HTTP/1.1 426 Upgrade Required\r\n" && reply.endsWith "\r\n\r\nuse https" do
       throw (IO.userError s!"denied: {repr reply}")
@@ -166,8 +193,8 @@ private def tlsExchange (certPath : String) (port : UInt16) (path : String) : IO
 
 -- `allowInsecure`: plain HTTP is served too, and says it is not secure;
 -- TLS on the same port still says it is.
-#eval show IO Unit from withTestCert fun certPath keyPath => do
-  withTLSServer certPath keyPath echoApp (onInsecure := .allowInsecure) fun port => do
+#eval bothModes fun mode => withTestCert fun certPath keyPath => do
+  withTLSServer mode certPath keyPath echoApp (onInsecure := .allowInsecure) fun port => do
     let reply ← plainExchange port
       "POST /plain HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\nConnection: close\r\n\r\nhi"
     unless reply.startsWith "HTTP/1.1 200" && contains reply "POST /plain secure=false body=hi;" do
@@ -176,12 +203,45 @@ private def tlsExchange (certPath : String) (port : UInt16) (path : String) : IO
       throw (IO.userError "TLS beside allowed plaintext")
 
 -- A client that connects and closes without a byte costs nothing.
-#eval show IO Unit from withTestCert fun certPath keyPath => do
-  withTLSServer certPath keyPath echoApp fun port => do
+#eval bothModes fun mode => withTestCert fun certPath keyPath => do
+  withTLSServer mode certPath keyPath echoApp fun port => do
     let quiet ← Blocking.connect (← socket .inet .stream) { host := "127.0.0.1", port }
     let _ ← close quiet
     unless contains (← tlsExchange certPath port "/still") "GET /still secure=true" do
       throw (IO.userError "TLS after a silent client")
+
+/-! ### Timeouts -/
+
+private def oneSecond : Network.WebApp.Server.Settings :=
+  { Network.WebApp.Server.defaultSettings with settingsTimeout := 1, settingsTimeoutPos := by decide }
+
+-- An idle TLS connection — after its handshake, and after a request — is
+-- closed once `settingsTimeout` passes. Through 1.8.0 a blocking `SSL_read`
+-- waited forever.
+#eval bothModes fun mode => withTestCert fun certPath keyPath => do
+  withTLSServer mode certPath keyPath echoApp (settings := oneSecond) fun port => do
+    for request in ["", "GET /then-idle HTTP/1.1\r\nHost: localhost\r\n\r\n"] do
+      let (conn, session) ← tlsConnect certPath port
+      unless request.isEmpty do Network.TLS.write session request.toUTF8
+      let t0 ← IO.monoMsNow
+      let got ← readUntil session (fun _ => false)
+      let waited := (← IO.monoMsNow) - t0
+      Network.TLS.close session
+      let _ ← close conn
+      unless waited ≥ 900 && waited < 5000 &&
+          (request.isEmpty || contains got "GET /then-idle secure=true") do
+        throw (IO.userError s!"{repr request}: closed after {waited} ms, got {repr got}")
+
+-- A client that opens TCP and never starts the handshake is dropped too.
+#eval bothModes fun mode => withTestCert fun certPath keyPath => do
+  withTLSServer mode certPath keyPath echoApp (settings := oneSecond) fun port => do
+    let silent ← Blocking.connect (← socket .inet .stream) { host := "127.0.0.1", port }
+    let t0 ← IO.monoMsNow
+    let got ← try Blocking.recv silent 16 (timeoutMillis := 5000) catch _ => pure ByteArray.empty
+    let waited := (← IO.monoMsNow) - t0
+    let _ ← close silent
+    unless got.isEmpty && waited ≥ 900 && waited < 5000 do
+      throw (IO.userError s!"silent client: closed after {waited} ms")
 
 /-! ### Signatures -/
 

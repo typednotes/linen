@@ -271,6 +271,41 @@ private def contains (s part : String) : Bool := (s.splitOn part).length > 1
     let _ ← Network.Socket.close conn
     unless reply.isEmpty do throw (IO.userError s!"answered: {repr reply}")
 
+/-! ### Over the C `RecvBuffer` (`ByteSource.ofRecvBuffer`) -/
+
+-- `parseRequest` over a live socket's `RecvBuffer`: two pipelined requests,
+-- the first with a body, are parsed in turn.
+#eval show IO Unit from do
+  let server ← _root_.Network.Socket.listenTCP "127.0.0.1" 0
+  let addr ← _root_.Network.Socket.getSockName server
+  let client ← _root_.Network.Socket.Blocking.connect
+    (← _root_.Network.Socket.socket .inet .stream) { host := "127.0.0.1", port := addr.port }
+  let (conn, peer) ← _root_.Network.Socket.Blocking.accept server
+  _root_.Network.Socket.Blocking.sendAll client
+    ("POST /a HTTP/1.1\r\nHost: x\r\nContent-Length: 3\r\n\r\nabc" ++
+     "GET /b HTTP/1.1\r\nHost: x\r\n\r\n").toUTF8
+  let buf ← Network.Socket.FFI.recvBufCreate conn.raw
+  let some first ← parseRequest buf peer | throw (IO.userError "first request")
+  let body ← first.requestBody
+  let rest ← first.requestBody
+  let some second ← parseRequest buf peer | throw (IO.userError "second request")
+  for s in [client, conn] do let _ ← _root_.Network.Socket.close s
+  let _ ← _root_.Network.Socket.close server
+  unless first.rawPathInfo == "/a" && body == "abc".toUTF8 && rest.isEmpty &&
+      second.rawPathInfo == "/b" && second.requestBodyLength == .knownLength 0 do
+    throw (IO.userError s!"parsed {first.rawPathInfo} {String.fromUTF8! body}, then {second.rawPathInfo}")
+
+-- A `Content-Length` body cut short by the peer closing is an error, not a
+-- short body that looks complete.
+#eval show IO Unit from do
+  let (readLine, readN, _) ← memReaders "POST / HTTP/1.1\r\nContent-Length: 10\r\n\r\n0123"
+  let some req ← parseRequestFrom { readLine, readN } { host := "127.0.0.1", port := 0 }
+    | throw (IO.userError "no request")
+  let first ← req.requestBody
+  let truncated ← try let _ ← req.requestBody; pure false catch _ => pure true
+  unless first == "0123".toUTF8 && truncated do
+    throw (IO.userError "a truncated body read as complete")
+
 /-! ### IO entry points — signatures -/
 
 example : Network.Socket.FFI.RecvBuffer → IO (Option (String × HeaderLines)) := recvHeaders

@@ -185,20 +185,32 @@ def sendResponseTo (sink : ResponseSink) (settings : Settings) (req : Request)
     (rawAction sink.rawRecv sink.rawSend : IO _)
     pure ResponseReceived.done
 
-/-- The sink for a connected socket in blocking mode (`Blocking.sendAll`). -/
-def ResponseSink.ofSocket (sock : Socket .connected) : ResponseSink where
-  send bytes := do (Blocking.sendAll sock bytes : IO _)
-  sendIO := Blocking.sendAll sock
-  sendFile path part := Network.Sendfile.sendFile sock path part
-  rawRecv := Blocking.recv sock 4096
-  rawSend := Blocking.sendAll sock
+/-- The sink for a connected socket in blocking mode (`Blocking.sendAll`,
+    each wait for writability at most `timeoutMillis`). `rawRecv` should read
+    through the connection's buffer when there is one, so a `responseRaw`
+    handler sees bytes already received. -/
+def ResponseSink.ofSocket (sock : Socket .connected)
+    (timeoutMillis : Nat := Blocking.defaultTimeoutMillis)
+    (rawRecv : IO ByteArray := Blocking.recv sock 4096 timeoutMillis) : ResponseSink where
+  send bytes := do (Blocking.sendAll sock bytes timeoutMillis : IO _)
+  sendIO bytes := Blocking.sendAll sock bytes timeoutMillis
+  sendFile path part := Network.Sendfile.sendFileWith (Blocking.sendAll sock · timeoutMillis) path part
+  rawRecv := rawRecv
+  rawSend bytes := Blocking.sendAll sock bytes timeoutMillis
 
-/-- The sink for a connected socket in EventDispatcher mode: whole writes go
-    through `sendAllGreen`, so the Green thread yields while the socket would
-    block. -/
+/-- The sink for a connected socket in EventDispatcher mode: every wait goes
+    through the dispatcher — suspending the green thread for whole writes,
+    and `IO.wait` on its promise for writes from `IO` callbacks (streamed
+    bodies, files, `responseRaw`), which does not starve the pool as a
+    `poll` would. Each wait is at most `timeoutMillis`. -/
 def ResponseSink.ofSocketEL (sock : Socket .connected) (disp : EventDispatcher)
-    (rawRecv : IO ByteArray := Blocking.recv sock 4096) : ResponseSink :=
-  { ResponseSink.ofSocket sock with send := disp.sendAllGreen sock, rawRecv }
+    (timeoutMillis : Nat := Blocking.defaultTimeoutMillis)
+    (rawRecv : IO ByteArray := disp.recvAwait sock timeoutMillis) : ResponseSink where
+  send bytes := disp.sendAllGreenFor sock bytes timeoutMillis
+  sendIO bytes := disp.sendAllAwait sock bytes timeoutMillis
+  sendFile path part := Network.Sendfile.sendFileWith (disp.sendAllAwait sock · timeoutMillis) path part
+  rawRecv := rawRecv
+  rawSend bytes := disp.sendAllAwait sock bytes timeoutMillis
 
 /-- Send a full HTTP response over a connected socket (blocking mode).
     Uses `Blocking.sendAll` for reliable full writes.

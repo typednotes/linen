@@ -9,18 +9,24 @@
 
   ## Design
 
-  One thread per connection, as in `Server.runSettings`: the accept loop
-  hands each connection to a dedicated thread, which performs the TLS
-  handshake and then serves HTTP/1.1 requests *through the session* — a
-  `ByteSource.buffered` over `TLS.read` for requests, a `ResponseSink` over
-  `TLS.write` for responses. (`Network.TLS.Green` now makes an
-  event-loop TLS server possible — the handshake is resumable — but this
-  server does not use it yet.)
+  Two modes, as for the plain server:
 
+  - **`runTLS`** — a thread per connection (`Server.runSettings`'s model).
+    The socket is made non-blocking after the first-byte peek so every wait —
+    handshake, reads, writes — is a `poll` bounded by `settingsTimeout`
+    (`Network.TLS.handshake`, `readWithin`, `writeWithin`).
+  - **`runTLSEventLoop`** — green threads over an `EventDispatcher`
+    (`Server.runSettingsEventLoop`'s model): the peek, the handshake and every
+    head read suspend the green thread (`Network.TLS.Green`), so idle and slow
+    connections hold no pool thread; body reads, which are the application's
+    `IO` calls, wait on the dispatcher's promise (`Green.readIO`), which the
+    task manager compensates for.
+
+  Either way requests are parsed, and responses written, *through the
+  session*, by the same HTTP/1.1 loop as plain connections (`serveHttp`).
   Through 1.8.0 this module ran the handshake and then parsed and answered
   requests on the raw socket, bypassing the session entirely, so no HTTPS
-  request could succeed; nothing tested it. It is now tested end to end
-  with a real TLS client.
+  request could succeed; nothing tested it.
 
   Before the handshake, the first byte the client sends is *peeked*
   (`MSG_PEEK`, so OpenSSL still reads it): `0x16` opens a TLS handshake
@@ -52,6 +58,7 @@ import Linen.Network.Socket
 import Linen.Network.Socket.Blocking
 import Linen.Network.Sendfile
 import Linen.Network.TLS.Context
+import Linen.Network.TLS.Green
 import Linen.Control.Concurrent
 import Linen.Control.Concurrent.Green
 import Linen.Network.WebApp.Server.Settings
@@ -107,83 +114,123 @@ inductive FirstByte where
   | closed
 deriving BEq, Repr
 
-/-- Wait (at most `timeoutMillis`) for the client's first byte and peek at
-    it, leaving it unread. -/
+/-- Classify a peeked first byte. -/
+def FirstByte.ofPeek : RecvOutcome → Option FirstByte
+  | .data bytes => some (if isTlsHandshakeByte (bytes.get! 0) then .tls else .plain)
+  | .eof => some .closed
+  | .error _ => some .closed
+  | .wouldBlock => none
+
+/-- Wait (at most `timeoutMillis`, with `poll`) for the client's first byte
+    and peek at it, leaving it unread. A client that sends nothing in time
+    counts as `closed`. -/
 def peekFirstByte (sock : Socket .connected) (timeoutMillis : Nat) : IO FirstByte := do
   for _ in [0:100] do
     match ← Network.Socket.poll sock .read timeoutMillis with
-    | .timeout => throw (IO.userError s!"no data from the client after {timeoutMillis}ms")
-    | .error e => throw e
-    | .ready =>
-      match ← Network.Socket.peek sock 1 with
-      | .data bytes => return if isTlsHandshakeByte (bytes.get! 0) then .tls else .plain
-      | .eof => return .closed
-      | .error e => throw e
-      | .wouldBlock => pure ()  -- a spurious wake-up: poll again
-  throw (IO.userError "the client's socket keeps waking without data")
+    | .ready => if let some b := FirstByte.ofPeek (← Network.Socket.peek sock 1) then return b
+    | _ => return .closed
+  return .closed
 
-/-- The sink writing a response through a TLS session. -/
-def tlsSink (session : TLSSession) (reader : BufferedSource) : ResponseSink where
-  send bytes := do (Network.TLS.write session bytes : IO _)
-  sendIO := Network.TLS.write session
-  sendFile path part := Network.Sendfile.sendFileWith (Network.TLS.write session) path part
-  rawRecv := reader.readSome
-  rawSend := Network.TLS.write session
+/-- `peekFirstByte` on the dispatcher: the green thread is suspended while
+    waiting. -/
+def peekFirstByteEL (disp : EventDispatcher) (sock : Socket .connected) (timeoutMillis : Nat) :
+    Green FirstByte := do
+  for _ in [0:100] do
+    if let some b := FirstByte.ofPeek (← (Network.Socket.peek sock 1 : IO _)) then return b
+    unless ← disp.waitReadableFor sock timeoutMillis do return .closed
+  return .closed
 
-/-- Serve one connection: the TLS handshake, then HTTP/1.1 requests through
-    the session, with keep-alive, until either side closes. A connection
-    that does not open with a TLS record is handled per `onInsecure`. Every
-    error ends the connection only, reported through `settingsOnException`. -/
+/-- Answer plain HTTP with `insecureDenial` — after reading its head, since
+    closing with a request unread makes the kernel reset the connection,
+    which can destroy the answer. -/
+def denyInsecureOn (t : HttpTransport) (message : String) : Green Unit := do
+  if ← t.bufferHead then t.sink.send (insecureDenial message)
+
+-- ── Transports over a TLS session ──
+
+/-- The transport of a TLS session in blocking mode, on a **non-blocking**
+    socket so that every wait is a bounded `poll` (`readWithin`,
+    `writeWithin`) — a blocking `SSL_read` could not time out. -/
+def tlsTransport (session : TLSSession) (sock : Socket .connected) (settings : Settings) :
+    IO HttpTransport := do
+  let timeout := settings.timeoutMillis
+  let recv : IO ByteArray := do
+    match ← readWithin session sock.raw timeout with
+    | some bytes => pure bytes
+    | none => throw (IO.userError s!"TLS read timed out after {timeout}ms")
+  let reader ← ByteSource.buffered recv
+  let write := writeWithin session sock.raw timeout
+  return {
+    nextChunk := do (readWithin session sock.raw timeout : IO _)
+    reader
+    sink := {
+      send := fun bytes => do (write bytes : IO _)
+      sendIO := write
+      sendFile := fun path part => Network.Sendfile.sendFileWith write path part
+      rawRecv := reader.readSome
+      rawSend := write }
+    isSecure := true }
+
+/-- The transport of a TLS session in EventDispatcher mode: heads read on the
+    green thread (`Green.readFor`), bodies and `IO`-side writes through the
+    dispatcher's promises (`readIO`/`writeIO`), each wait at most
+    `settingsTimeout`. -/
+def tlsTransportEL (session : TLSSession) (sock : Socket .connected) (settings : Settings)
+    (disp : EventDispatcher) : IO HttpTransport := do
+  let timeout := settings.timeoutMillis
+  let reader ← ByteSource.buffered (Network.TLS.Green.readIO disp sock session timeout)
+  let writeIO (bytes : ByteArray) := Network.TLS.Green.writeIO disp sock session bytes timeout
+  return {
+    nextChunk := Network.TLS.Green.readFor disp sock session (some timeout)
+    reader
+    sink := {
+      send := fun bytes => Network.TLS.Green.write disp sock session bytes (some timeout)
+      sendIO := writeIO
+      sendFile := fun path part => Network.Sendfile.sendFileWith writeIO path part
+      rawRecv := reader.readSome
+      rawSend := writeIO }
+    isSecure := true }
+
+-- ── Blocking mode: a thread per connection ──
+
+private def reportError (settings : Settings) (remoteAddr : SockAddr) (e : IO.Error) : IO Unit := do
+  settings.settingsOnException (some remoteAddr)
+  IO.eprintln s!"Server.TLS: connection error from {remoteAddr}: {e}"
+
+/-- Serve one connection on the calling thread: the TLS handshake, then
+    HTTP/1.1 requests through the session (`serveHttp` over `tlsTransport`).
+    A connection that does not open with a TLS record is handled per
+    `onInsecure`. Every error ends the connection only, reported through
+    `settingsOnException`. -/
 def tlsConnection (ctx : TLSContext) (clientSock : Socket .connected)
     (remoteAddr : SockAddr) (settings : Settings) (app : Application)
     (onInsecure : OnInsecure := .denyInsecure "This server requires HTTPS") : IO Unit := do
-  let firstByte ← try peekFirstByte clientSock (settings.settingsTimeout * 1000)
-    catch _ => pure .closed
-  match firstByte, onInsecure with
-  | .tls, _ => pure ()
-  | .closed, _ =>
-    let _ ← Network.Socket.close clientSock
-    return
+  let timeout := settings.timeoutMillis
+  match ← peekFirstByte clientSock timeout, onInsecure with
   | .plain, .allowInsecure =>
     -- Plain HTTP on this socket, exactly as the plain server serves it.
-    return ← runConnection clientSock remoteAddr settings app
+    runConnection clientSock remoteAddr settings app
+  | .tls, _ =>
+    try
+      setNonBlocking clientSock
+      let session ← newServerSession ctx clientSock.raw
+      try
+        handshake session clientSock.raw timeout
+        let transport ← tlsTransport session clientSock settings
+        Green.block (serveHttp transport remoteAddr settings app) (← Std.CancellationToken.new)
+      finally
+        Network.TLS.close session
+    catch e => reportError settings remoteAddr e
+    finally
+      let _ ← Network.Socket.close clientSock
   | .plain, .denyInsecure message =>
     try
-      -- Read the head first: closing with a request unread makes the
-      -- kernel reset the connection, which can destroy the answer.
-      let _ ← recvHeaders (← FFI.recvBufCreate clientSock.raw)
-      Network.Socket.Blocking.sendAll clientSock (insecureDenial message)
+      let transport ← blockingTransport clientSock settings
+      Green.block (denyInsecureOn transport message) (← Std.CancellationToken.new)
     catch _ => pure ()
-    let _ ← Network.Socket.close clientSock
-    return
-  try
-    let session ← Network.TLS.acceptSocket ctx clientSock.raw
-    try
-      let reader ← ByteSource.buffered (Network.TLS.read session 16384)
-      let sink := tlsSink session reader
-      let token ← Std.CancellationToken.new
-      let mut keepGoing := true
-      while keepGoing do
-        match ← parseRequestFrom reader.source remoteAddr with
-        | none => keepGoing := false
-        | some req =>
-          let secureReq := { req with isSecure := true }
-          let action := connAction secureReq
-          let _received ← Green.block (app secureReq fun resp => do
-            let resp' := if action == .close then
-              resp.mapResponseHeaders ((hConnection, "close") :: ·)
-            else resp
-            sendResponseTo sink settings secureReq resp').run token
-          if action == .keepAlive then
-            drainBody secureReq
-          else
-            keepGoing := false
     finally
-      Network.TLS.close session
-  catch e =>
-    settings.settingsOnException (some remoteAddr)
-    IO.eprintln s!"Server.TLS: connection error from {remoteAddr}: {e}"
-  finally
+      let _ ← Network.Socket.close clientSock
+  | .closed, _ =>
     let _ ← Network.Socket.close clientSock
 
 /-- Accept connections on `serverSock` and serve each on its own thread,
@@ -201,7 +248,8 @@ def runTLSSocket (ctx : TLSContext) (serverSock : Socket .listening) (settings :
       let _tid ← Control.Concurrent.forkIO
         (tlsConnection ctx clientSock remoteAddr settings app onInsecure)
 
-/-- Run a web application with TLS on the given port.
+/-- Run a web application with TLS on the given port, a thread per
+    connection.
     $$\text{runTLS} : \text{TLSSettings} \to \text{Settings} \to \text{Application} \to \text{IO}()$$ -/
 def runTLS (tlsSettings : TLSSettings) (settings : Settings)
     (app : Application) : IO Unit := do
@@ -214,6 +262,80 @@ def runTLS (tlsSettings : TLSSettings) (settings : Settings)
     settings.settingsBeforeMainLoop
     runTLSSocket ctx serverSock settings app (← Std.CancellationToken.new) tlsSettings.onInsecure
   finally
+    let _ ← Network.Socket.close serverSock
+
+-- ── EventDispatcher mode: green threads ──
+
+/-- Serve one connection on a green thread (`tlsConnection`'s event-loop
+    form): the first-byte peek, the handshake (`Network.TLS.Green.accept`)
+    and every head read suspend the green thread instead of holding a pool
+    thread. -/
+def tlsConnectionEL (ctx : TLSContext) (clientSock : Socket .connected)
+    (remoteAddr : SockAddr) (settings : Settings) (app : Application) (disp : EventDispatcher)
+    (onInsecure : OnInsecure := .denyInsecure "This server requires HTTPS") : Green Unit := do
+  let timeout := settings.timeoutMillis
+  -- OpenSSL reads and writes the fd itself, so it must not block (Linux does
+  -- not carry the listener's O_NONBLOCK over to accepted sockets).
+  try (setNonBlocking clientSock : IO _) catch _ => pure ()
+  match ← peekFirstByteEL disp clientSock timeout, onInsecure with
+  | .plain, .allowInsecure =>
+    runConnectionEL clientSock remoteAddr settings app disp
+  | .tls, _ =>
+    try
+      let session ← Network.TLS.Green.accept disp ctx clientSock (some timeout)
+      try
+        let transport ← (tlsTransportEL session clientSock settings disp : IO _)
+        serveHttp transport remoteAddr settings app
+      finally
+        (Network.TLS.close session : IO _)
+    catch e => (reportError settings remoteAddr e : IO _)
+    finally
+      let _ ← (Network.Socket.close clientSock : IO _)
+  | .plain, .denyInsecure message =>
+    try
+      let transport ← (eventLoopTransport clientSock settings disp : IO _)
+      denyInsecureOn transport message
+    catch _ => pure ()
+    finally
+      let _ ← (Network.Socket.close clientSock : IO _)
+  | .closed, _ =>
+    let _ ← (Network.Socket.close clientSock : IO _)
+
+/-- The event-loop accept loop for TLS: each connection on its own green
+    thread. Stops when the green thread's token is cancelled (checked on each
+    iteration; `EventDispatcher.shutdown` wakes an idle wait). -/
+def runTLSSocketEL (ctx : TLSContext) (serverSock : Socket .listening) (settings : Settings)
+    (app : Application) (disp : EventDispatcher)
+    (onInsecure : OnInsecure := .denyInsecure "This server requires HTTPS") : Green Unit := do
+  while true do
+    Control.Concurrent.Green.Green.checkCancelled
+    match ← (Network.Socket.accept serverSock : IO _) with
+    | .accepted clientSock remoteAddr =>
+      let _ ← (Control.Concurrent.forkGreen
+        (tlsConnectionEL ctx clientSock remoteAddr settings app disp onInsecure) : IO _)
+    | .wouldBlock => disp.waitReadable serverSock
+    | .error _ => (IO.sleep 10 : IO _)
+
+/-- Run a web application with TLS on the given port, on green threads over
+    an `EventDispatcher` (`Server.runSettingsEventLoop`'s TLS counterpart):
+    idle and slow connections — including their TLS handshakes — hold no
+    pool thread.
+    $$\text{runTLSEventLoop} : \text{TLSSettings} \to \text{Settings} \to \text{Application} \to \text{IO}()$$ -/
+def runTLSEventLoop (tlsSettings : TLSSettings) (settings : Settings)
+    (app : Application) : IO Unit := do
+  let (certPath, keyPath) := match tlsSettings.certSettings with
+    | .certFile c k => (c, k)
+  let ctx ← Network.TLS.createContext certPath keyPath
+  let serverSock ← Network.Socket.listenTCP
+    settings.settingsHost settings.settingsPort settings.settingsBacklog
+  Network.Socket.setNonBlocking serverSock
+  let disp ← EventDispatcher.create
+  try
+    settings.settingsBeforeMainLoop
+    Green.block (runTLSSocketEL ctx serverSock settings app disp tlsSettings.onInsecure)
+      (← Std.CancellationToken.new)
+  finally
+    disp.shutdown
     let _ ← Network.Socket.close serverSock
 
 end Network.WebApp.Server.TLS
