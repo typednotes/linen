@@ -81,7 +81,10 @@ private def tlsConnection (ctx : TLSContext) (clientSock : Socket .connected)
               resp.mapResponseHeaders ((hConnection, "close") :: ·)
             else resp
             sendResponseEL clientSock settings secureReq resp' disp).run
-          if action != .keepAlive then keepGoing := false
+          if action == .keepAlive then
+            (drainBody secureReq : IO _)
+          else
+            keepGoing := false
     finally
       (Network.TLS.close session : IO _)
   catch e =>

@@ -108,14 +108,7 @@ def runConnection (clientSock : Socket .connected) (remoteAddr : SockAddr)
           else resp
           sendResponse clientSock settings req resp').run token
         if action == .keepAlive then
-          match req.requestBodyLength with
-          | .chunkedBody => pure ()
-          | .knownLength 0 => pure ()
-          | .knownLength _ =>
-            let mut bodyDone := false
-            while !bodyDone do
-              let chunk ← req.requestBody
-              if chunk.isEmpty then bodyDone := true
+          drainBody req
         else
           keepGoing := false
   catch e =>
@@ -172,14 +165,7 @@ def runConnectionEL (clientSock : Socket .connected) (remoteAddr : SockAddr)
           else resp
           sendResponseEL clientSock settings req resp' disp).run
         if action == .keepAlive then
-          match req.requestBodyLength with
-          | .chunkedBody => pure ()
-          | .knownLength 0 => pure ()
-          | .knownLength _ =>
-            let mut bodyDone := false
-            while !bodyDone do
-              let chunk ← (req.requestBody : IO _)
-              if chunk.isEmpty then bodyDone := true
+          (drainBody req : IO _)
           -- Wait for next request's data before looping
           disp.waitReadable clientSock
         else
