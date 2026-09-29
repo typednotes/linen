@@ -394,6 +394,7 @@ import LinenTest.Linen.Data.Streaming.NetworkTest
 import LinenTest.Linen.Network.TLS.TypesTest
 import LinenTest.Linen.Network.TLS.TestSupport
 import LinenTest.Linen.Network.TLS.ContextTest
+import LinenTest.Linen.Network.TLS.GreenTest
 import LinenTest.Linen.Network.MimeTest
 import LinenTest.Linen.Network.URITest
 import LinenTest.Linen.Network.OAuth2Test

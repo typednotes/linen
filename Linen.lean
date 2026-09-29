@@ -424,6 +424,7 @@ import Linen.Network.Sendfile
 import Linen.Data.Streaming.Network
 import Linen.Network.TLS.Types
 import Linen.Network.TLS.Context
+import Linen.Network.TLS.Green
 import Linen.Network.Mime
 import Linen.Network.URI
 import Linen.Network.OAuth2
