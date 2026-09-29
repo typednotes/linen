@@ -245,7 +245,7 @@ def isSuccess (resp : Response) : Bool :=
 def Call.preflight (c : Call) : Except Error Unit :=
   if !c.auth.usable then
     .error {
-        klass := .denied
+        klass := .unauthenticated
       , message := s!"credentials for {c.auth.scheme} are incomplete" }
   else if c.pathEncodingConflicts then
     .error {

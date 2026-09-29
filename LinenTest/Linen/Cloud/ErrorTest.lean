@@ -110,10 +110,30 @@ def googleDenied : String :=
 #guard classify 404 "not_found" == .notFound
 #guard classify 404 "NOT_FOUND" == .notFound
 
-#guard classify 403 "SignatureDoesNotMatch" == .denied
 #guard classify 403 "AccessDenied" == .denied
 #guard classify 403 "PERMISSION_DENIED" == .denied
-#guard classify 400 "ExpiredTokenException" == .denied
+#guard classify 403 "permissions_denied" == .denied
+#guard classify 403 "com.amazonaws.secretsmanager#AccessDeniedException" == .denied
+
+/- Not being believed is not being refused: a bad signature or an expired
+   token says nothing about the resource named. -/
+#guard classify 403 "SignatureDoesNotMatch" == .unauthenticated
+#guard classify 403 "InvalidAccessKeyId" == .unauthenticated
+#guard classify 400 "ExpiredTokenException" == .unauthenticated
+#guard classify 401 "UNAUTHENTICATED" == .unauthenticated
+
+/- A Google API switched off answers `PERMISSION_DENIED` too; only the
+   message tells it from one hidden resource. -/
+#guard classifyMessage 403 "PERMISSION_DENIED"
+  "Cloud SQL Admin API has not been used in project 1 before or it is disabled." == .serviceDisabled
+#guard classifyMessage 403 "PERMISSION_DENIED" "Permission 'storage.buckets.get' denied" == .denied
+-- The refinement applies to refusals only: a not-found stays one.
+#guard classifyMessage 404 "NOT_FOUND" "it is disabled" == .notFound
+
+/- All three are refusals to the coarse question, and nothing else is. -/
+#guard [Class.denied, .unauthenticated, .serviceDisabled].all Class.isAuthFailure
+#guard ![Class.notFound, .conflict, .throttled, .invalid, .server, .transport, .protocol,
+         .unsupported, .unbound].any Class.isAuthFailure
 
 #guard classify 409 "BucketAlreadyOwnedByYou" == .conflict
 #guard classify 400 "QueueAlreadyExists" == .conflict
@@ -139,7 +159,7 @@ def googleDenied : String :=
    kernel (it gets stuck on the slice representation) — the same wall
    `String.startsWith` hits. `#guard` runs the compiled function instead, which
    is the honest way to check a fact about eighty string literals. -/
-#guard deniedCodes.all (fun c => classify 403 c != Class.notFound)
+#guard (deniedCodes ++ unauthenticatedCodes).all (fun c => classify 403 c != Class.notFound)
 
 /- And the converse: nothing in the not-found list classifies as denied, so a
    genuine absence is not reported as a permissions problem either. -/
@@ -148,16 +168,16 @@ def googleDenied : String :=
 /- The code lists do not overlap. Two lists claiming the same code would make
    classification depend on the order of the `if`s in `classify`, which is not
    a property anyone should have to know. -/
-#guard (notFoundCodes ++ deniedCodes ++ conflictCodes ++ throttledCodes
+#guard (notFoundCodes ++ deniedCodes ++ unauthenticatedCodes ++ conflictCodes ++ throttledCodes
         ++ invalidCodes).eraseDups.length
-  == (notFoundCodes.length + deniedCodes.length + conflictCodes.length
-      + throttledCodes.length + invalidCodes.length)
+  == (notFoundCodes.length + deniedCodes.length + unauthenticatedCodes.length
+      + conflictCodes.length + throttledCodes.length + invalidCodes.length)
 
 -- ── Classification: the status as fallback ──────────────────────────────────
 
 #guard classify 404 "" == .notFound
 #guard classify 403 "" == .denied
-#guard classify 401 "" == .denied
+#guard classify 401 "" == .unauthenticated
 #guard classify 409 "" == .conflict
 #guard classify 429 "" == .throttled
 #guard classify 500 "" == .server
@@ -176,11 +196,15 @@ def googleDenied : String :=
 #guard (describeError 404 s3NoSuchKey).code == "NoSuchKey"
 #guard (describeError 404 s3NoSuchKey).requestId == some "656c76696e6727732072657175657374"
 
-#guard (describeError 403 s3SignatureMismatch).klass == .denied
+#guard (describeError 403 s3SignatureMismatch).klass == .unauthenticated
 #guard (describeError 400 sqsNoSuchQueue).klass == .notFound
 #guard (describeError 404 scalewayNotFound).klass == .notFound
 #guard (describeError 404 googleNotFound).klass == .notFound
 #guard (describeError 403 googleDenied).klass == .denied
+-- The message decides, end to end: a disabled API is not a hidden resource.
+#guard (describeError 403 ("{\"error\":{\"code\":403,\"status\":\"PERMISSION_DENIED\"," ++
+  "\"message\":\"Cloud SQL Admin API has not been used in project 1 before or it is disabled.\"}}")).klass
+  == .serviceDisabled
 
 /- An unrecognised dialect keeps the body rather than discarding it — the thing
    that makes a provider integration undebuggable. -/

@@ -186,7 +186,7 @@ def Auth.headers (auth : Auth) (host method path : String)
     doubleEncodePath unsignedBody
 
 /-- Whether this scheme can actually authenticate — a SigV4 auth with half a
-    key pair cannot, and saying so here beats a `denied` from the provider. -/
+    key pair cannot, and saying so here beats an `unauthenticated` from the provider. -/
 def Auth.usable : Auth → Bool
   | .sigV4 creds _ _ => creds.canSign
   | .bearer token    => !token.isEmpty
@@ -220,7 +220,7 @@ def Auth.presignedUrlAt (auth : Auth) (ep : Endpoint) (now : Data.Time.UTCTime)
   | .sigV4 creds service region =>
     if !creds.canSign then
       return .error
-        { klass := .denied
+        { klass := .unauthenticated
         , message := "presigning needs a complete key pair" }
     match ← Crypto.SigV4.presignedUrl
         { accessKeyId := creds.accessKey

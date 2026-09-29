@@ -32,6 +32,28 @@
   codes are an explicit list rather than anything inferred, and codes that
   merely sound absent are left to fall through to `denied` or `invalid`.
 
+  ## Three ways to be refused
+
+  A `403` means three different things, and a caller deciding what a refusal
+  *says about the resource* must be able to tell them apart:
+
+  - **`denied`** — the caller is who it claims to be and may not see or change
+    *this* resource (S3's `AccessDenied`, Scaleway's `permissions_denied`,
+    Google's `PERMISSION_DENIED`). A statement about one resource.
+  - **`unauthenticated`** — the request did not prove who sent it: a bad
+    signature, an expired token, an unknown key. Nothing to do with the
+    resource named; every other call with the same credentials fails too.
+  - **`serviceDisabled`** — the whole service is switched off for the project.
+    Google answers it with `PERMISSION_DENIED` as well, and only the message
+    (or the `SERVICE_DISABLED` reason) tells it from a hidden resource.
+
+  The distinction is load-bearing for the sibling `typednotes/infra`, which
+  reads a refused marker read as "not this fleet's resource" — a reading that
+  must never widen from one resource to a whole kind, which is what
+  mistaking the second or third for the first would do. `Class.isAuthFailure`
+  is the coarse question ("was this any kind of refusal?") for callers that do
+  not care which.
+
   ## Structured, not scraped
 
   A word on what this module deliberately does *not* do. It would be possible to
@@ -77,9 +99,15 @@ inductive Class
   /-- The bucket, object, queue or secret is not there. Ordinary control flow,
       and the class most dangerous to infer wrongly — see the module header. -/
   | notFound
-  /-- Authentication or authorisation failed: bad signature, expired token,
-      missing permission. -/
+  /-- Authenticated, and refused: this caller may not see or change this
+      resource. A statement about one resource — see the module header. -/
   | denied
+  /-- The request did not authenticate: a bad signature, an expired or
+      missing token, an unknown key. Says nothing about the resource named. -/
+  | unauthenticated
+  /-- The service itself is switched off for this project or account (a
+      Google API that is not enabled). Says nothing about one resource. -/
+  | serviceDisabled
   /-- The resource already exists, or its current state forbids the request. -/
   | conflict
   /-- Rate-limited. Retrying later is the right response. -/
@@ -108,13 +136,22 @@ inductive Class
     consistency should say so itself rather than have a retry loop hide it. -/
 def Class.retryable : Class → Bool
   | .throttled | .server | .transport => true
-  | .notFound | .denied | .conflict | .invalid | .protocol
-  | .unsupported | .unbound => false
+  | .notFound | .denied | .unauthenticated | .serviceDisabled | .conflict
+  | .invalid | .protocol | .unsupported | .unbound => false
+
+/-- Whether this is any of the three refusals — `denied`, `unauthenticated`
+    or `serviceDisabled`. What `denied` alone meant before the split, for a
+    caller that only needs to know the request was turned away. -/
+def Class.isAuthFailure : Class → Bool
+  | .denied | .unauthenticated | .serviceDisabled => true
+  | _ => false
 
 /-- A short human name, for diagnostics. -/
 def Class.name : Class → String
   | .notFound => "not found"
   | .denied => "denied"
+  | .unauthenticated => "unauthenticated"
+  | .serviceDisabled => "service disabled"
   | .conflict => "conflict"
   | .throttled => "throttled"
   | .invalid => "invalid"
@@ -175,15 +212,31 @@ def notFoundCodes : List String :=
     -- Google
   , "NOT_FOUND" ]
 
-/-- Provider codes that mean "you are not allowed, or we do not believe you". -/
+/-- Provider codes that mean "we know who you are, and you may not". A
+    statement about the resource named — see the module header. -/
 def deniedCodes : List String :=
   [ "AccessDenied", "AccessDeniedException", "AllAccessDisabled"
-  , "SignatureDoesNotMatch", "InvalidAccessKeyId", "InvalidSecurity"
+  , "UnauthorizedOperation"
+  , "permissions_denied"
+  , "PERMISSION_DENIED" ]
+
+/-- Provider codes that mean "we do not believe you": the request did not
+    authenticate, whatever it named. -/
+def unauthenticatedCodes : List String :=
+  [ "SignatureDoesNotMatch", "InvalidAccessKeyId", "InvalidSecurity"
   , "TokenRefreshRequired", "ExpiredToken", "ExpiredTokenException"
-  , "UnauthorizedOperation", "UnrecognizedClientException"
+  , "UnrecognizedClientException"
   , "MissingAuthenticationToken", "InvalidClientTokenId"
-  , "permissions_denied", "denied_authentication", "invalid_auth"
-  , "PERMISSION_DENIED", "UNAUTHENTICATED" ]
+  , "denied_authentication", "invalid_auth"
+  , "UNAUTHENTICATED" ]
+
+/-- What a Google refusal says when the whole API is switched off rather
+    than one resource hidden: the `SERVICE_DISABLED` reason, or the two
+    phrases of the message Google sends with it ("… has not been used in
+    project N before or it is disabled."). Matched as substrings of the
+    message, because `PERMISSION_DENIED` is the code either way. -/
+def serviceDisabledMarkers : List String :=
+  ["SERVICE_DISABLED", "has not been used in project", "it is disabled"]
 
 /-- Provider codes that mean "it already exists, or its state forbids this". -/
 def conflictCodes : List String :=
@@ -228,17 +281,29 @@ def classify (status : Nat) (code : String) : Class :=
     | []        => code
   if notFoundCodes.contains bare then .notFound
   else if deniedCodes.contains bare then .denied
+  else if unauthenticatedCodes.contains bare then .unauthenticated
   else if conflictCodes.contains bare then .conflict
   else if throttledCodes.contains bare then .throttled
   else if invalidCodes.contains bare then .invalid
   else if status == 404 || status == 410 then .notFound
-  else if status == 401 || status == 403 then .denied
+  else if status == 401 then .unauthenticated
+  else if status == 403 then .denied
   else if status == 409 || status == 412 then .conflict
   else if status == 429 then .throttled
   else if status >= 500 && status < 600 then .server
   else if status >= 400 && status < 500 then .invalid
   else if status == 0 then .protocol
   else .protocol
+
+/-- `classify`, with the message as well: a `denied` whose message says the
+    whole service is off is `serviceDisabled`. The one refinement that needs
+    the prose, because Google spells both with the same code. -/
+def classifyMessage (status : Nat) (code message : String) : Class :=
+  match classify status code with
+  | .denied =>
+    if serviceDisabledMarkers.any (fun m => (message.splitOn m).length > 1) then .serviceDisabled
+    else .denied
+  | k => k
 
 -- ── Reading error bodies ────────────────────────────────────────────────────
 
@@ -305,16 +370,16 @@ def bodyExcerptLimit : Nat := 400
 def describeError (status : Nat) (body : String) : Error :=
   match parseXmlError body with
   | some (code, message, rid) =>
-    { klass := classify status code, status, code, message, requestId := rid }
+    { klass := classifyMessage status code message, status, code, message, requestId := rid }
   | none =>
     match parseJsonError body with
-    | some (code, message) => { klass := classify status code, status, code, message }
+    | some (code, message) => { klass := classifyMessage status code message, status, code, message }
     | none =>
       let trimmed := body.trimAscii.toString
       let shown :=
         if trimmed.length > bodyExcerptLimit then (trimmed.take bodyExcerptLimit).toString ++ "…"
         else trimmed
-      { klass := classify status ""
+      { klass := classifyMessage status "" shown
       , status
       , message := if shown.isEmpty then "(empty response body)" else shown }
 

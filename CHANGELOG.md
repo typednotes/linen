@@ -17,6 +17,22 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 - **`Data.Json.Value.lookupText` / `lookupNat` / `lookupBool`** — lenient
   scalar reads (a quoted number is a number, an unquoted one is text), moved
   from `infra`'s `JsonRead.stringField` / `natField` / `boolField`.
+- **`Cloud.Class.unauthenticated` and `Cloud.Class.serviceDisabled`**, split
+  out of `denied`; `Class.isAuthFailure` for the old, coarse question;
+  `classifyMessage`, and `unauthenticatedCodes` / `serviceDisabledMarkers`.
+
+### Changed
+
+- **`Cloud.Class.denied` now means one thing: authenticated, and refused for
+  this resource.** A bad signature, an expired or missing token and an unknown
+  key classify as `unauthenticated` (including a bare `401`, and the
+  incomplete-credentials refusals of `Call.preflight` and
+  `Auth.presignedUrlAt`); a Google `PERMISSION_DENIED` whose message says the
+  API is not enabled classifies as `serviceDisabled` (`describeError` reads
+  the message). A caller that matched `.denied` for "any refusal" should use
+  `Class.isAuthFailure`. Asked for by `infra`, whose "a refused marker read
+  means not ours" must never widen from one resource to a whole kind — the
+  blocker on its move to `Linen.Cloud`.
 
 ## [1.7.0] - 2026-09-28
 

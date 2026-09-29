@@ -131,7 +131,7 @@ def broken : Transport :=
 
 /- A 403 that is really a signing problem does not read as a permissions
    problem: the code says which, and the class follows the code. -/
-/-- info: (Cloud.Class.denied, "SignatureDoesNotMatch") -/
+/-- info: (Cloud.Class.unauthenticated, "SignatureDoesNotMatch") -/
 #guard_msgs in
 #eval show IO (Class × String) from do
   let log ← IO.mkRef []
@@ -161,7 +161,7 @@ def broken : Transport :=
 
 /- **Incomplete credentials are caught before anything is sent.** The stub
    records nothing, so no half-signed request reached the network. -/
-/-- info: (Cloud.Class.denied, []) -/
+/-- info: (Cloud.Class.unauthenticated, []) -/
 #guard_msgs in
 #eval show IO (Class × List String) from do
   let log ← IO.mkRef []

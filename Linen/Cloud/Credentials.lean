@@ -218,8 +218,8 @@ def fromScalewayFile (paths : Paths) : IO (Option Credentials) := do
     both real:
 
     - **The token expires**, typically within the hour. A long-running program
-      can outlive one; there is no refresh here, and the failure is a `denied`
-      partway through. `Cloud.Credentials.Gcp` avoids this by minting from a
+      can outlive one; there is no refresh here, and the failure is an
+      `unauthenticated` partway through. `Cloud.Credentials.Gcp` avoids this by minting from a
       service-account key instead, which is why that source is tried first.
     - **It needs `gcloud` on `PATH` and logged in.** A missing binary is not an
       error, it is a source with nothing to offer, so it falls through. -/
@@ -393,8 +393,8 @@ def loadFrom (paths : Paths) (provider : Provider) : IO (Except Error Credential
 
 /-- The bearer token, or a clear failure.
 
-    Every GCP call carries one and nothing else, so its absence is otherwise a
-    `denied` on the first request with no indication of which source was
+    Every GCP call carries one and nothing else, so its absence is otherwise an
+    `unauthenticated` on the first request with no indication of which source was
     supposed to supply it. -/
 def Credentials.requireToken (c : Credentials) (provider : Provider) :
     Except Error String :=

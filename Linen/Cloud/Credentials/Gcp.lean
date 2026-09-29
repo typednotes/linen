@@ -26,7 +26,7 @@
   This matters beyond tidiness. `gcloud` requires the CLI installed and a human
   logged in, which is exactly what a deployed service does not have — and its
   token cannot be refreshed, so a long-running process fails partway through
-  with a `denied` and no indication why. A key file can be re-minted from.
+  with an `unauthenticated` and no indication why. A key file can be re-minted from.
 
   ## The transport is a parameter
 
