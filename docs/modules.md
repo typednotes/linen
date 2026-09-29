@@ -1598,7 +1598,7 @@ convention.
   server.
 - `Network.WebApp.Server.Settings` — `Settings`/`defaultSettings`: port,
   host, timeouts, backlog, graceful-shutdown timeout, auto `Date`/`Server`
-  headers.
+  headers, and `settingsHttp2` (cleartext HTTP/2, on by default).
 - `Network.WebApp.Server.Request` — HTTP request-line and header parsing off
   a raw socket buffer, producing a `Network.WebApp.Request`; RFC 9112 §6 body
   framing (`requestFraming`, which refuses the ambiguous framings request
@@ -1614,7 +1614,16 @@ convention.
   Both modes run one HTTP/1.1 loop (`serveHttp`) over an `HttpTransport`
   (`blockingTransport`, `eventLoopTransport`): heads buffered until complete
   (in event-loop mode on the green thread), pipelined requests served back
-  to back, `settingsTimeout` enforced on every wait.
+  to back, `settingsTimeout` enforced on every wait. Both modes accept h2c
+  by prior knowledge or HTTP/1.1 Upgrade, preserving the completed upgrade
+  request as stream 1 and applying its HTTP2-Settings before responding.
+- `Network.WebApp.Server.Transport` — the shared `HttpTransport` and buffered
+  protocol detection: a fragmented HTTP/2 preface is distinguished from an
+  HTTP/1.1 head without consuming bytes or losing pipelined frames.
+- `Network.WebApp.Server.HTTP2` — `serveHttp2`, request/response mapping and
+  h2c Upgrade validation and handoff. Upgrade bodies are spooled to a temporary
+  file before 101, using bounded memory; both Content-Length and chunked
+  bodies, including Expect: 100-continue, are supported.
 - `Network.WebApp.Server.Conduit` — `ISource`: buffered incremental body
   reading for known-length and chunked request bodies.
 - `Network.WebApp.Server.IO` — low-level connection byte-sending helpers.
@@ -1638,7 +1647,7 @@ convention.
   `serveHttp2`, others by the HTTP/1.1 loop. Plain HTTP on the TLS
   port is told apart by peeking at the first byte, and answered per
   `OnInsecure`: `426 Upgrade Required` (`denyInsecure`) or served
-  (`allowInsecure`), as warp-tls does.
+  (`allowInsecure`), including h2c. Secure connections use ALPN exclusively.
 - `Network.WebApp.Server.TLS.Internal` — re-exports `Server.TLS` for advanced
   usage.
 - `Network.WebApp.Server.WebSockets` — upgrades `Network.WebApp` requests to
@@ -2759,6 +2768,7 @@ the secrets, never their values.
 | `Linen.Network.WebApp.Server` | the package aggregator plus `run`, a one-line server entry point |
 | `Linen.Network.WebApp.Server.QUIC` | bridges `Network.WebApp` to HTTP/3 over `Network.QUIC` |
 | `Linen.Network.WebApp.Server.HTTP2` | serving a `Network.WebApp.Application` over HTTP/2 (`serveHttp2`): request mapping, every `Response` kind on a stream |
+| `Linen.Network.WebApp.Server.Transport` | shared byte transport, buffered heads and fragmented cleartext HTTP/2 preface detection |
 | `Linen.Network.WebApp.Server.TLS` | HTTPS through the session, thread-per-connection (`runTLS`) or green threads (`runTLSEventLoop`); HTTP/2 or HTTP/1.1 by ALPN; `OnInsecure` by first-byte peek |
 | `Linen.Network.WebApp.Server.TLS.Internal` | re-exports `Server.TLS` for advanced use |
 | `Linen.Network.WebApp.Server.WebSockets` | upgrades `Network.WebApp` requests to `Network.WebSockets` connections via `responseRaw` |

@@ -366,6 +366,41 @@ private def curlHasHttp2 : IO Bool := do
     return out.exitCode == 0 && (out.stdout.splitOn "HTTP2").length > 1
   catch _ => return false
 
+-- The TLS port's allowInsecure branch accepts h2c in both modes, even
+-- when TLS ALPN HTTP/2 is disabled; the app sees insecure HTTP/2 requests.
+#eval bothModes fun mode => withTestCert fun certPath keyPath => do
+  unless ← curlHasHttp2 do
+    IO.println "curl with HTTP/2 not found: skipping TLS-port h2c interop"
+    return
+  let app : Application := fun req respond => AppM.respond respond
+    (responseLBS status200 [] s!"{req.httpVersion} secure={req.isSecure}")
+  withTLSServer mode certPath keyPath app (onInsecure := .allowInsecure) (http2 := false) fun port => do
+    for option in ["--http2", "--http2-prior-knowledge"] do
+      let out ← IO.Process.output {
+        cmd := "curl", args := #["-sS", option, "--max-time", "10", s!"http://127.0.0.1:{port}/"] }
+      unless out.exitCode == 0 && out.stdout == "HTTP/2.0 secure=false" do
+        throw (IO.userError s!"allowInsecure {option}: {out.stdout} {out.stderr}")
+
+-- h2c cannot bypass ALPN on a secure transport. Upgrade is ignored and
+-- served as HTTP/1.1; a direct preface without h2 negotiation is rejected.
+#eval bothModes fun mode => withTestCert fun certPath keyPath => do
+  withTLSServer mode certPath keyPath echoApp (http2 := false) fun port => do
+    let (conn, session) ← tlsConnect certPath port
+    Network.TLS.write session
+      ("GET /no-upgrade HTTP/1.1\r\nHost: localhost\r\nUpgrade: h2c\r\n" ++
+       "Connection: Upgrade, HTTP2-Settings, close\r\nHTTP2-Settings: \r\n\r\n").toUTF8
+    let got ← readUntil session (fun _ => false)
+    Network.TLS.close session
+    let _ ← close conn
+    unless got.startsWith "HTTP/1.1 200" && contains got "GET /no-upgrade secure=true" do
+      throw (IO.userError s!"secure Upgrade: {got}")
+    let (conn, session) ← tlsConnect certPath port
+    Network.TLS.write session Network.HTTP2.connectionPreface
+    let got ← readUntil session (fun _ => false)
+    Network.TLS.close session
+    let _ ← close conn
+    unless got.isEmpty do throw (IO.userError "HTTP/2 served without ALPN")
+
 -- Interop with curl (nghttp2), when available: a GET with a query, a 3 MB
 -- upload and a 1 MB download (flow control both ways), and five requests
 -- multiplexed on one connection. Where curl lacks HTTP/2 this says so; the
@@ -409,6 +444,17 @@ private def curlHasHttp2 : IO Bool := do
         throw (IO.userError s!"curl parallel: /{i} missing in {repr got}")
 
 /-! ### Signatures -/
+
+-- Optional pinned h2spec, used by the CI conformance step. Unlike curl's
+-- capability-dependent checks this is mandatory when H2SPEC is set.
+#eval bothModes fun mode => withTestCert fun certPath keyPath => do
+  if let some h2spec ← IO.getEnv "H2SPEC" then
+    withTLSServer mode certPath keyPath echoApp fun port => do
+      let out ← IO.Process.output {
+        cmd := h2spec, args := #["-h", "localhost", "-p", toString port, "-t", "-k", "--timeout", "5"] }
+      unless out.exitCode == 0 do
+        throw (IO.userError s!"TLS h2spec {repr mode}: {out.stdout}\n{out.stderr}")
+      IO.println s!"TLS h2spec {repr mode}: {out.stdout.splitOn "\n" |>.filter (fun s => (s.splitOn "tests").length > 1)}"
 
 example : TLSSettings → Network.WebApp.Server.Settings → Application → IO Unit := runTLS
 

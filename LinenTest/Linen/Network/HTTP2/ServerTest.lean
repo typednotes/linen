@@ -518,6 +518,46 @@ private def expectGoaway (setup : Client → IO Unit) (code : ErrorCode) (config
 
 /-! ### The historical entry point -/
 
+-- A transport exception (not a protocol GOAWAY) still tears down the
+-- engine before its caller can release TLS/socket resources: waiting body
+-- readers wake, and the handler cannot write after serve returns.
+#eval show IO Unit from do
+  let toServer ← Pipe.new
+  let fromServer ← Pipe.new
+  let broken ← IO.mkRef false
+  let started ← IO.Promise.new (α := Unit)
+  let finished ← IO.Promise.new (α := Bool)
+  let done ← IO.Promise.new (α := Unit)
+  let transport : Transport := {
+    recv := do
+      let bytes ← (toServer.read 3000 : IO _)
+      if ← (broken.get : IO _) then throw (IO.userError "injected transport failure")
+      return bytes
+    send := fromServer.write }
+  let handler : Handler := fun req responder => do
+    (started.resolve () : IO _)
+    let bodyFailed ← (try let _ ← req.body; pure false catch _ => pure true : IO _)
+    let writeFailed ← (try responder.respond 200 [] true; pure false catch _ => pure true : IO _)
+    (finished.resolve (bodyFailed && writeFailed) : IO _)
+    (done.resolve () : IO _)
+  let server ← IO.asTask (prio := .dedicated)
+    (Green.block (serve transport handler) (← Std.CancellationToken.new))
+  let c : Client := { toServer, fromServer, buffer := ← IO.mkRef ByteArray.empty }
+  try
+    c.open
+    c.send (buildHeadersFrame (sid 1) (headersOf getReq) (endStream := false))
+    unless ← waitFor started 3000 do fail "handler did not start"
+    broken.set true
+    toServer.write "wake the transport".toUTF8
+    match ← IO.wait server with
+    | .ok () => fail "transport failure was not propagated"
+    | .error _ => pure ()
+    unless ← waitFor done 3000 do fail "transport failure left the body reader waiting"
+    unless (← IO.wait finished.result?).getD false do fail "handler wrote after teardown"
+  finally
+    toServer.close
+    fromServer.close
+
 #eval show IO Unit from do
   let toServer ← Pipe.new
   let fromServer ← Pipe.new

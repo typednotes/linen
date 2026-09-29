@@ -40,6 +40,10 @@ private def mkReq (version : HttpVersion) (connHeader : Option String) : Request
 #guard connAction (mkReq http11 (some "close")) == .close
 #guard connAction (mkReq http10 none) == .close
 #guard connAction (mkReq http10 (some "keep-alive")) == .keepAlive
+#guard connAction (mkReq http11 (some "Upgrade, CLOSE")) == .close
+#guard connAction (mkReq http10 (some "upgrade, Keep-Alive")) == .keepAlive
+#guard connAction { mkReq http11 (some "upgrade") with
+  requestHeaders := [(hConnection, "upgrade"), (hConnection, "close")] } == .close
 
 example (req : Request) (hVer : (req.httpVersion == http11) = false)
     (hNoConn : req.requestHeaders.find? (fun (n, _) => n == hConnection) = none) :

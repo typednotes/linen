@@ -538,6 +538,7 @@ import LinenTest.Linen.Network.WebApp.Server.WithApplicationTest
 import LinenTest.Linen.Network.WebApp.ServerTest
 import LinenTest.Linen.Network.WebApp.Server.QUICTest
 import LinenTest.Linen.Network.WebApp.Server.HTTP2Test
+import LinenTest.Linen.Network.WebApp.Server.TransportTest
 import LinenTest.Linen.Network.WebApp.Server.TLSTest
 import LinenTest.Linen.Network.WebApp.Server.TLS.InternalTest
 import LinenTest.Linen.Network.WebSockets.TypesTest

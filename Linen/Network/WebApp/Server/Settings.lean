@@ -59,10 +59,17 @@ structure Settings where
   settingsAddDateHeader : Bool := true
   /-- Whether to auto-add the `Server` response header. -/
   settingsAddServerHeader : Bool := true
+  /-- Accept cleartext HTTP/2, by prior knowledge or `Upgrade: h2c`, in
+      either plain-server mode (and TLS's `allowInsecure` branch).
+      TLS ALPN is controlled independently by `TLSSettings.http2`. -/
+  settingsHttp2 : Bool := true
 
 /-- Default settings.
     $$\text{defaultSettings} = \text{Settings}\{\}$$ -/
 def defaultSettings : Settings := {}
+
+/-- `settingsTimeout`, in milliseconds. -/
+def Settings.timeoutMillis (settings : Settings) : Nat := settings.settingsTimeout * 1000
 
 /-- The default settings have positive timeout and backlog (by construction). -/
 theorem defaultSettings_valid : (defaultSettings).settingsTimeout > 0 ∧

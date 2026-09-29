@@ -62,6 +62,9 @@ jobs:
       - name: Build the test suite (runs every #guard check)
         run: lake test
 
+      - uses: ./.github/actions/check-http2
+        timeout-minutes: 10
+
       # A symbol table is not observable from a `#guard`, and getting this
       # wrong aborts the process on every DuckDB error path rather than failing
       # the build. The seal is a property of a linked binary, so it is asserted

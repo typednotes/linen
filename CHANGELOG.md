@@ -7,12 +7,26 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
-The four *Changed* entries below were first written into the 1.8.0 section,
-but landed after the `v1.8.0` tag (`4cb1074`): a consumer pinning `v1.8.0`
-does not have them.
+## [1.9.0] - 2026-09-29
+
+The JSON encoding, Scaleway error details, EC2 XML error parsing, and GCP
+key-file changes below were first written into the 1.8.0 section, but landed
+after the `v1.8.0` tag (`4cb1074`): a consumer pinning `v1.8.0` does not have
+them.
 
 ### Added
 
+- **Cleartext HTTP/2 (h2c)** in both plain-server modes, and TLS's
+  `allowInsecure` branch: prior knowledge (`curl --http2-prior-knowledge`)
+  and HTTP/1.1 Upgrade (`curl --http2`). `Settings.settingsHttp2` controls
+  it, on by default; TLS ALPN remains independently controlled. Fragmented
+  prefaces and buffered frames are preserved. Upgrades validate the single
+  HTTP2-Settings header, apply it before responding, and retain the initial
+  request as half-closed stream 1. Content-Length and chunked upgrade bodies
+  are spooled before 101 with bounded memory; Expect: 100-continue works.
+- **Pinned h2spec conformance in CI and release gates**, built from source
+  for all runner architectures: 146 cases each for plain/TLS HTTP/2 in
+  blocking/event-loop mode. Local tests can opt in with `H2SPEC=/path/to/h2spec`.
 - **`Crypto.SHA1`** — FIPS 180-4 SHA-1, pure and structurally recursive (the
   sibling of `Crypto.MD5` from the `cryptohash` import), with
   `hash_size : (hash m).size = 20`. For protocols that fix SHA-1 as a
@@ -132,11 +146,26 @@ does not have them.
   dropped on `EAGAIN`.
 - **`Server.TLS.TLSSettings.alpn`.** `true` (the default) called
   `Network.TLS.setAlpn`, which *prefers `h2`*, so any browser would
-  negotiate HTTP/2 with a server that speaks only HTTP/1.1. The server no
-  longer answers ALPN at all, and clients fall back to HTTP/1.1.
+  negotiate HTTP/2 with a server that spoke only HTTP/1.1. Replaced by
+  `TLSSettings.http2`: on by default now that the server implements HTTP/2;
+  off, it does not answer ALPN and clients fall back to HTTP/1.1.
 
 ### Fixed
 
+- **TLS session concurrency.** The HTTP/2 reader and stream handlers could
+  call SSL_read/SSL_write on the same OpenSSL object concurrently, causing
+  intermittent truncated transfers and resets (reproduced on Linux).
+  A per-session mutex protects every I/O/handshake/getter/close operation,
+  released before a non-blocking readiness wait. External-class registration
+  is once-only. A full-duplex, multi-MiB regression test races both directions
+  and getters; TLS and h2c interoperability are checked on macOS and Linux.
+- **HTTP/2 teardown also runs on transport exceptions and cancellation**,
+  waking waiting handlers and preventing late writes before the caller
+  releases the connection.
+- **Connection options are parsed as tokens across repeated fields.**
+  `Connection: Upgrade, close` now closes an HTTP/1.1 connection as required,
+  instead of being treated as keep-alive because the whole field was not
+  exactly `close`.
 - **HPACK**: table entry sizes are counted in octets, not characters (any
   non-ASCII field desynchronised the table from the peer's); a string that
   does not decode — bad Huffman padding, an encoded EOS, invalid UTF-8 — is

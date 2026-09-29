@@ -10,11 +10,15 @@
 
   Two execution modes are available:
   - **Blocking mode** (default): Uses blocking `accept`/`recv`/`send` with
-    `forkIO` per connection. Maximizes throughput for I/O-bound workloads.
+    a dedicated thread per connection. Maximizes throughput for I/O-bound workloads.
   - **EventDispatcher mode**: Uses non-blocking sockets with kqueue/epoll
     via `EventDispatcher` and `Green` threads. Better for high-concurrency
     scenarios where many connections are idle (e.g., WebSockets, long-polling).
     Accessible via `runSettingsEventLoop`.
+
+  Both accept cleartext HTTP/2 (`Settings.settingsHttp2`, on by default):
+  the 24-byte client preface selects prior knowledge; HTTP/1.1 requests
+  with a valid `Upgrade: h2c` switch and become HTTP/2 stream 1.
 
   ## No `partial`
 
@@ -46,6 +50,8 @@ import Linen.Control.Concurrent.Green
 import Linen.Network.WebApp.Server.Settings
 import Linen.Network.WebApp.Server.Request
 import Linen.Network.WebApp.Server.Response
+import Linen.Network.WebApp.Server.Transport
+import Linen.Network.WebApp.Server.HTTP2
 
 namespace Network.WebApp.Server
 
@@ -65,11 +71,11 @@ deriving BEq, Repr
     and the Connection header. -/
 def connAction (req : Network.WebApp.Request) : ConnAction :=
   let connHdr := req.requestHeaders.find? (fun (n, _) => n == hConnection)
-    |>.map (·.2.toLower)
+    |>.map (fun _ => headerTokens "connection" req.requestHeaders)
   if req.httpVersion == http11 then
-    if connHdr == some "close" then .close else .keepAlive
+    if connHdr.any (·.contains "close") then .close else .keepAlive
   else
-    if connHdr == some "keep-alive" then .keepAlive else .close
+    if connHdr.any (·.contains "keep-alive") then .keepAlive else .close
 
 /-- HTTP/1.0 without Connection header defaults to close. -/
 theorem connAction_http10_default (req : Network.WebApp.Request)
@@ -89,31 +95,6 @@ theorem connAction_http11_default (req : Network.WebApp.Request)
 -- The HTTP/1.1 connection loop, over any transport
 -- ══════════════════════════════════════════════════════════════
 
-/-- A connection as the HTTP/1.1 loop sees it — the same for plain and TLS
-    sockets, in blocking and event-loop mode. -/
-structure HttpTransport where
-  /-- The next bytes towards a request head: `some` bytes, `some` empty at
-      end of input, `none` when `settingsTimeout` passed without any. The
-      event-loop transports suspend the green thread here. -/
-  nextChunk : Green (Option ByteArray)
-  /-- The connection's buffered reader: request heads are parsed from it,
-      and bodies read through it (in `IO`, throwing on timeout). -/
-  reader : BufferedSource
-  /-- Where responses go. -/
-  sink : ResponseSink
-  /-- Whether the connection is TLS (`Request.isSecure`). -/
-  isSecure : Bool := false
-
-/-- Receive until `t.reader` holds a complete request head, or the peer
-    closes: `true` then; `false` when `settingsTimeout` passed first. -/
-def HttpTransport.bufferHead (t : HttpTransport) : Green Bool := do
-  let mut ended := false
-  while !ended && !headComplete (← (t.reader.unread : IO _)) do
-    match ← t.nextChunk with
-    | none => return false
-    | some chunk => if chunk.isEmpty then ended := true else (t.reader.feed chunk : IO _)
-  return true
-
 /-- Serve HTTP/1.1 requests on a transport until the peer closes, a request
     asks to close, or `settingsTimeout` passes waiting for a request head.
 
@@ -123,9 +104,18 @@ def HttpTransport.bufferHead (t : HttpTransport) : Green Bool := do
     head (between requests, or a client sending one too slowly) closes the
     connection quietly, as Warp's does; one while reading a body is an error
     the application sees. After each response the unread body is drained, so
-    the next head starts where it should. -/
+    the next head starts where it should. Cleartext connections can select
+    HTTP/2 by prior knowledge, or switch via h2c Upgrade. TLS connections
+    enter HTTP/2 only through the separate ALPN-selected entry point. -/
 def serveHttp (t : HttpTransport) (remoteAddr : SockAddr) (settings : Settings)
     (app : Application) : Green Unit := do
+  if settings.settingsHttp2 && !t.isSecure then
+    match ← t.detectHttp2 with
+    | none => return
+    | some true =>
+      serveHttp2 t remoteAddr settings app
+      return
+    | some false => pure ()
   let mut keepGoing := true
   while keepGoing do
     if !(← t.bufferHead) then
@@ -134,7 +124,19 @@ def serveHttp (t : HttpTransport) (remoteAddr : SockAddr) (settings : Settings)
       match ← (parseRequestFrom t.reader.source remoteAddr : IO _) with
       | none => keepGoing := false
       | some req =>
+        -- HTTP/2 on TLS must have been selected by ALPN; when cleartext
+        -- HTTP/2 is disabled its PRI preface is not an HTTP/1.x request.
+        if req.httpVersion.major > 1 then return
         let req := { req with isSecure := t.isSecure }
+        if settings.settingsHttp2 && !t.isSecure then
+          match h2cSettings req with
+          | .error _ =>
+            t.sink.send "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n".toUTF8
+            return
+          | .ok (some params) =>
+            serveHttp2Upgrade t remoteAddr settings app req params
+            return
+          | .ok none => pure ()
         let action := connAction req
         let _received ← (app req fun resp => do
           let resp' := if action == .close then
@@ -145,9 +147,6 @@ def serveHttp (t : HttpTransport) (remoteAddr : SockAddr) (settings : Settings)
           (drainBody req : IO _)
         else
           keepGoing := false
-
-/-- `settingsTimeout`, in milliseconds. -/
-def Settings.timeoutMillis (settings : Settings) : Nat := settings.settingsTimeout * 1000
 
 -- ══════════════════════════════════════════════════════════════
 -- Blocking mode (default, maximum throughput)

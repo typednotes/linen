@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen LinenTest --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen LinenTest --include='*.lean' | wc -l -->
-  <strong>795 modules</strong> · <strong>492 compile-time theorems</strong> · <strong>11545 <code>#guard</code> checks</strong>
+  <strong>796 modules</strong> · <strong>492 compile-time theorems</strong> · <strong>11578 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -126,7 +126,8 @@ for the full per-module feature list and module table.
   `Network.QUIC.Client`/`Server` are stubs that throw.
 - **`Network.WebApp` / `Network.WebApp.Server`** — a WAI-style application
   interface plus a server implementing it: HTTP/1.1 over plain TCP or TLS,
-  and HTTP/2 over TLS (chosen by ALPN).
+  HTTP/2 over TLS (chosen by ALPN), and cleartext HTTP/2 (h2c, by prior
+  knowledge or HTTP/1.1 Upgrade), in both server modes.
 - **`Web.Html` / `Web.Css`** — typed HTML5/CSS construction where illegal
   nesting and property/value mismatches are compile-time errors, with `elem!`
   and `rule!` macro sugar; `<script>`/`<style>` bodies carry a proof that they
@@ -423,7 +424,7 @@ you imported only pure-Lean modules.
 
 ## Modules
 
-See **[docs/modules.md](docs/modules.md)** for the full module table (all 795 modules).
+See **[docs/modules.md](docs/modules.md)** for the full module table (all 796 modules).
 
 ## Build & Test
 

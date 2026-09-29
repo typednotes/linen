@@ -130,6 +130,13 @@ structure Request where
       reset, the connection closes, or nothing arrives in time. -/
   body : IO ByteArray
 
+/-- The completed HTTP/1.1 request that initiated an h2c upgrade, and the
+    peer's HTTP2-Settings. It becomes half-closed (remote) stream 1; its
+    already-received body is read outside HTTP/2 receive flow control. -/
+structure UpgradeRequest where
+  request : Request
+  settings : List (SettingsKeyId × UInt32)
+
 /-- How a handler answers. `respond` sends the status and headers (at most
     once; `endStream` for a response with no body), `write` a piece of body
     (split and paced by flow control), `finish` ends the body. -/
@@ -506,9 +513,16 @@ def finishStream (c : Conn) (id : Nat) : IO Unit := do
     c.resetStream id .noError
 
 /-- Start the handler for a stream whose request head is complete. -/
-def startHandler (c : Conn) (handler : Handler) (req : Request) : IO Unit := do
+def startHandler (c : Conn) (handler : Handler) (req : Request)
+    (receivedBody : Option (IO ByteArray) := none) : IO Unit := do
   let id := req.streamId
-  let req := { req with body := c.readBody id }
+  let body := match receivedBody with
+    | none => c.readBody id
+    | some read => do
+      let st ← c.state.atomically get
+      if st.isClosed || !st.streams.contains id then throw (goneError "stream closed")
+      read
+  let req := { req with body }
   let responder : Responder := {
     respond := fun status headers endStream => c.sendHeaders id status headers endStream
     write := fun bytes => if bytes.isEmpty then pure () else c.sendData id bytes false
@@ -568,19 +582,28 @@ private def readBytes (c : Conn) (n : Nat) : ReaderM ByteArray := do
       if st.streams.isEmpty then stop .quiet
   return ByteArray.empty
 
-/-- Validate a SETTINGS frame's values and apply them (§6.5.2). -/
-private def applyPeerSettings (c : Conn) (params : List (SettingsKeyId × UInt32)) :
-    ReaderM Unit := do
+/-- Validate peer settings (§6.5.2), shared by SETTINGS frames and the
+    HTTP2-Settings upgrade header. Unknown settings are ignored. -/
+def validatePeerSettings (params : List (SettingsKeyId × UInt32)) :
+    Except (ErrorCode × String) Unit := do
   for (key, value) in params do
     match key with
-    | .enablePush => if value > 1 then protocolError "SETTINGS_ENABLE_PUSH not 0 or 1"
+    | .enablePush => if value > 1 then throw (.protocolError, "SETTINGS_ENABLE_PUSH not 0 or 1")
     | .initialWindowSize =>
       if value.toNat > maxWindowSize.toNat then
-        stop (.error .flowControlError "SETTINGS_INITIAL_WINDOW_SIZE above 2^31-1")
+        throw (.flowControlError, "SETTINGS_INITIAL_WINDOW_SIZE above 2^31-1")
     | .maxFrameSize =>
       if value.toNat < minMaxFrameSize.toNat || value.toNat > maxMaxFrameSize.toNat then
-        protocolError "SETTINGS_MAX_FRAME_SIZE out of range"
+        throw (.protocolError, "SETTINGS_MAX_FRAME_SIZE out of range")
     | _ => pure ()
+
+/-- Apply peer settings, acknowledging a frame but not an upgrade header:
+    the 101 response implicitly acknowledges HTTP2-Settings (§3.2.1). -/
+private def applyPeerSettings (c : Conn) (params : List (SettingsKeyId × UInt32))
+    (acknowledge : Bool := true) : ReaderM Unit := do
+  match validatePeerSettings params with
+  | .error (code, message) => stop (.error code message)
+  | .ok () => pure ()
   let overflow ← (c.state.atomically do
     let mut st ← get
     let mut overflow := false
@@ -603,7 +626,7 @@ private def applyPeerSettings (c : Conn) (params : List (SettingsKeyId × UInt32
       if let some p := s.sendWaiter then p.resolve ()
     return overflow : IO _)
   if overflow then stop (.error .flowControlError "SETTINGS_INITIAL_WINDOW_SIZE overflows a window")
-  (c.sendQuietly (encodeFrame (buildSettingsFrame [] true)) : IO _)
+  if acknowledge then (c.sendQuietly (encodeFrame (buildSettingsFrame [] true)) : IO _)
 
 /-- A stream error: reset the stream, keep the connection. -/
 private def streamError (c : Conn) (id : Nat) (code : ErrorCode) : ReaderM Unit := do
@@ -885,7 +908,17 @@ private def frame (c : Conn) (handler : Handler) (h : FrameHeader) (payload : By
   | .unknown _ => pure ()  -- §4.1: ignored
 
 /-- The reader loop. -/
-private def readLoop (c : Conn) (handler : Handler) : ReaderM Unit := do
+private def readLoop (c : Conn) (handler : Handler) (upgrade : Option UpgradeRequest) : ReaderM Unit := do
+  if let some initial := upgrade then
+    applyPeerSettings c initial.settings false
+    let st ← (c.state.atomically get : IO _)
+    let req := { initial.request with streamId := 1 }
+    let slot : StreamSlot := {
+      recvWindow := c.config.initialWindowSize
+      sendWindow := st.peerInitialWindow, remoteDone := true, contentLength := req.contentLength }
+    (c.state.atomically (modify fun st => { st with
+      lastClientStream := 1, streams := st.streams.insert 1 slot }) : IO _)
+    (c.startHandler handler req (some req.body) : IO _)
   let preface ← readBytes c connectionPrefaceLength
   if preface != connectionPreface then protocolError "invalid connection preface"
   let mut first := true
@@ -914,8 +947,11 @@ private def readLoop (c : Conn) (handler : Handler) : ReaderM Unit := do
 /-- Serve one HTTP/2 connection whose preface is next on `transport`: send
     our SETTINGS, run the reader until the peer closes, goes idle, or commits
     a connection error (answered with GOAWAY), then close. Handlers run
-    concurrently; the transport is not touched after this returns. -/
-def serve (transport : Transport) (handler : Handler) (config : ServerConfig := {}) :
+    concurrently; the transport is not touched after this returns. For h2c
+    Upgrade, `upgrade` seeds half-closed stream 1 with the completed HTTP/1.1
+    request and its peer settings; the caller sends 101 first. -/
+def serve (transport : Transport) (handler : Handler) (config : ServerConfig := {})
+    (upgrade : Option UpgradeRequest := none) :
     Green Unit := do
   let state ← (Std.Mutex.new ({ connRecvWindow := config.connectionWindowSize } : ConnState) : IO _)
   let writeLock ← (Std.Mutex.new () : IO _)
@@ -929,18 +965,22 @@ def serve (transport : Transport) (handler : Handler) (config : ServerConfig := 
   let opening := encodeFrame settings ++
     (if raise > 0 then encodeFrame (buildWindowUpdateFrame StreamId.zero raise.toUInt32)
      else ByteArray.empty)
-  try (c.send opening : IO _) catch _ => (c.close : IO _); return
-  let outcome ← (readLoop c handler).run {} |>.run
-  let lastId := (← (c.state.atomically get : IO _)).lastClientStream
-  match outcome with
-  | .error (.error code message) =>
-    (c.sendQuietly (encodeFrame
-      (buildGoawayFrame (StreamId.fromWire lastId.toUInt32) code message.toUTF8)) : IO _)
-  | .error .quiet =>
-    (c.sendQuietly (encodeFrame
-      (buildGoawayFrame (StreamId.fromWire lastId.toUInt32) .noError ByteArray.empty)) : IO _)
-  | .ok _ => pure ()
-  (c.close : IO _)
+  try
+    try (c.send opening : IO _) catch _ => return
+    let outcome ← (readLoop c handler upgrade).run {} |>.run
+    let lastId := (← (c.state.atomically get : IO _)).lastClientStream
+    match outcome with
+    | .error (.error code message) =>
+      (c.sendQuietly (encodeFrame
+        (buildGoawayFrame (StreamId.fromWire lastId.toUInt32) code message.toUTF8)) : IO _)
+    | .error .quiet =>
+      (c.sendQuietly (encodeFrame
+        (buildGoawayFrame (StreamId.fromWire lastId.toUInt32) .noError ByteArray.empty)) : IO _)
+    | .ok _ => pure ()
+  finally
+    -- Transport exceptions and cancellation must wake handlers and prohibit
+    -- writes too, before the caller releases the socket/TLS session.
+    (c.close : IO _)
 
 -- ── The historical entry point ────────────────────────────────────
 

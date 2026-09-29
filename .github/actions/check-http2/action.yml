@@ -1,0 +1,35 @@
+name: HTTP/2 conformance
+description: Build pinned h2spec and check cleartext and TLS HTTP/2 in both server modes
+
+runs:
+  using: composite
+  steps:
+    # Build from source: the upstream release has no Linux/macOS arm64
+    # executables. Its go.mod/go.sum pin its dependencies too.
+    - uses: actions/setup-go@v6
+      with:
+        go-version: '1.27.x'
+        cache: false
+    - name: Build h2spec v2.6.0
+      shell: bash
+      env:
+        H2SPEC_DIR: ${{ runner.temp }}/linen-h2spec
+        CGO_ENABLED: '0'
+      run: |
+        set -euo pipefail
+        git clone --depth 1 --branch v2.6.0 https://github.com/summerwind/h2spec.git "$H2SPEC_DIR"
+        test "$(git -C "$H2SPEC_DIR" rev-parse HEAD)" = 70ac2294010887f48b18e2d64f5cccd48421fad1
+        go -C "$H2SPEC_DIR" build -trimpath -o "$H2SPEC_DIR/h2spec" ./cmd/h2spec
+    - name: HTTP/2 conformance and interoperability (plain and TLS, both modes)
+      shell: bash
+      env:
+        H2SPEC: ${{ runner.temp }}/linen-h2spec/h2spec
+      run: |
+        set -euo pipefail
+        # Explicitly elaborate again with the build's own interpreter setup:
+        # a cached lake test otherwise does not rerun an optional #eval when
+        # H2SPEC changes. The ordinary socket and curl checks run here too.
+        for module in HTTP2Test TLSTest; do
+          file="LinenTest/Linen/Network/WebApp/Server/$module"
+          lake env lean --setup ".lake/build/ir/$file.setup.json" "$file.lean"
+        done

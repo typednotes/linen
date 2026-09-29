@@ -18,6 +18,13 @@
   either direction may be asked for by either call. `Network.TLS.Green`
   drives all three on the `EventDispatcher`.
 
+  Published sessions serialize every OpenSSL operation (including getters
+  and close) with a per-session mutex. A non-blocking connection can have a
+  reader and writer on different threads: the mutex is released before a
+  WANT_READ/WANT_WRITE readiness wait. Callers still serialize writers across
+  retries of the same write. Blocking operations hold the mutex until their
+  syscall returns; use non-blocking sessions for full-duplex concurrency.
+
   Through 1.8.0, `acceptSocketNB`/`connectSocketNB` created a fresh `SSL`
   per call and freed it on every would-block, so a handshake needing a
   second read could never finish; they are removed.

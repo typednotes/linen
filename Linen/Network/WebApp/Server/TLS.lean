@@ -35,10 +35,9 @@
   record; anything else is plain HTTP, handled per `OnInsecure` — the
   detection warp-tls uses (which consumes and replays the bytes instead).
 
-  ## What is not supported (say it loudly)
-
-  - **HTTP/2 without TLS** (`h2c`, by prior knowledge or `Upgrade`): HTTP/2
-    is offered only over TLS, by ALPN — which is how browsers use it.
+  The `allowInsecure` branch also serves cleartext HTTP/2 (`h2c`, by prior
+  knowledge or HTTP/1.1 Upgrade), controlled by `Settings.settingsHttp2`.
+  Secure connections use ALPN exclusively: h2c cannot bypass negotiation.
 
   ## No `partial`
 

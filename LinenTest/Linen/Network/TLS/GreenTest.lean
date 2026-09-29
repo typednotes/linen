@@ -155,6 +155,51 @@ private def nonBlockingClient (certPath : String) (port : UInt16) :
   unless serverGot == up do
     throw (IO.userError s!"server received {serverGot.size} bytes, not the {up.size} sent")
 
+-- Full duplex: one reader and one writer on each SSL object at once,
+-- with getters racing them too. HTTP/2 needs this when consuming an upload
+-- while its stream handler returns WINDOW_UPDATE or response DATA. Without
+-- per-session serialization OpenSSL intermittently corrupts its state.
+#eval show IO Unit from withTestCert fun certPath keyPath => do
+  let up := pattern (2 * 1024 * 1024 + 23)
+  let down := pattern (2 * 1024 * 1024 + 47)
+  let inspect (session : TLSSession) : IO Unit := do
+    for _ in [0:1000] do
+      let version ← getVersion session
+      unless version == "TLSv1.2" || version == "TLSv1.3" do
+        throw (IO.userError s!"concurrent getter: {version}")
+      let _ ← getAlpn session
+  let (serverGot, clientGot) ← withGreenServer certPath keyPath
+    (fun disp sock session => do
+      let writer ← (IO.asTask (prio := .dedicated) do
+        Network.TLS.Green.writeIO disp sock session down 10000 : IO _)
+      let getter ← (IO.asTask (prio := .dedicated) (inspect session) : IO _)
+      let mut got := ByteArray.empty
+      while got.size < up.size do
+        let piece ← Network.TLS.Green.readFor disp sock session (some 10000)
+        let some piece := piece | throw (IO.userError "duplex server read timed out")
+        if piece.isEmpty then throw (IO.userError "duplex server EOF")
+        got := got ++ piece
+      (IO.ofExcept (← IO.wait writer) : IO _)
+      (IO.ofExcept (← IO.wait getter) : IO _)
+      return got)
+    (fun port => do
+      let (conn, session) ← nonBlockingClient certPath port
+      try
+        let writer ← IO.asTask (prio := .dedicated) (writeWithin session conn.raw 10000 up)
+        let getter ← IO.asTask (prio := .dedicated) (inspect session)
+        let got ← readExactly down.size do
+          let some bytes ← readWithin session conn.raw 10000
+            | throw (IO.userError "duplex client read timed out")
+          return bytes
+        IO.ofExcept (← IO.wait writer)
+        IO.ofExcept (← IO.wait getter)
+        return got
+      finally
+        close session
+        let _ ← Network.Socket.close conn)
+  unless serverGot == up && clientGot == down do
+    throw (IO.userError s!"duplex mismatch: {serverGot.size}/{up.size}, {clientGot.size}/{down.size}")
+
 -- End of input: a peer that closes (with close_notify) reads as empty.
 #eval show IO Unit from withTestCert fun certPath keyPath => do
   let (serverGot, _) ← withGreenServer certPath keyPath

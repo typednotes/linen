@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <pthread.h>
 
 /* ────────────────────────────────────────────────────────────
  * External classes for SSL_CTX and SSL
@@ -40,7 +41,27 @@ typedef struct {
     SSL *ssl;
     int fd;      /* borrowed — not owned, closed by socket layer */
     int failed;  /* a fatal SSL/SYSCALL error happened: never SSL_shutdown */
+    /* OpenSSL is thread-safe across objects, not within one SSL object.
+     * HTTP/2 reads while stream handlers write. Serialize each SSL call and
+     * its error inspection, never the socket-readiness wait outside it. */
+    pthread_mutex_t lock;
 } linen_ssl_t;
+
+static linen_ssl_t *linen_tls_lock(linen_ssl_t *s) {
+    pthread_mutex_lock(&s->lock);
+    return s;
+}
+
+static void linen_tls_unlock(linen_ssl_t **s) {
+    pthread_mutex_unlock(&(*s)->lock);
+}
+
+/* Clang and GCC's cleanup guard unlocks on every return, including errors.
+ * A guard protects all accesses to a published session: I/O, handshake,
+ * getters and close. Non-blocking operations release it before WANT_* is
+ * returned, so a waiting read cannot prevent a concurrent write. */
+#define LINEN_TLS_SESSION_LOCK(s) \
+    linen_ssl_t *session_guard __attribute__((cleanup(linen_tls_unlock))) = linen_tls_lock(s)
 
 static void linen_ssl_ctx_finalizer(void *ptr) {
     linen_ssl_ctx_t *c = (linen_ssl_ctx_t *)ptr;
@@ -59,6 +80,7 @@ static void linen_ssl_finalizer(void *ptr) {
     linen_ssl_t *s = (linen_ssl_t *)ptr;
     if (s) {
         if (s->ssl) SSL_free(s->ssl);
+        pthread_mutex_destroy(&s->lock);
         free(s);
     }
 }
@@ -67,7 +89,7 @@ static void linen_noop_foreach_tls(void *mod, b_lean_obj_arg fn) {
     /* no sub-objects to traverse */
 }
 
-static void ensure_classes(void) {
+static void register_classes(void) {
     if (!g_linen_ssl_ctx_class) {
         g_linen_ssl_ctx_class = lean_register_external_class(
             linen_ssl_ctx_finalizer, linen_noop_foreach_tls);
@@ -76,6 +98,12 @@ static void ensure_classes(void) {
         g_linen_ssl_class = lean_register_external_class(
             linen_ssl_finalizer, linen_noop_foreach_tls);
     }
+}
+
+static pthread_once_t classes_once = PTHREAD_ONCE_INIT;
+
+static void ensure_classes(void) {
+    pthread_once(&classes_once, register_classes);
 }
 
 static lean_obj_res mk_io_error(const char *msg) {
@@ -294,6 +322,11 @@ static lean_obj_res linen_tls_new_session(b_lean_obj_arg ctx_obj, b_lean_obj_arg
     wrapper->ssl = ssl;
     wrapper->fd = fd;
     wrapper->failed = 0;
+    if (pthread_mutex_init(&wrapper->lock, NULL) != 0) {
+        SSL_free(ssl);
+        free(wrapper);
+        return lean_io_result_mk_error(mk_io_error("TLS session mutex initialization failed"));
+    }
     return lean_io_result_mk_ok(lean_alloc_external(g_linen_ssl_class, wrapper));
 }
 
@@ -330,6 +363,7 @@ LEAN_EXPORT lean_obj_res linen_tls_read(
     lean_obj_arg world
 ) {
     linen_ssl_t *wrapper = lean_get_external_data(ssl_obj);
+    LINEN_TLS_SESSION_LOCK(wrapper);
     if (!wrapper->ssl) {
         /* Return empty on closed session */
         lean_obj_res arr = lean_mk_empty_byte_array(lean_box(0));
@@ -365,6 +399,7 @@ LEAN_EXPORT lean_obj_res linen_tls_write(
     lean_obj_arg world
 ) {
     linen_ssl_t *wrapper = lean_get_external_data(ssl_obj);
+    LINEN_TLS_SESSION_LOCK(wrapper);
     if (!wrapper->ssl) {
         return lean_io_result_mk_error(lean_mk_io_user_error(
             lean_mk_string("TLS write on closed session")));
@@ -398,6 +433,7 @@ LEAN_EXPORT lean_obj_res linen_tls_close(
     lean_obj_arg world
 ) {
     linen_ssl_t *wrapper = lean_get_external_data(ssl_obj);
+    LINEN_TLS_SESSION_LOCK(wrapper);
     if (wrapper->ssl) {
         /* A fast, one-call shutdown: send close_notify without waiting for
          * the peer's. Never after a fatal error (OpenSSL forbids it). On a
@@ -472,6 +508,7 @@ static int linen_tls_is_unexpected_eof(int err) {
  */
 LEAN_EXPORT lean_obj_res linen_tls_handshake_nb(b_lean_obj_arg ssl_obj, lean_obj_arg world) {
     linen_ssl_t *wrapper = lean_get_external_data(ssl_obj);
+    LINEN_TLS_SESSION_LOCK(wrapper);
     if (!wrapper->ssl)
         return linen_tls_outcome(3, mk_tls_io_error("TLS handshake on closed session"));
     ERR_clear_error();
@@ -499,6 +536,7 @@ LEAN_EXPORT lean_obj_res linen_tls_read_nb(
     lean_obj_arg world
 ) {
     linen_ssl_t *wrapper = lean_get_external_data(ssl_obj);
+    LINEN_TLS_SESSION_LOCK(wrapper);
     if (!wrapper->ssl)
         return linen_tls_outcome(3, mk_tls_io_error("TLS read on closed session"));
     if (maxlen == 0) return linen_tls_outcome(0, lean_mk_empty_byte_array(lean_box(0)));
@@ -536,6 +574,7 @@ LEAN_EXPORT lean_obj_res linen_tls_write_nb(
     lean_obj_arg world
 ) {
     linen_ssl_t *wrapper = lean_get_external_data(ssl_obj);
+    LINEN_TLS_SESSION_LOCK(wrapper);
     if (!wrapper->ssl)
         return linen_tls_outcome(3, mk_tls_io_error("TLS write on closed session"));
     size_t len = lean_sarray_size(data_obj);
@@ -565,6 +604,7 @@ LEAN_EXPORT lean_obj_res linen_tls_get_version(
     lean_obj_arg world
 ) {
     linen_ssl_t *wrapper = lean_get_external_data(ssl_obj);
+    LINEN_TLS_SESSION_LOCK(wrapper);
     const char *ver = wrapper->ssl ? SSL_get_version(wrapper->ssl) : "unknown";
     return lean_io_result_mk_ok(lean_mk_string(ver));
 }
@@ -578,6 +618,7 @@ LEAN_EXPORT lean_obj_res linen_tls_get_alpn(
     lean_obj_arg world
 ) {
     linen_ssl_t *wrapper = lean_get_external_data(ssl_obj);
+    LINEN_TLS_SESSION_LOCK(wrapper);
     if (!wrapper->ssl) {
         return lean_io_result_mk_ok(lean_box(0));
     }
@@ -748,4 +789,3 @@ LEAN_EXPORT lean_obj_res linen_tls_client_ctx_create_with_ca(
     lean_obj_res obj = lean_alloc_external(g_linen_ssl_ctx_class, wrapper);
     return lean_io_result_mk_ok(obj);
 }
-
