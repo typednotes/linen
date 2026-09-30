@@ -2417,6 +2417,7 @@ the secrets, never their values.
 | `Linen.Control.Monad.Effect.FileSystem` | capability-restricted filesystem effect: `Capability`, `CanRead`/`CanWrite`/`CanDelete` proof obligations, `readFile`/`writeFile`/`deleteFile`, `runFileSystem` |
 | `Linen.Control.Monad.Effect.HTTP` | capability-restricted HTTP client effect: `Capability` of method bits + URL `scopes`, `CanGet`/`CanPost`/… proof obligations, `u!` URL literals, `get`/`post`/`put`/`patch`/`delete`, `runHTTP`/`runHTTPWith` |
 | `Linen.Control.Monad.Effect.PostgreSQL` | capability-restricted PostgreSQL effect: capability-pinned database/user, `CanSelect`/`CanInsert`/`CanUpdate`/`CanDelete` proof obligations, table scope, parameterised `Query` AST, `runPostgreSQL`/`dryRun` |
+| `Linen.Control.Monad.Effect.Connector` | credential-free named operations on exact/recursive resource scopes; four-ceiling authority witnesses, request/response byte bounds, strict runtime decoding and proved semantic narrowing |
 | `Linen.Control.Concurrent.STM.TVar` | transactional variable over `IO.Ref`: `newTVarIO`/`readTVar`/`writeTVar`/`modifyTVar'` |
 | `Linen.Control.Concurrent.STM.TMVar` | `TVar (Option α)`: `takeTMVar`/`putTMVar`/`readTMVar`/`tryTakeTMVar`/`tryPutTMVar`/`isEmptyTMVar` |
 | `Linen.Control.Concurrent.STM.TQueue` | transactional two-list FIFO: `writeTQueue`/`readTQueue`/`tryReadTQueue`/`isEmptyTQueue`/`peekTQueue` |

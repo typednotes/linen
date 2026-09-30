@@ -63,6 +63,7 @@ import Linen.Control.Monad.State
 import Linen.Control.Monad.STM
 import Linen.Control.Monad.Effect
 import Linen.Control.Monad.Effect.Handler
+import Linen.Control.Monad.Effect.Connector
 import Linen.Control.Monad.Effect.Reader
 import Linen.Control.Monad.Effect.State
 import Linen.Control.Monad.Effect.Error

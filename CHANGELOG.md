@@ -7,6 +7,19 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-09-30
+
+### Added
+
+- **`Control.Monad.Effect.Connector`** — named operations and component-wise
+  resource scopes with strict capability decoding, private scoped-resource
+  witnesses, and an `Eff` interface for native connector execution.
+- **Kernel-checked authority evidence** — confinement, exact resources,
+  attenuation and narrowing transitivity, independently owned organization /
+  connection / cell / warrant intersections, and request/response byte bounds.
+  Runtime validation produces the witnesses consumed by the sibling broker and
+  notebook runner; corresponding tests are imported by `LinenTest`.
+
 ## [1.9.2] - 2026-09-29
 
 ### Fixed

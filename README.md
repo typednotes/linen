@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen LinenTest --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen LinenTest --include='*.lean' | wc -l -->
-  <strong>796 modules</strong> · <strong>492 compile-time theorems</strong> · <strong>11584 <code>#guard</code> checks</strong>
+  <strong>797 modules</strong> · <strong>511 compile-time theorems</strong> · <strong>11630 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -85,6 +85,10 @@ for the full per-module feature list and module table.
     parameterised AST rather than strings, because a `String` of SQL cannot be
     checked by `decide` — and so the SQL sent cannot disagree with the SQL
     authorised.
+  - `Connector` — credential-free named operations with exact/recursive resource
+    scopes and explicit byte bounds. Runtime authorization witnesses intersect
+    organization, connection, cell and warrant ceilings. Kernel-checked narrowing
+    and permission/bound theorems accompany strict runtime capability decoding.
 - **`Control.Reactive`** — typed reactive graphs, DAGs of observables with
   ReactiveX's names (`Subject`, `map`, `scan`, `combineLatest`, `zip`,
   `debounceTime`, …) and reactive-banana's glitch-free semantics over virtual
@@ -424,7 +428,7 @@ you imported only pure-Lean modules.
 
 ## Modules
 
-See **[docs/modules.md](docs/modules.md)** for the full module table (all 796 modules).
+See **[docs/modules.md](docs/modules.md)** for the full module table (all 797 modules).
 
 ## Build & Test
 

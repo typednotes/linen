@@ -26,6 +26,7 @@ import LinenTest.Linen.Control.Monad.StateTest
 import LinenTest.Linen.Control.Monad.STMTest
 import LinenTest.Linen.Control.Monad.EffectTest
 import LinenTest.Linen.Control.Monad.Effect.HandlerTest
+import LinenTest.Linen.Control.Monad.Effect.ConnectorTest
 import LinenTest.Linen.Control.Monad.Effect.ReaderTest
 import LinenTest.Linen.Control.Monad.Effect.StateTest
 import LinenTest.Linen.Control.Monad.Effect.ErrorTest
