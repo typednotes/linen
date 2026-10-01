@@ -11,10 +11,8 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
-  # For re-running a release whose publish step failed after the tests
-  # already passed — the tests run again, since a green result that nobody
-  # re-checked is not evidence.
+      - 'v*.*.*'
+  # Retry publication for an existing tag; attest its exact main CI again.
   workflow_dispatch:
     inputs:
       tag:
@@ -22,33 +20,50 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 # One release at a time per tag, and never cancel one part way: a half-created
 # release is worse than a slow one.
 concurrency:
-  group: release-${{ inputs.tag || github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   # ── Cheap checks first ────────────────────────────────────────────────────
   #
-  # A version mismatch or a missing CHANGELOG section should fail in seconds,
-  # not after two platforms have each built the whole library.
+  # Attest the full main CI (all platforms, consumer and unsealable host),
+  # then check the version and release notes without rebuilding on tags.
   verify:
     name: Verify tag and notes
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
     outputs:
       tag: ${{ steps.check.outputs.tag }}
       version: ${{ steps.check.outputs.version }}
       prerelease: ${{ steps.check.outputs.prerelease }}
+      sha: ${{ steps.ci.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require successful main CI for the exact tag commit
+        id: ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: bash ci/require-main-ci.sh lean_action_ci.yml "$TAG"
 
       - name: Check the tag against lakefile.lean and CHANGELOG.md
         id: check
+        env:
+          TAG: ${{ steps.ci.outputs.tag }}
         run: |
-          TAG="${{ inputs.tag || github.ref_name }}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
           # A prerelease suffix (v0.17.0-rc1) is published as a prerelease, so
@@ -69,44 +84,10 @@ jobs:
           path: release-notes.md
           retention-days: 7
 
-  # ── The gate ──────────────────────────────────────────────────────────────
-  #
-  # AGENTS.md requires the full suite to pass on macOS **and** Linux whenever
-  # an FFI target is in the build graph, which is always here. So a release is
-  # gated on both, not on whatever CI happened to run for the branch.
-  test:
-    name: Test (${{ matrix.os }})
-    needs: verify
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-      - uses: ./.github/actions/setup-native-deps
-      - uses: leanprover/lean-action@v1
-        with:
-          test: false
-      # Every `#guard` and `#guard_msgs` check runs at elaboration time, so
-      # `lake test` (which builds `LinenTest`) *is* running the tests.
-      - name: Build the test suite (runs every #guard check)
-        run: lake test
-
-      - uses: ./.github/actions/check-http2
-        timeout-minutes: 10
-
-      # Same check as the CI workflow, via the same script — a release must not
-      # ship a Linux build whose DuckDB aborts on its first error path.
-      - name: Verify the sealed DuckDB library is self-contained
-        run: ./ci/check-sealed-duckdb.sh
-
   # ── Publish ───────────────────────────────────────────────────────────────
   publish:
     name: Publish the release
-    needs: [verify, test]
+    needs: verify
     runs-on: ubuntu-24.04
     permissions:
       # The only write this workflow needs.
@@ -114,7 +95,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ needs.verify.outputs.sha }}
+          persist-credentials: false
 
       - name: Download the release notes
         uses: actions/download-artifact@v8

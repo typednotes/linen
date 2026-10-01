@@ -48,7 +48,7 @@ Three rules hold across the whole library:
 
 ## Features
 
-`linen` covers the following areas — see **[docs/modules.md](docs/modules.md)**
+`linen` covers the following areas — see **[docs/modules.md](https://github.com/typednotes/linen/blob/main/docs/modules.md)**
 for the full per-module feature list and module table.
 
 - **`Data.Functor` / `Control`** — functor, applicative & monad constructions
@@ -352,7 +352,7 @@ need do not, so you get `undefined symbol: SecItemCopyMatching` or similar.
 Because the flags are platform-conditional, this needs `lakefile.lean` rather
 than `lakefile.toml`.
 
-The helpers are one canonical block, **`ci/consumer/link-helpers.lean`**:
+The helpers are one canonical block, **[`ci/consumer/link-helpers.lean`](https://github.com/typednotes/linen/blob/main/ci/consumer/link-helpers.lean)**:
 paste it — markers included — into your lakefile, and check it against the
 tag you pin with `ci/consumer/check-link-helpers.sh lakefile.lean`, run from
 that checkout (`.lake/packages/linen`). A copy is unavoidable, since Lake gives
@@ -391,7 +391,7 @@ run time); on macOS it is `-L<workspace>/.lake/duckdb -lduckdb` plus its
 `-rpath` (the pinned `libduckdb.dylib` linen downloads when your package
 elaborates its lakefile). Both must be absolute — an `-rpath` is resolved
 relative to the *executable* at run time, not the caller's directory. The
-`consumer` job in `.github/workflows/lean_action_ci.yml` is a complete,
+`consumer` job in [`.github/workflows/lean_action_ci.yml`](https://github.com/typednotes/linen/blob/main/.github/workflows/lean_action_ci.yml) is a complete,
 working recipe, including the executable link.
 
 **Why the absolute-path form exists.** A `lean_lib` never links the executable
@@ -428,7 +428,7 @@ you imported only pure-Lean modules.
 
 ## Modules
 
-See **[docs/modules.md](docs/modules.md)** for the full module table (all 797 modules).
+See **[docs/modules.md](https://github.com/typednotes/linen/blob/main/docs/modules.md)** for the full module table (all 797 modules).
 
 ## Build & Test
 
@@ -437,9 +437,34 @@ lake build          # build the library
 lake test    # builds LinenTest: runs every #guard / #eval check
 ```
 
+### CI and releases
+
+[`lean_action_ci.yml`](https://github.com/typednotes/linen/blob/main/.github/workflows/lean_action_ci.yml)
+runs on pushes to `main`, pull requests targeting `main`, and manual dispatch.
+It covers Linux x86_64, Linux arm64 and macOS, consumer library/executable
+builds on those platforms, the unsealable host, and HTTP/2 conformance.
+
+For a release, update the version and CHANGELOG, run
+`ci/check-release.sh vX.Y.Z`, push `main`, and wait for CI on that exact
+commit before pushing its version tag. The
+[`release.yml`](https://github.com/typednotes/linen/blob/main/.github/workflows/release.yml)
+verification job has only `contents: read` and `actions: read` permissions.
+[`ci/require-main-ci.sh`](https://github.com/typednotes/linen/blob/main/ci/require-main-ci.sh)
+checks that the actual checkout matches the tag's commit, that the commit is
+reachable from `origin/main`, and that its latest **push-to-main** run of
+`lean_action_ci.yml` is completed/success. Missing, pending or failed latest
+runs block publication; PR/manual CI and another commit's result do not qualify.
+
+The release attests that full main CI workflow rather than repeating a test
+matrix on tags. It still checks the tagged version and CHANGELOG notes, then
+the publisher checks out the verified SHA and uses `contents: write` to create
+or update the GitHub release. A manual release retry must name an existing
+version tag and passes the same gate. Prerelease tags create prereleases;
+the source tag is the artifact, with no platform-specific build binaries attached.
+
 ## Examples
 
-Example programs live under [`Examples/`](Examples) and share one entrypoint,
+Example programs live under [`Examples/`](https://github.com/typednotes/linen/tree/main/Examples) and share one entrypoint,
 `lake exe examples <name> [args...]` (run with no name to list them):
 
 ```bash
@@ -475,7 +500,7 @@ loop forks a green handler per connection, each suspending on
 `recvGreen`/`sendAllGreen` (via the kqueue/epoll `EventDispatcher`) instead of
 holding an OS thread, so one small worker pool serves many connections. Adding
 an example is a new module under `Examples/` plus one line in the registry in
-`Examples/Main.lean`.
+[`Examples/Main.lean`](https://github.com/typednotes/linen/blob/main/Examples/Main.lean).
 
 The `quic` example demonstrates the HTTP/3-over-QUIC wire format end-to-end —
 `Network.HTTP3.QPACK.Encode`/`Frame.encode` producing bytes that
@@ -622,18 +647,18 @@ If nothing is listening, the example prints a short "could not connect" hint
 
 ## Documentation
 
-- [docs/modules.md](docs/modules.md) — the full module feature list and module table.
-- [docs/imports/index.md](docs/imports/index.md) — Hackage-package import order, with a
+- [docs/modules.md](https://github.com/typednotes/linen/blob/main/docs/modules.md) — the full module feature list and module table.
+- [docs/imports/index.md](https://github.com/typednotes/linen/blob/main/docs/imports/index.md) — Hackage-package import order, with a
   per-package module dependency list under `docs/imports/<Package>/dependencies.md`.
-- [docs/linking.md](docs/linking.md) — how native libraries are linked: static vs
+- [docs/linking.md](https://github.com/typednotes/linen/blob/main/docs/linking.md) — how native libraries are linked: static vs
   dynamic, PIC, and the C++ exception/unwinder hazard on Linux. Read before
   adding an FFI dependency.
-- [docs/rfcs.md](docs/rfcs.md) — the specifications `linen` implements, mapped to
+- [docs/rfcs.md](https://github.com/typednotes/linen/blob/main/docs/rfcs.md) — the specifications `linen` implements, mapped to
   their modules; the foundational ones it rests on; and a few worth reading for
   their own sake.
-- [CHANGELOG.md](CHANGELOG.md) — notable changes per released version.
-- [AGENTS.md](AGENTS.md) — conventions for contributing to the library.
+- [CHANGELOG.md](https://github.com/typednotes/linen/blob/main/CHANGELOG.md) — notable changes per released version.
+- [AGENTS.md](https://github.com/typednotes/linen/blob/main/AGENTS.md) — conventions for contributing to the library.
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+See [LICENSE](https://github.com/typednotes/linen/blob/main/LICENSE) for details.

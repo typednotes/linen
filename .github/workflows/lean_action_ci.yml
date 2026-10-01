@@ -2,13 +2,15 @@ name: Lean Action CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
   workflow_dispatch:
 
 # Two pushes of the same commit seconds apart (or rapid successive pushes)
 # each fire the full ~11-minute matrix; only the newest run per ref matters,
 # so supersede the older instead of running it out. Grouped per ref, so a
-# tag push never cancels a branch's run or another tag's.
+# pull request never cancels main's run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -19,8 +21,8 @@ jobs:
       # Never cancel one platform because another failed. These legs fail for
       # genuinely different reasons — the whole point of running them is to see
       # each one's result — and the default (fail-fast: true) threw away the
-      # Linux result the moment a flaky macOS timing test failed. `release.yml`
-      # already sets this; the two should not disagree.
+      # Linux result the moment a flaky macOS timing test failed. Releases
+      # attest this complete matrix for the exact tagged commit.
       fail-fast: false
       matrix:
         # Three legs, one per axis that actually varies. The ~770 pure-Lean
@@ -46,8 +48,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-      # Installs libpq, OpenSSL and (on Linux) libsecret. Shared with the
-      # release workflow, so the two cannot drift.
+      - name: Offline release gate regressions
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        run: bash ci/test-require-main-ci.sh
+      # Installs libpq, OpenSSL and (on Linux) libsecret from the canonical list.
       - uses: ./.github/actions/setup-native-deps
       # `test: false`: the suite runs in the named step below instead.
       - uses: leanprover/lean-action@v1
@@ -68,8 +73,8 @@ jobs:
       # A symbol table is not observable from a `#guard`, and getting this
       # wrong aborts the process on every DuckDB error path rather than failing
       # the build. The seal is a property of a linked binary, so it is asserted
-      # on the artifact; the script skips itself on macOS. Shared with the
-      # release workflow so the two cannot drift.
+      # on the artifact; the script skips itself on macOS. Releases require
+      # this workflow to have passed on the exact tagged commit.
       - name: Verify the sealed DuckDB library is self-contained
         run: ./ci/check-sealed-duckdb.sh
 

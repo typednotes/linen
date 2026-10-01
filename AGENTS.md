@@ -116,21 +116,23 @@ the rest. The order matters, because three things have to agree:
 3. Run `ci/check-release.sh vx.y.z` **before** tagging. It checks the tag
    against the lakefile and the CHANGELOG and prints the notes that would be
    published, so a mismatch is caught locally rather than in a workflow.
-4. Commit, `git tag -a vx.y.z`, and push the tag.
+4. Commit and have the user push `main`. Wait for `lean_action_ci.yml` to pass
+   on that exact commit before creating and having the user push `vx.y.z`.
 
-The workflow then re-runs the full suite on macOS **and** Linux — a release is
-never gated on whatever CI happened to run for the branch — and publishes a
-GitHub release whose notes are the CHANGELOG section. A tag with a prerelease
+CI runs on pushes to `main` and pull requests targeting `main` (plus manual
+dispatch). The release workflow requires the **latest push-to-main CI run for
+the exact tag commit** to have completed successfully, and the commit to be
+reachable from `main`. `ci/require-main-ci.sh` attests that full workflow:
+Linux x86_64, Linux arm64, macOS, consumer builds, the unsealable host and HTTP/2
+conformance. No test matrix is repeated on tags. It then publishes a GitHub
+release whose notes are the CHANGELOG section. A tag with a prerelease
 suffix (`v0.17.0-rc1`) publishes as a prerelease, so it does not become
 "latest".
 
-**`release.yml` is narrower than `lean_action_ci.yml`, deliberately or not —
-know which.** Its `test` job runs `[ubuntu-24.04, macos-latest]` only: it does
-**not** cover the arm64 Linux leg, the consumer build, or the unsealable host.
-So a tag is gated on two of the four axes above. Two of those three uncovered
-axes have each already caught a bug that reached a release (0.19.1 and the
-unsealable fallback), so do not read a green release workflow as "every axis
-passed" — check `lean_action_ci.yml` on the tagged commit for that.
+Missing, pending or failed main CI blocks publication, as do PR/manual results
+and results for another commit. A manual release retry requires an existing
+version tag and attests its checked-out commit again; `GITHUB_SHA` from the
+dispatch's default branch is not release evidence.
 
 Two things worth knowing:
 
@@ -144,7 +146,7 @@ Two things worth knowing:
   compiler.
 
 The native dependency list lives in one place,
-`.github/actions/setup-native-deps/action.yml`, used by both workflows — a
+`.github/actions/setup-native-deps/action.yml`, used by CI and consumers — a
 second copy is the kind of duplication that goes stale without anyone noticing.
 
 ## Keeping the main page current
