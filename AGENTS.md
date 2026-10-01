@@ -116,8 +116,8 @@ the rest. The order matters, because three things have to agree:
 3. Run `ci/check-release.sh vx.y.z` **before** tagging. It checks the tag
    against the lakefile and the CHANGELOG and prints the notes that would be
    published, so a mismatch is caught locally rather than in a workflow.
-4. Commit and have the user push `main`. Wait for `lean_action_ci.yml` to pass
-   on that exact commit before creating and having the user push `vx.y.z`.
+4. Commit and create the new local tag. The user may push `main` and `vx.y.z`
+   together; the publisher waits for successful CI on that exact release commit.
 
 CI runs on pushes to `main` and pull requests targeting `main` (plus manual
 dispatch). The release workflow requires the **latest push-to-main CI run for
@@ -129,8 +129,9 @@ release whose notes are the CHANGELOG section. A tag with a prerelease
 suffix (`v0.17.0-rc1`) publishes as a prerelease, so it does not become
 "latest".
 
-Missing, pending or failed main CI blocks publication, as do PR/manual results
-and results for another commit. A manual release retry requires an existing
+Missing/pending main CI is polled for up to two hours. Failed/cancelled CI,
+invalid evidence, API errors, timeout, PR/manual results and results for another
+commit block publication. A manual release retry requires an existing
 version tag and attests its checked-out commit again; `GITHUB_SHA` from the
 dispatch's default branch is not release evidence.
 

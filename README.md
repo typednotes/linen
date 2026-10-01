@@ -46,6 +46,18 @@ Three rules hold across the whole library:
 - **Everything is tested** — each module has a `LinenTest/` counterpart whose
   `#guard` examples run on every build.
 
+## CI and releases
+
+After checking the new version and CHANGELOG with `ci/check-release.sh`, the user
+can push the release commit and tag together: `git push origin main vX.Y.Z`.
+The version-tag publisher polls for up to two hours for the latest successful
+push-to-main CI run on that exact commit. The full platform, consumer,
+unsealable-host and HTTP/2 checks remain required. Failed/cancelled CI, invalid
+evidence, API errors and timeout stop publication; PR/manual results cannot
+substitute. Version/notes checks still run after CI, and existing tags keep the
+workflow stored in their own commits. See the
+[release workflow](https://github.com/typednotes/linen/blob/main/.github/workflows/release.yml).
+
 ## Features
 
 `linen` covers the following areas — see **[docs/modules.md](https://github.com/typednotes/linen/blob/main/docs/modules.md)**

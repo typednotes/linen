@@ -37,6 +37,7 @@ jobs:
   verify:
     name: Verify tag and notes
     runs-on: ubuntu-24.04
+    timeout-minutes: 130
     permissions:
       contents: read
       actions: read
@@ -52,7 +53,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Require successful main CI for the exact tag commit
+      - name: Wait for successful main CI for the exact tag commit
         id: ci
         env:
           GH_TOKEN: ${{ github.token }}
