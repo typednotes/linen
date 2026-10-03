@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen LinenTest --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen LinenTest --include='*.lean' | wc -l -->
-  <strong>797 modules</strong> · <strong>511 compile-time theorems</strong> · <strong>11630 <code>#guard</code> checks</strong>
+  <strong>798 modules</strong> · <strong>511 compile-time theorems</strong> · <strong>11632 <code>#guard</code> checks</strong>
 </p>
 
 ## Overview
@@ -279,6 +279,8 @@ for the full per-module feature list and module table.
   killing its whole process group; **`System.LakeLog`** — `lake build`'s
   output as diagnostics; **`System.Git.Remote`** — branch names and
   repository URLs checked before they reach `git` or a hosting API.
+- **`System.Worker`** — bounded, serialized persistent line-protocol processes,
+  typed request framing, deadlines, UTF-8 validation and synchronized retirement.
 - **`System.GitFn`** — run a Lean function identified by its git location
   (repo, commit, project, name, declared type) securely: the remote sources
   are checked before compilation (plain, kernel-checked Lean only, effects
@@ -440,7 +442,7 @@ you imported only pure-Lean modules.
 
 ## Modules
 
-See **[docs/modules.md](https://github.com/typednotes/linen/blob/main/docs/modules.md)** for the full module table (all 797 modules).
+See **[docs/modules.md](https://github.com/typednotes/linen/blob/main/docs/modules.md)** for the full module table (all 798 modules).
 
 ## Build & Test
 

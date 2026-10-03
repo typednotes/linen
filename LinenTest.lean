@@ -598,6 +598,7 @@ import LinenTest.Linen.CDP.RuntimeTest
 import LinenTest.Linen.Graphics.NetpbmTest
 import LinenTest.Linen.Graphics.GraphvizTest
 import LinenTest.Linen.System.ProcessTest
+import LinenTest.Linen.System.WorkerTest
 import LinenTest.Linen.System.LakeLogTest
 import LinenTest.Linen.System.Git.RemoteTest
 import LinenTest.Linen.System.GitFnTest

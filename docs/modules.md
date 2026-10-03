@@ -402,6 +402,10 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
 
 ### `System.Process` — commands with a deadline
 
+- `System.Worker` — reusable serialized line-protocol processes with bounded
+  private request witnesses, bounded UTF-8 responses, deadlines and retirement.
+  Consumers own protocol correlation, request context and parent supervision.
+
 - `System.Process` — `run`: a command to completion with stdout and stderr
   read concurrently, optional stdin, and a deadline and an abort flag
   (`IO.Ref Bool`) after which the child's whole process group is killed
@@ -2828,6 +2832,7 @@ the secrets, never their values.
 | `Linen.CDP.Runtime` | the client runtime: `runClient`, `sendCommand`/`sendCommandWait`, `subscribe`/`unsubscribe` |
 | `Linen.CDP` | the package aggregator: `CDP.Domains` + `CDP.Runtime` |
 | `Linen.System.Process` | commands with a deadline and an abort flag, the process group killed; `runBytes`, `Result.describe`, `hermeticGit` |
+| `Linen.System.Worker` | reusable serialized processes, private bounded/newline-free `Line`, deadlines, bounded UTF-8 replies and running-group retirement |
 | `Linen.System.LakeLog` | `lake build` output → `Diagnostic`s (`parse`, `splitLocation`, `render`, `isSummary`) |
 | `Linen.System.Git.Remote` | `isBranchName`; `Repository.parse` (`Host`, segments, canonical clone URL) |
 | `Linen.System.GitFn` | functions defined by their git location, run securely: re-exports `Descriptor`, `Policy`, `Build`, `Worker` |

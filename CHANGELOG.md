@@ -7,6 +7,17 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-10-03
+
+### Added
+
+- **`System.Worker`** — reusable serialized line-protocol processes with private
+  bounded/newline-free request witnesses, bounded UTF-8 replies, per-call deadlines,
+  synchronized retirement and running-process-group cleanup. Real process tests
+  cover repeated/Unicode/large frames, hung descendants and malformed output.
+  Protocol correlation, effect authority and parent lifetime remain the consumer's
+  responsibility; Lun's checked cache and driver protocol supply those contracts.
+
 ## [1.10.0] - 2026-09-30
 
 ### Added
