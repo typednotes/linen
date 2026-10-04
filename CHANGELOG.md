@@ -7,6 +7,16 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-10-04
+
+### Added
+
+- **`Control.Monad.Effect.Producer`** — pure sequential scripts with `yield`,
+  `yieldAll`, millisecond `wait`, ordinary branches/finite loops, and repeating
+  `every` sources. Lowers the existing coroutine effect to JSON-cursor steps;
+  callers own state and scheduling. Pure prefixes are reconstructed on resume,
+  with the cursor reset each repeating cycle.
+
 ## [1.11.1] - 2026-10-04
 
 ### Fixed

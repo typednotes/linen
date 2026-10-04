@@ -33,6 +33,7 @@ import LinenTest.Linen.Control.Monad.Effect.ErrorTest
 import LinenTest.Linen.Control.Monad.Effect.WriterTest
 import LinenTest.Linen.Control.Monad.Effect.NonDetTest
 import LinenTest.Linen.Control.Monad.Effect.CoroutineTest
+import LinenTest.Linen.Control.Monad.Effect.ProducerTest
 import LinenTest.Linen.Control.Monad.Effect.FreshTest
 import LinenTest.Linen.Control.Monad.Effect.TraceTest
 import LinenTest.Linen.Control.Monad.Effect.FileSystemTest

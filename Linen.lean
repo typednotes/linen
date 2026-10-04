@@ -70,6 +70,7 @@ import Linen.Control.Monad.Effect.Error
 import Linen.Control.Monad.Effect.Writer
 import Linen.Control.Monad.Effect.NonDet
 import Linen.Control.Monad.Effect.Coroutine
+import Linen.Control.Monad.Effect.Producer
 import Linen.Control.Monad.Effect.Fresh
 import Linen.Control.Monad.Effect.Trace
 import Linen.Control.Monad.Effect.FileSystem

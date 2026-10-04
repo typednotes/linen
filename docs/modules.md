@@ -259,6 +259,12 @@ the project overview and quick start.
   `Status` is self-referential *through* `Eff`, which is why `Eff`'s payload is
   universe-polymorphic; driving a coroutine to completion is the caller's job,
   since one may yield forever.
+- `Control.Monad.Effect.Producer` — pure sequential `Script`s with `yield`,
+  `yieldAll`, millisecond `wait`, ordinary branches and finite loops. `run`
+  lowers a script to `Nat → Option Cursor → Eff [] (List β × Cursor × Option Nat)`;
+  `every` repeats a finite block, resetting the reconstruction cursor each cycle.
+  Continuations are JSON data; the caller owns the clock and scheduler. Only
+  pure control flow is reconstructed, never arbitrary external effects.
 - `Control.Monad.Effect.Fresh` — hand out distinct `Nat`s: `fresh`/`runFresh`.
 - `Control.Monad.Effect.Trace` — diagnostics in the row, so `Eff [Trace] α`
   announces that a computation logs and a row without `Trace` provably does
@@ -2418,6 +2424,7 @@ the secrets, never their values.
 | `Linen.Control.Monad.Effect.Handler` | canonical handlers: `Handler eff m`, row-derived `Handlers effs m`, `Eff.handle`; `Handler _ IO` for `Trace`/`Error`/`HTTP`/`FileSystem` |
 | `Linen.Control.Monad.Effect.Reader` | reader effect over `Eff`: `ask`/`asks`/`runReader`/`withReader` |
 | `Linen.Control.Monad.Effect.State` | state effect over `Eff`: `get`/`put`/`modify`/`gets`/`runState`/`evalState`/`execState` |
+| `Linen.Control.Monad.Effect.Producer` | pure sequential scripts: `yield`/`yieldAll`/`wait`, JSON-cursor `run` steps, and repeating `every` sources with caller-owned scheduling |
 | `Linen.Control.Monad.Effect.FileSystem` | capability-restricted filesystem effect: `Capability`, `CanRead`/`CanWrite`/`CanDelete` proof obligations, `readFile`/`writeFile`/`deleteFile`, `runFileSystem` |
 | `Linen.Control.Monad.Effect.HTTP` | capability-restricted HTTP client effect: `Capability` of method bits + URL `scopes`, `CanGet`/`CanPost`/… proof obligations, `u!` URL literals, `get`/`post`/`put`/`patch`/`delete`, `runHTTP`/`runHTTPWith` |
 | `Linen.Control.Monad.Effect.PostgreSQL` | capability-restricted PostgreSQL effect: capability-pinned database/user, `CanSelect`/`CanInsert`/`CanUpdate`/`CanDelete` proof obligations, table scope, parameterised `Query` AST, `runPostgreSQL`/`dryRun` |
