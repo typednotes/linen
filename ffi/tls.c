@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <arpa/inet.h>
 
 /* ────────────────────────────────────────────────────────────
  * External classes for SSL_CTX and SSL
@@ -307,9 +308,20 @@ static lean_obj_res linen_tls_new_session(b_lean_obj_arg ctx_obj, b_lean_obj_arg
         return lean_io_result_mk_error(mk_io_error("SSL_set_fd failed"));
     }
     if (hostname) {
-        /* SNI for virtual hosting, and the name the certificate must match. */
-        SSL_set_tlsext_host_name(ssl, hostname);
-        SSL_set1_host(ssl, hostname);
+        /* Configure DNS/IP certificate identity without SSL_set1_host, which
+         * is deprecated in OpenSSL 4. These verification-parameter APIs also
+         * work on OpenSSL 1.1/3 and LibreSSL. IP literals must match an IP SAN,
+         * not a DNS SAN; send SNI only for DNS names. Fail closed on setup errors. */
+        unsigned char address[sizeof(struct in6_addr)];
+        int is_ip = inet_pton(AF_INET, hostname, address) == 1 ||
+                    inet_pton(AF_INET6, hostname, address) == 1;
+        X509_VERIFY_PARAM *param = SSL_get0_param(ssl);
+        if (!param || !(is_ip ? X509_VERIFY_PARAM_set1_ip_asc(param, hostname)
+                             : X509_VERIFY_PARAM_set1_host(param, hostname, 0)) ||
+            (!is_ip && SSL_set_tlsext_host_name(ssl, hostname) != 1)) {
+            SSL_free(ssl);
+            return lean_io_result_mk_error(mk_io_error("TLS peer identity configuration failed"));
+        }
         SSL_set_connect_state(ssl);
     } else {
         SSL_set_accept_state(ssl);

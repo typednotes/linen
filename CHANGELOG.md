@@ -7,6 +7,16 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-10-04
+
+### Fixed
+
+- TLS client peer verification uses the non-deprecated verification-parameter
+  APIs on OpenSSL 1.1/3/4 and LibreSSL. DNS names use DNS identity/SNI; IPv4 and
+  IPv6 literals require matching IP subject-alt names. Configuration failures
+  refuse the handshake. Real TLS tests cover DNS and IPv4/IPv6 SAN success plus
+  mismatched DNS/IP refusal. Removes OpenSSL 4's `SSL_set1_host` build warning.
+
 ## [1.11.0] - 2026-10-03
 
 ### Added

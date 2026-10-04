@@ -77,6 +77,64 @@ namespace Tests.Network.TLS.Context
   unless alpn == none do
     throw (IO.userError s!"expected no ALPN protocol negotiated, got {alpn}")
 
+/-! ### Peer identities fail closed, including IP literals without an IP SAN -/
+
+#eval Tests.Network.TLS.TestSupport.withTestCert fun certPath keyPath => do
+  let serverCtx ← createContext certPath keyPath
+  let clientCtx ← createClientContextWithCA certPath
+  for hostname in ["wrong.example.invalid", "127.0.0.1", "::1"] do
+    let listener ← listenTCP "127.0.0.1" 0
+    let addr ← getSockName listener
+    let serverTask ← IO.asTask (prio := .dedicated) do
+      let (conn, _) ← Blocking.accept listener
+      try
+        let session ← acceptSocket serverCtx conn.raw
+        close session
+      catch _ => pure ()
+      finally
+        let _ ← Network.Socket.close conn
+    let conn ← Blocking.connect (← socket .inet .stream) {host := "127.0.0.1", port := addr.port}
+    let accepted ← try
+      let session ← connectSocket clientCtx conn.raw hostname
+      close session
+      pure true
+    catch _ => pure false
+    let _ ← Network.Socket.close conn
+    let _ ← IO.ofExcept (← IO.wait serverTask)
+    let _ ← Network.Socket.close listener
+    if accepted then throw (IO.userError s!"TLS accepted an unmatched peer identity: {hostname}")
+
+/-! ### IP subject-alt names are accepted, independently of the TCP address -/
+
+#eval Tests.Network.TLS.TestSupport.withTestCert fun certPath keyPath => do
+  let made ← IO.Process.output {cmd := "openssl", args := #["req", "-x509", "-newkey", "rsa:2048",
+    "-noenc", "-keyout", keyPath, "-out", certPath, "-subj", "/CN=TLS-fixture", "-days", "1",
+    "-addext", "subjectAltName=IP:127.0.0.1,IP:::1"]}
+  unless made.exitCode == 0 do throw (IO.userError s!"TLS test certificate creation failed: {made.stderr}")
+  let serverCtx ← createContext certPath keyPath
+  let clientCtx ← createClientContextWithCA certPath
+  for hostname in ["127.0.0.1", "::1"] do
+    let listener ← listenTCP "127.0.0.1" 0
+    let addr ← getSockName listener
+    let serverTask ← IO.asTask (prio := .dedicated) do
+      let (conn, _) ← Blocking.accept listener
+      try
+        let session ← acceptSocket serverCtx conn.raw
+        write session "verified IP".toUTF8
+        close session
+      finally
+        let _ ← Network.Socket.close conn
+    let conn ← Blocking.connect (← socket .inet .stream) {host := "127.0.0.1", port := addr.port}
+    try
+      let session ← connectSocket clientCtx conn.raw hostname
+      let reply ← read session 4096
+      close session
+      unless reply == "verified IP".toUTF8 do throw (IO.userError "IP SAN handshake failed")
+    finally
+      let _ ← Network.Socket.close conn
+      let _ ← IO.ofExcept (← IO.wait serverTask)
+      let _ ← Network.Socket.close listener
+
 /- The fallback CA bundle is either none (`""`) or one of the four known
    locations — and then a file this process can actually read, since that is
    the test the C side applies before loading it. Which one depends on the
