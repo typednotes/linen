@@ -1,6 +1,6 @@
 # AGENTS.md — linen
 
-<!-- agents-md standard v3 — github.com/ngrislain/agents. Refresh with the agents-md skill. -->
+<!-- agents-md standard v4 — github.com/ngrislain/agents. Refresh with the agents-md skill. -->
 
 Instructions for coding agents (Claude Code, Codex, pi, opencode, …) and for humans working on
 this project. `CLAUDE.md` imports this file; edit this one.
@@ -12,10 +12,10 @@ this project. `CLAUDE.md` imports this file; edit this one.
 | Task | Command |
 | --- | --- |
 | Install | Lean via elan (toolchain pinned in `lean-toolchain`, `leanprover/lean4:v4.34.0`); native libs — Linux: `sudo apt-get install $(sed 's/#.*//' ci/native-deps/apt.txt \| xargs)`, macOS: `brew install libpq openssl pkg-config` plus the `PKG_CONFIG_PATH` from `.github/actions/setup-native-deps/action.yml`; Lake fetches Lean deps on `lake build` |
-| Type-check | `lake build` |
-| Test | `lake test` (builds `LinenTest`, running every `#guard`); integration: `lake exe gitfn-integration`, `lake exe gitfn-remote` (needs network + deploy key); `./ci/check-sealed-duckdb.sh` (Linux) |
+| Type-check | `lake build --wfail` (warnings fail the build, as in CI) |
+| Test | `lake test --wfail` (builds `LinenTest`, running every `#guard`); integration: `lake exe gitfn-integration`, `lake exe gitfn-remote` (needs network + deploy key); `./ci/check-sealed-duckdb.sh` (Linux) |
 | Lint / format | `TODO(agents-md): no linter or formatter is configured (no lintDriver in lakefile.lean, none in CI)` |
-| Build / release | `lake build`; release: `ci/check-release.sh vX.Y.Z`, then tag (see "Releasing" below; `.github/workflows/release.yml` publishes) |
+| Build / release | `lake build --wfail`; release: `ci/check-release.sh vX.Y.Z`, then tag (see "Releasing" below; `.github/workflows/release.yml` publishes) |
 | Examples | `lake exe examples` (lists them), `lake exe examples <name> [args...]` |
 
 Before declaring a change done, run type-check, tests and lint, and report their real output.
@@ -41,7 +41,11 @@ Before declaring a change done, run type-check, tests and lint, and report their
 
 **Confirm explicitly every time**, even if a similar action was approved earlier — approval does
 not carry over to a new context:
-- `git push` of any kind; never force-push, and never push to `main`/`master` directly;
+- `git push` only when explicitly requested by the user for that operation. Direct pushes to
+  `main`/`master` are permitted only when explicitly specified. A request specifying the push
+  scope (repositories, remote, branches and any tags), including an explicit command or batch,
+  counts as confirmation; do not ask again for the same operation. Approval does not extend to
+  later pushes. Never force-push or rewrite pushed history;
 - opening, merging or closing a PR/MR, posting review comments, tagging, releasing, publishing a
   package or image;
 - deploying to any environment (dev, staging, prod);
@@ -151,16 +155,16 @@ experiments are logged too.
 ### Types: use the strongest standard checking the language offers, maximally
 
 - Use the standard type-checker of the language/framework in its strictest practical mode, run it in
-  CI, and keep it at zero errors. Examples: Python `mypy --strict` or `pyright` strict, with
-  `py.typed`; TypeScript `"strict": true` plus `noUncheckedIndexedAccess` and
-  `exactOptionalPropertyTypes`; Rust `clippy -D warnings`; Go `go vet` + `staticcheck`; Haskell
-  `-Wall -Werror`; Kotlin/Swift/Scala with warnings as errors.
+  CI, and keep it at zero errors.
   **This project:** Lean 4 (`leanprover/lean4:v4.34.0`, pinned in `lean-toolchain`), checked by
-  the elaborator and kernel through `lake build` / `lake test`. Settings in use: Lake defaults
-  only — `lakefile.lean` sets no `leanOptions`/`moreLeanArgs` and no source file sets
-  `autoImplicit`, so `autoImplicit` is on (Lean's default), and warnings are not errors (CI's
-  `lean-action` runs without `--wfail`). `sorry` and `partial def` are forbidden by the project
-  rules below.
+  the elaborator and kernel; `lake build --wfail` locally and in CI (and `lake test --wfail`), so
+  every warning, `sorry` above all, fails the build; `autoImplicit` stays on (Lean's default) — it
+  automates implicit binders, which are still fully checked. `partial def` is forbidden by the
+  project rules below.
+- "Strict" means settings that make the checker reject more incorrect programs. Features that only
+  automate what the checker then verifies in full — type inference, Lean's `autoImplicit`
+  (auto-bound implicit arguments) — are not weaknesses; leave them on, and never spend a strictness
+  pass removing them.
 - Make illegal states unrepresentable: precise types, enums/sum types over strings and flags, new
   types for identifiers and units, immutable data by default. Avoid `Any`, casts and ignores; when
   one is unavoidable, scope it narrowly and justify it in a comment.
@@ -392,8 +396,8 @@ the rest. The order matters, because three things have to agree:
    against the lakefile and the CHANGELOG and prints the notes that would be
    published, so a mismatch is caught locally rather than in a workflow.
 4. When the user asks, commit and create the annotated local tag (confirm the tag, per
-   Permissions). Pushing `main` and `vx.y.z` together is the user's action; the publisher
-   waits for successful CI on that exact release commit.
+   Permissions). Push `main` and `vx.y.z` together only when explicitly requested; the
+   publisher waits for successful CI on that exact release commit.
 
 CI runs on pushes to `main` and pull requests targeting `main` (plus manual
 dispatch). The release workflow requires the **latest push-to-main CI run for

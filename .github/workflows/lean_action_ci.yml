@@ -55,9 +55,11 @@ jobs:
       # Installs libpq, OpenSSL and (on Linux) libsecret from the canonical list.
       - uses: ./.github/actions/setup-native-deps
       # `test: false`: the suite runs in the named step below instead.
+      # `--wfail`: every warning (`sorry` above all) fails the build.
       - uses: leanprover/lean-action@v1
         with:
           test: false
+          build-args: "--wfail"
       # `LinenTest` is not a default target, so `lean-action`'s `lake build` does
       # not reach it. Run it explicitly on every matrix leg: AGENTS.md
       # requires the full test suite to run on each platform axis whenever an
@@ -65,7 +67,7 @@ jobs:
       # check in the suite runs at elaboration time — so `lake test` (the
       # package's test driver, which builds `LinenTest`) *is* running the tests.
       - name: Build the test suite (runs every #guard check)
-        run: lake test
+        run: lake test --wfail
 
       - uses: ./.github/actions/check-http2
         timeout-minutes: 10
@@ -92,7 +94,9 @@ jobs:
       # take a few minutes.
       - name: GitFn integration test
         timeout-minutes: 15
-        run: lake exe gitfn-integration
+        run: |
+          lake build --wfail gitfn-integration
+          lake exe gitfn-integration
 
       # `System.GitFn` against a real, private GitHub repository:
       # `typednotes/test` at the commit pinned in `Integration/GitFnRemote.lean`,
@@ -117,6 +121,7 @@ jobs:
           curl -fsSL https://api.github.com/meta | jq -r '.ssh_keys[] | "github.com " + .' > "$HOME/.ssh/gitfn_known_hosts"
           git config --global url."git@github.com:typednotes/test".insteadOf https://github.com/typednotes/test
           git config --global core.sshCommand "ssh -i $HOME/.ssh/gitfn_test -o IdentitiesOnly=yes -o UserKnownHostsFile=$HOME/.ssh/gitfn_known_hosts -o StrictHostKeyChecking=yes"
+          lake build --wfail gitfn-remote
           lake exe gitfn-remote
       - name: GitFn remote test skipped
         if: matrix.os == 'ubuntu-24.04' && env.GITFN_DEPLOY_KEY == ''
@@ -279,14 +284,14 @@ jobs:
             pure ()
           SRC
           ../linen/ci/consumer/check-link-helpers.sh lakefile.lean
-          lake build Consumer
+          lake build --wfail Consumer
           # The regression tests: with the old `-L<libdir> -lpq` recipe this
           # executable link fails on Linux with an undefined `__libc_csu_init`
           # in Lean's vendored `Scrt1.o`; `pkgAbsoluteLibs` links it. And
           # before the glibc compat shims, the same link failed with
           # `undefined reference: __isoc23_strtoul` et al., referenced by
           # `libduckdb_sealed.so` under `--no-allow-shlib-undefined`.
-          lake build consumerApp
+          lake build --wfail consumerApp
           # The link is not the whole story: the sealed library also has to
           # *load and run* at executable scope, through the consumer's own
           # rpath rather than anything lake set up.
@@ -336,7 +341,7 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          out="$(lake build Linen.Database.DuckDB.FFI.OpenConnect 2>&1)" && rc=0 || rc=$?
+          out="$(lake build --wfail Linen.Database.DuckDB.FFI.OpenConnect 2>&1)" && rc=0 || rc=$?
           echo "$out" | tail -30
           if [ "$rc" -eq 0 ]; then
             echo "::error::the build succeeded on a host that cannot seal DuckDB" >&2
@@ -362,7 +367,7 @@ jobs:
         run: |
           set -uo pipefail
           out="$(LINEN_ALLOW_UNSEALED_DUCKDB=1 \
-            lake build Linen.Database.DuckDB.FFI.OpenConnect 2>&1)" && rc=0 || rc=$?
+            lake build --wfail Linen.Database.DuckDB.FFI.OpenConnect 2>&1)" && rc=0 || rc=$?
           echo "$out" | tail -20
           if [ "$rc" -eq 0 ]; then
             echo "::error::the opt-out produced a build on a host with no libduckdb" >&2
@@ -382,7 +387,7 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          out="$(lake build Linen.Database.DuckDB.FFI.OpenConnect 2>&1)" && rc=0 || rc=$?
+          out="$(lake build --wfail Linen.Database.DuckDB.FFI.OpenConnect 2>&1)" && rc=0 || rc=$?
           if [ "$rc" -eq 0 ]; then
             echo "::error::expected this host to refuse" >&2; exit 1
           fi
