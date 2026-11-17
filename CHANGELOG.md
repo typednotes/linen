@@ -7,6 +7,20 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.12.1] - 2026-11-17
+
+### Changed
+
+- CI now fails on any Lean warning: every build and test step runs with
+  `--wfail` (library, test suite, GitFn executables, consumer builds and the
+  unsealable host), so a `sorry`, unused variable or deprecation cannot land
+  unnoticed. The library and test suite already built warning-free on Lean
+  v4.34.0, so no code changed and consumers see no difference.
+- Contributor instructions (`AGENTS.md`) follow the shared agents-md standard
+  v4: project rules, permissions, documentation and release steps in one
+  place, and the type-checking rule names linen's actual setting
+  (`lake build --wfail`, `autoImplicit` left on).
+
 ## [1.12.0] - 2026-10-04
 
 ### Added
