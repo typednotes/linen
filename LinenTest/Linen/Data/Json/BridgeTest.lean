@@ -33,10 +33,12 @@ def sample : Value := .object [
 #guard Value.ofLeanJson (Lean.Json.num 12345) == .ok (.number 12345)
 #guard Value.ofLeanJson (Lean.Json.str "x") == .ok (.string "x")
 #guard Value.ofLeanJson (Lean.Json.num (9007199254740993 : Nat)) == .ok (.number 9007199254740992)
--- Duplicate keys: Lean core keeps the last one.
+-- The bridge keeps the last key regardless of Lean core's parser policy.
 #guard match (Value.object [("k", .number 1), ("k", .number 2)]).toLeanJson with
   | .ok j => j.getObjValAs? Nat "k" == .ok 2
   | .error _ => false
+#guard (Value.array #[.object [("k", .number 1), ("k", .number 2)]]).toLeanJson ==
+  .ok (.arr #[Lean.Json.mkObj [("k", Lean.toJson (2 : Nat))]])
 -- A non-finite number becomes `null`, as linen's encoder writes it.
 #guard (Value.number (0.0 / 0.0)).toLeanJson == .ok Lean.Json.null
 -- Non-integer numbers keep 6 significant digits (linen's encoder), as documented.
