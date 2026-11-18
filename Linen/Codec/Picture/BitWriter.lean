@@ -139,7 +139,6 @@ private def msbCore (idx : Nat) (v : UInt8) (rest : ByteArray) (pos : Nat) (n : 
       ((v >>> remaining.toUInt8).toUInt32 ||| acc, remaining, v &&& mask, rest, pos)
 termination_by 2 * n + if idx == 0 then 1 else 0
 decreasing_by
-  all_goals simp only [show (8 == 0) = false from rfl]
   all_goals (by_cases hidx : idx = 0 <;> simp_all <;> omega)
 
 def getNextBitsMSBFirst (n : Nat) : BoolReader UInt32 := do
