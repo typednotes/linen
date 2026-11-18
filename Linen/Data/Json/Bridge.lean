@@ -2,10 +2,9 @@
   `Data.Json.Bridge` — between linen's `Data.Json.Value` and Lean core's `Lean.Json`
 
   linen's `Data.Json` (an aeson port) and Lean core's `Lean.Json` are two
-  independent JSON libraries. Both read and write standard JSON text, which
-  is how this bridge converts: through each library's own total encoder and
-  parser. So it is exact wherever both models can represent the value — and
-  says so where they cannot:
+  independent JSON libraries. The bridge builds Lean core's values directly,
+  using JSON text for numbers and for the reverse conversion. It is exact
+  wherever both models can represent the value, with these exceptions:
 
   - **Numbers** are the one difference in what can be represented: linen's
     are IEEE doubles (`Float`), Lean core's exact decimals (`JsonNumber`).
@@ -25,10 +24,25 @@ import Linen.Data.Json
 
 namespace Data.Json
 
-/-- linen's JSON as Lean core's: exact, except that a non-finite number has no
-    JSON form. -/
-def Value.toLeanJson (v : Value) : Except String Lean.Json :=
-  Lean.Json.parse (Encode.encode v)
+/-- Convert to Lean core's JSON, using the linen encoder's number precision
+    and keeping the last occurrence of each object key. -/
+def Value.toLeanJson : Value → Except String Lean.Json
+  | .null => .ok .null
+  | .bool b => .ok (.bool b)
+  | .string s => .ok (.str s)
+  | .number n => Lean.Json.parse (Encode.renderNumber n)
+  | .array values => .arr <$> convertArray values.toList #[]
+  | .object fields => .obj <$> convertFields fields {}
+where
+  convertArray : List Value → Array Lean.Json → Except String (Array Lean.Json)
+    | [], acc => .ok acc
+    | v :: rest, acc => do
+      convertArray rest (acc.push (← v.toLeanJson))
+  convertFields : List (String × Value) → Std.TreeMap.Raw String Lean.Json compare →
+      Except String (Std.TreeMap.Raw String Lean.Json compare)
+    | [], acc => .ok acc
+    | (k, v) :: rest, acc => do
+      convertFields rest (acc.insert k (← v.toLeanJson))
 
 /-- Lean core's JSON as linen's: exact, except that a number a double cannot
     hold is rounded to the nearest one. -/
