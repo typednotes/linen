@@ -7,6 +7,15 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-11-24
+
+### Added
+
+- `Control.Monad.Effect.HTTP.OperationHTTP` adds typed operation allowlists
+  to HTTP method and URL capabilities. A trusted encoder constructs requests
+  from authorised operations, so an application can grant AWS Query reads
+  such as IAM `ListRoles` or STS `GetCallerIdentity` without granting raw POST.
+
 ## [1.13.0] - 2026-11-24
 
 ### Changed
