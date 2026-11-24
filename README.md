@@ -90,7 +90,9 @@ for the full per-module feature list and module table.
     `u!"https://api.example.com/v1"`, POST only to `/v1/events`". Hosts are
     compared as DNS labels and paths component-wise, so
     `api.example.com.evil.com`, a scheme downgrade, a changed port and
-    `/v1-admin` are all rejected.
+    `/v1-admin` are all rejected. For APIs that use the same `POST` endpoint
+    for reads and writes, [`OperationHTTP`](Linen/Control/Monad/Effect/HTTP/SPEC.md)
+    adds a typed operation allowlist without exposing raw requests.
   - `PostgreSQL` — the database, instance and role are capability fields the
     handler builds its connection from, so no computation can reach another;
     statement kinds and tables are separately grantable. Queries are a

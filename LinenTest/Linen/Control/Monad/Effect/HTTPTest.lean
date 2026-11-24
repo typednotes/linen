@@ -17,7 +17,7 @@
 import Linen.Control.Monad.Effect.HTTP
 
 open Data.OpenUnion Control.Monad.Effect Control.Monad.Effect.HTTP
-open Network.HTTP.Types (StdMethod status200)
+open Network.HTTP.Types (StdMethod status200 hContentType)
 open Network.HTTP.Client (Request Response)
 
 namespace Tests.Control.Monad.Effect.HTTP
@@ -243,6 +243,82 @@ example (segment : String) : Eff [HTTP api] (Option Response) :=
         path := u!"https://api.example.com/v1".path ++ [segment] } with
   | some su => some <$> getAt su
   | none    => pure none
+
+-- ── Typed application operations ──────────────────────────────────────────
+
+private inductive QueryOp where
+  | listRoles | createRole | getCallerIdentity | assumeRole
+
+private def QueryInput : QueryOp → Type
+  | .listRoles | .getCallerIdentity => Unit
+  | .createRole | .assumeRole => String
+
+private abbrev queryTransport : Capability :=
+  { canPost := true
+    scopes := [under u!"https://iam.amazonaws.com/" [.POST],
+               under u!"https://sts.amazonaws.com/" [.POST]] }
+
+private def queryReads : OperationPolicy queryTransport QueryOp QueryInput where
+  allows
+    | .listRoles | .getCallerIdentity => true
+    | .createRole | .assumeRole => false
+  encode
+    | .listRoles, _, () =>
+      .request .POST rfl u!"https://iam.amazonaws.com/" (by decide)
+        [(hContentType, "application/x-www-form-urlencoded")] []
+        (some "Action=ListRoles&Version=2010-05-08".toUTF8)
+    | .getCallerIdentity, _, () =>
+      .request .POST rfl u!"https://sts.amazonaws.com/" (by decide)
+        [(hContentType, "application/x-www-form-urlencoded")] []
+        (some "Action=GetCallerIdentity&Version=2011-06-15".toUTF8)
+    | .createRole, h, _ | .assumeRole, h, _ => nomatch h
+
+-- S2: reads elaborate, but a different operation on the same POST scope cannot
+-- produce the proof, even via the raw constructor.
+example : Eff [OperationHTTP queryReads] Response :=
+  callOperation queryReads .listRoles ()
+
+example : queryReads.allows .createRole ≠ true := by decide
+example : queryReads.allows .assumeRole ≠ true := by decide
+
+-- S1/S2: an operation-only effect row has neither unchecked transport
+-- authority nor a raw POST entry point, even for an in-scope endpoint.
+example : queryTransport.permits .POST u!"https://elsewhere.test/" ≠ true := by decide
+example : True := by
+  fail_if_success
+    have _ : Eff [OperationHTTP queryReads] Response :=
+      callOperation queryReads .createRole "test"
+  fail_if_success
+    have _ : Eff [OperationHTTP queryReads] Response :=
+      post u!"https://iam.amazonaws.com/" "Action=CreateRole".toUTF8
+  trivial
+
+-- S2: a runtime-selected operation needs evidence just like a literal one.
+private def callQueryRead? (op : QueryOp) (input : QueryInput op) :
+    Eff [OperationHTTP queryReads] (Option Response) :=
+  if h : queryReads.allows op = true then some <$> callOperation queryReads op input h
+  else pure none
+
+-- S3: the two allowed reads reach the scoped transport as POST, and the
+-- denied operations (including credential issuance) never reach it.
+#eval show IO Unit from do
+  let log ← IO.mkRef []
+  let outcomes ← runOperationHTTPWith queryReads (fun req => do
+    let body := (req.body.bind String.fromUTF8?).getD ""
+    log.modify (· ++ [s!"{req.method} {req.host}{req.path} {body}"])
+    pure { statusCode := status200, headers := [], body := ByteArray.empty }) do
+      let roles ← callQueryRead? .listRoles ()
+      let identity ← callQueryRead? .getCallerIdentity ()
+      let created ← callQueryRead? .createRole "test"
+      let assumed ← callQueryRead? .assumeRole "test"
+      pure [roles.isSome, identity.isSome, created.isSome, assumed.isSome]
+  unless outcomes == [true, true, false, false] do
+    throw (IO.userError s!"Unexpected operation results: {outcomes}")
+  let requests ← log.get
+  unless requests ==
+      ["POST iam.amazonaws.com/ Action=ListRoles&Version=2010-05-08",
+       "POST sts.amazonaws.com/ Action=GetCallerIdentity&Version=2011-06-15"] do
+    throw (IO.userError s!"Unexpected operation requests: {requests}")
 
 -- ── End to end: a round trip through a stub transport ───────────────────────
 

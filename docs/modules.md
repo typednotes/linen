@@ -310,7 +310,11 @@ the project overview and quick start.
   are passed separately and deliberately take no part in scoping, not being
   part of the path hierarchy. `runHTTP` dispatches through
   `Network.HTTP.Client`; `runHTTPWith` takes the transport as a parameter, so
-  the effect is testable without a network.
+  the effect is testable without a network. For protocols such as AWS Query,
+  where reads and writes share the same method and URL, use `OperationHTTP`
+  instead of raw `HTTP` in the effect row. A typed operation allowlist is
+  checked before the trusted encoder constructs the scoped request.
+  See the [HTTP capability contract](../Linen/Control/Monad/Effect/HTTP/SPEC.md).
 - `Control.Monad.Effect.PostgreSQL` — the idiom over a database, restricting in
   three parts of decreasing strength, `linen`-original. **Connection target:**
   `host`/`port`/`database`/`user` are capability fields and `runPostgreSQL`
@@ -2426,7 +2430,7 @@ the secrets, never their values.
 | `Linen.Control.Monad.Effect.State` | state effect over `Eff`: `get`/`put`/`modify`/`gets`/`runState`/`evalState`/`execState` |
 | `Linen.Control.Monad.Effect.Producer` | pure sequential scripts: `yield`/`yieldAll`/`wait`, JSON-cursor `run` steps, and repeating `every` sources with caller-owned scheduling |
 | `Linen.Control.Monad.Effect.FileSystem` | capability-restricted filesystem effect: `Capability`, `CanRead`/`CanWrite`/`CanDelete` proof obligations, `readFile`/`writeFile`/`deleteFile`, `runFileSystem` |
-| `Linen.Control.Monad.Effect.HTTP` | capability-restricted HTTP client effect: `Capability` of method bits + URL `scopes`, `CanGet`/`CanPost`/… proof obligations, `u!` URL literals, `get`/`post`/`put`/`patch`/`delete`, `runHTTP`/`runHTTPWith` |
+| `Linen.Control.Monad.Effect.HTTP` | capability-restricted HTTP client effect: method and URL permissions, `u!` URL literals, `runHTTP`/`runHTTPWith`, and `OperationHTTP` for typed operations that share a method and URL |
 | `Linen.Control.Monad.Effect.PostgreSQL` | capability-restricted PostgreSQL effect: capability-pinned database/user, `CanSelect`/`CanInsert`/`CanUpdate`/`CanDelete` proof obligations, table scope, parameterised `Query` AST, `runPostgreSQL`/`dryRun` |
 | `Linen.Control.Monad.Effect.Connector` | credential-free named operations on exact/recursive resource scopes; four-ceiling authority witnesses, request/response byte bounds, strict runtime decoding and proved semantic narrowing |
 | `Linen.Control.Concurrent.STM.TVar` | transactional variable over `IO.Ref`: `newTVarIO`/`readTVar`/`writeTVar`/`modifyTVar'` |
