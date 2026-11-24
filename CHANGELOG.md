@@ -16,6 +16,12 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
   from authorised operations, so an application can grant AWS Query reads
   such as IAM `ListRoles` or STS `GetCallerIdentity` without granting raw POST.
 
+### Changed
+
+- The manual release workflow can waive verified GitHub-hosted runner
+  allocation failures with a logged reason. Actual test failures on the
+  tagged `main` commit remain blocking.
+
 ## [1.13.0] - 2026-11-24
 
 ### Changed

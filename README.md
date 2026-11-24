@@ -51,10 +51,10 @@ Three rules hold across the whole library:
 After checking the new version and CHANGELOG with `ci/check-release.sh`, the user
 can push the release commit and tag together: `git push origin main vX.Y.Z`.
 The version-tag publisher polls for up to two hours for the latest successful
-push-to-main CI run on that exact commit. The full platform, consumer,
-unsealable-host and HTTP/2 checks remain required. Failed/cancelled CI, invalid
-evidence, API errors and timeout stop publication; PR/manual results cannot
-substitute. Version/notes checks still run after CI, and existing tags keep the
+push-to-main CI run on that exact commit. A manual retry can waive only a
+verified hosted runner allocation failures; actual failures still block publication.
+PR/manual CI results cannot substitute. Version/notes checks still run after
+CI, and existing tags keep the
 workflow stored in their own commits. See the
 [release workflow](https://github.com/typednotes/linen/blob/main/.github/workflows/release.yml).
 
@@ -467,18 +467,26 @@ For a release, update the version and CHANGELOG, run
 `ci/check-release.sh vX.Y.Z`, push `main`, and wait for CI on that exact
 commit before pushing its version tag. The
 [`release.yml`](https://github.com/typednotes/linen/blob/main/.github/workflows/release.yml)
-verification job has only `contents: read` and `actions: read` permissions.
+verification job has only read permissions (`contents`, `actions`, `checks`).
 [`ci/require-main-ci.sh`](https://github.com/typednotes/linen/blob/main/ci/require-main-ci.sh)
 checks that the actual checkout matches the tag's commit, that the commit is
 reachable from `origin/main`, and that its latest **push-to-main** run of
 `lean_action_ci.yml` is completed/success. Missing, pending or failed latest
-runs block publication; PR/manual CI and another commit's result do not qualify.
+runs block automatic publication; PR/manual CI and another commit's result do
+not qualify.
 
 The release attests that full main CI workflow rather than repeating a test
 matrix on tags. It still checks the tagged version and CHANGELOG notes, then
 the publisher checks out the verified SHA and uses `contents: write` to create
 or update the GitHub release. A manual release retry must name an existing
-version tag and passes the same gate. Prerelease tags create prereleases;
+version tag. To waive a verified runner shortage, choose **Actions → Release →
+Run workflow** on `main`, enter the existing tag and `runner_capacity_reason`
+(nonblank, one line, at most 300 characters). The gate accepts this only if at
+least one expected job passed and each remaining job either passed or was
+cancelled before running, with a GitHub annotation confirming that no hosted
+runner could be assigned. The workflow logs the waived jobs and reason.
+This does not change PR checks or apply to tags whose checkout predates the
+exception. Prerelease tags create prereleases;
 the source tag is the artifact, with no platform-specific build binaries attached.
 
 ## Examples

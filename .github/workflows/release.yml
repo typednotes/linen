@@ -19,6 +19,10 @@ on:
         description: 'Version tag to release (e.g. v0.17.0)'
         required: true
         type: string
+      runner_capacity_reason:
+        description: 'Optional justification to waive verified hosted runner allocation failures'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -41,6 +45,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      checks: read
     outputs:
       tag: ${{ steps.check.outputs.tag }}
       version: ${{ steps.check.outputs.version }}
@@ -58,6 +63,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag || github.ref_name }}
+          RUNNER_CAPACITY_REASON: ${{ github.event_name == 'workflow_dispatch' && inputs.runner_capacity_reason || '' }}
         run: bash ci/require-main-ci.sh lean_action_ci.yml "$TAG"
 
       - name: Check the tag against lakefile.lean and CHANGELOG.md
