@@ -7,6 +7,22 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-11-24
+
+### Changed
+
+- **Lean 4.36.0.** `lean-toolchain` moves from `v4.34.0`, and the README badge
+  with it; consumers should move their toolchain too. The only breakage was a
+  termination proof in `Codec.Picture.BitWriter`, whose now-redundant step was
+  dropped.
+
+### Fixed
+
+- `Data.Json.Bridge`: `Value.toLeanJson` builds Lean core's values directly
+  instead of re-parsing encoded text, so an object with duplicate keys keeps
+  the **last** occurrence regardless of Lean core's parser policy, at every
+  nesting depth.
+
 ## [1.12.1] - 2026-11-17
 
 ### Changed
