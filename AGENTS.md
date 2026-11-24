@@ -411,9 +411,12 @@ suffix (`v0.17.0-rc1`) publishes as a prerelease, so it does not become
 
 Missing/pending main CI is polled for up to two hours. Failed/cancelled CI,
 invalid evidence, API errors, timeout, PR/manual results and results for another
-commit block publication. A manual release retry requires an existing
+commit block automatic publication. A manual release retry requires an existing
 version tag and attests its checked-out commit again; `GITHUB_SHA` from the
-dispatch's default branch is not release evidence.
+dispatch's default branch is not release evidence. The only manual exception is
+a reasoned waiver for verified hosted runner allocation failures. At least one
+matrix job must pass, and no test or build failure can be waived.
+See [CI and releases](README.md#ci-and-releases-1).
 
 Two things worth knowing:
 

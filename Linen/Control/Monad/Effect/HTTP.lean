@@ -29,6 +29,8 @@
 
   So `delete` under a read-only web capability fails to elaborate, and so does
   `get u!"https://evil.com/"` under a capability scoped to `api.example.com`.
+  For protocols that multiplex reads and writes on the same method and URL
+  (such as AWS Query), use `OperationHTTP` instead of exposing raw `HTTP`.
 
   ## Why `Url` is structured, not a string
 
@@ -477,6 +479,10 @@ def toClientRequest (m : StdMethod) (u : Url) (headers : RequestHeaders)
   , isSecure := u.secure }
 
 open Network.HTTP.Client in
+private def renderRequest {cap : Capability} : HTTP cap Response → Request
+  | .request m _ url _ headers query body => toClientRequest m url headers query body
+
+open Network.HTTP.Client in
 /-- Run an HTTP computation against a supplied transport.
 
     Performs no permission or scope check: every request already carries both
@@ -491,7 +497,7 @@ open Network.HTTP.Client in
 def runHTTPWith (cap : Capability) {α : Type} (send : Request → IO Response) :
     Eff [HTTP cap] α → IO α :=
   interpretM fun
-    | .request m _ url _ headers query body => send (toClientRequest m url headers query body)
+    | r@(.request ..) => send (renderRequest r)
 
 open Network.HTTP.Client in
 /-- The default transport: connect, perform one request, close.
@@ -513,13 +519,61 @@ def runHTTP (cap : Capability) {α : Type} : Eff [HTTP cap] α → IO α :=
     `sendOnce` — so an `HTTP` effect can sit in any row run by `Eff.handle`. -/
 instance instHandlerHTTPIO {cap : Capability} : Handler (HTTP cap) IO where
   handle
-    | .request m _ url _ headers query body => sendOnce (toClientRequest m url headers query body)
+    | r@(.request ..) => sendOnce (renderRequest r)
 
 /-- On its own row, `Eff.handle` into `IO` is `runHTTP`. -/
 theorem handle_eq_runHTTP (cap : Capability) {α : Type} (m : Eff [HTTP cap] α) :
     Eff.handle m = runHTTP cap m := by
   rw [Eff.handle_singleton]
   rfl
+
+-- ── Typed application operations ────────────────────────────────────────────
+
+open Network.HTTP.Client in
+/-- An allowlist over application operations, with an input type for each
+    operation and a trusted encoder into method- and URL-scoped HTTP.
+
+    The encoder must derive the wire action from the operation, not from
+    caller-controlled fields. It owns the body, query, and headers; Linen does
+    not infer whether the resulting request is read-only. -/
+structure OperationPolicy (cap : Capability) (Op : Type) (Input : Op → Type) where
+  /-- Whether the application operation is granted. Prefer an explicit allowlist. -/
+  allows : Op → Bool
+  /-- Encode a granted operation and its typed input into an authorised HTTP request. -/
+  encode : (op : Op) → allows op = true → Input op → HTTP cap Response
+
+open Network.HTTP.Client in
+/-- HTTP access through one fixed application policy, with no raw request
+    constructor. To enforce the policy, do not also expose raw HTTP or another
+    unrestricted transport in the same computation. -/
+inductive OperationHTTP {cap : Capability} {Op : Type} {Input : Op → Type}
+    (policy : OperationPolicy cap Op Input) : Type → Type where
+  /-- Run a named operation only with evidence that the policy grants it. -/
+  | call (op : Op) (allowed : policy.allows op = true) (input : Input op) :
+      OperationHTTP policy Response
+
+open Network.HTTP.Client in
+/-- Call a typed operation. For a runtime-selected operation, test
+    `policy.allows op` and pass the proof from the successful branch. -/
+def callOperation {cap : Capability} {Op : Type} {Input : Op → Type}
+    {effs : List (Type → Type)} (policy : OperationPolicy cap Op Input)
+    [Member (OperationHTTP policy) effs] (op : Op) (input : Input op)
+    (allowed : policy.allows op = true := by decide) : Eff effs Response :=
+  Control.Monad.Effect.send (OperationHTTP.call (policy := policy) op allowed input)
+
+open Network.HTTP.Client in
+/-- Interpret typed operations through the policy's encoder and a trusted
+    transport. Use this seam for signing, connection pooling, or offline tests. -/
+def runOperationHTTPWith {cap : Capability} {Op : Type} {Input : Op → Type} {α : Type}
+    (policy : OperationPolicy cap Op Input) (send : Request → IO Response) :
+    Eff [OperationHTTP policy] α → IO α :=
+  interpretM fun
+    | .call op allowed input => send (renderRequest (policy.encode op allowed input))
+
+/-- Interpret typed operations through the ordinary one-request HTTP transport. -/
+def runOperationHTTP {cap : Capability} {Op : Type} {Input : Op → Type} {α : Type}
+    (policy : OperationPolicy cap Op Input) : Eff [OperationHTTP policy] α → IO α :=
+  runOperationHTTPWith policy sendOnce
 
 -- ── Common capabilities ─────────────────────────────────────────────────────
 
