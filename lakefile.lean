@@ -750,7 +750,8 @@ target duckdbNative pkg : Dynlib := do
     else #["-Wl,-soname," ++ out.toString]
     let linker ← getLeanCc
     buildSharedLib name out #[obj.zipWith (fun path _ => path) libJob] #[]
-      (traceArgs := identity ++ #[lib.toString, "-Wl,-rpath," ++ config.libDir.toString])
+      (traceArgs := identity ++ (← macSdkLibArgs) ++
+        #[lib.toString, "-Wl,-rpath," ++ config.libDir.toString])
       (linker := linker.toString)
 
 /-- Bundle the FFI object(s) into a static lib that Lake links automatically. -/
