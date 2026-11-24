@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 208" role="img" aria-labelledby="title desc">
+  <title id="title">Native build paths for focused linen imports</title>
+  <desc id="desc">A focused pure import can build without any optional shim. A DuckDB import schedules the shim, which discovers the pinned archive, and then the consumer links it. The Linen umbrella includes both paths.</desc>
+  <rect width="720" height="208" rx="12" fill="#f6f8fa"/>
+  <g font-family="system-ui,sans-serif" fill="#24292f" font-size="16">
+    <text x="24" y="34" font-weight="700">Import determines which native targets Lake builds</text>
+    <g fill="#e2e8ef">
+      <rect x="24" y="55" width="196" height="42" rx="6"/>
+      <rect x="280" y="55" width="180" height="42" rx="6"/>
+      <rect x="524" y="55" width="172" height="42" rx="6"/>
+    </g>
+    <g fill="#b6d6fb">
+      <rect x="24" y="115" width="196" height="42" rx="6"/>
+      <rect x="280" y="115" width="180" height="42" rx="6"/>
+      <rect x="524" y="115" width="172" height="42" rx="6"/>
+    </g>
+    <g text-anchor="middle">
+      <text x="122" y="82">Focused pure import</text><text x="370" y="82">No optional shim</text><text x="610" y="82">No DuckDB archive</text>
+      <text x="122" y="142">DuckDB import</text><text x="370" y="142">DuckDB native target</text><text x="610" y="142">Archive if not cached</text>
+    </g>
+    <path d="M 230 76 H 268 L 260 70 M 268 76 L 260 82 M 470 76 H 512 L 504 70 M 512 76 L 504 82 M 230 136 H 268 L 260 130 M 268 136 L 260 142 M 470 136 H 512 L 504 130 M 512 136 L 504 142"
+          fill="none" stroke="#576575" stroke-width="2"/>
+    <text x="24" y="184" font-size="14">The umbrella import, import Linen, includes the DuckDB path.</text>
+  </g>
+</svg>

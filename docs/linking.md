@@ -144,6 +144,14 @@ linking "breaks cross-library C++ exceptions".
 
 ## 4. How `linen` links DuckDB
 
+DuckDB, PostgreSQL, zlib and Keychain each have a native Lake target attached
+to the library owning their FFI modules. Lake propagates these link inputs
+through imports to downstream executables. Platform discovery stays in those
+targets rather than in the consumer's `moreLinkArgs`. The other shims still use
+the package's static `linenffi` archive. Executables that use a shared shim
+refer to the artifact in linen's build directory; do not delete that
+directory while using the executable.
+
 - **macOS**: `libduckdb.dylib` from `libduckdb-osx-universal.zip`, linked
   dynamically with an `-rpath` to the unpack directory. §3 does not apply.
 - **Linux**: DuckDB is linked statically into one sealed shared library.
@@ -163,16 +171,12 @@ unpacked DuckDB archive, a static `libstdc++.a`, and static
   cannot be resolved from the global scope, and intra-library references bind
   at link time.
 
-**Where it is written, and where the `-L` looks, must be derived the same
-way.** The target writes to `pkg.buildDir / "ffi"` — always this package's own
-directory — while the flags are computed during lakefile elaboration, where
-`IO.currentDir` is the *workspace* root and so is the consumer's directory
-whenever `linen` is a dependency. The `-L` is therefore derived from the
-lakefile's own path (`getFileName`), not from the working directory. Deriving
-it from the working directory is what shipped in 0.17.0–0.19.0 and made every
-Linux consumer fail to link, while every standalone build — including this
-project's CI, where the two paths are the same directory — passed. A change
-here is only really tested by building a consumer.
+The target writes to `pkg.buildDir / "ffi"` and returns that artifact to Lake
+as a `Dynlib`. Lake uses the resulting link input in a consumer that imports
+DuckDB, and the sealed library's absolute ELF `SONAME` lets the runtime
+loader find it without consumer flags. This keeps build and link paths tied
+to the same package artifact, avoiding the old bug where flags resolved
+relative to the consumer but Lake wrote the library in the dependency.
 
 `--exclude-libs` names the archives explicitly rather than using `ALL`.
 `--exclude-libs` applies only to archive members, so `duckdb.o`'s entry points
@@ -258,11 +262,22 @@ is therefore not a link error; it appears at load time as
 
 ### 4.4 Pinning and updates
 
-`linen` does not use a system DuckDB, before or after sealing. The version is
-pinned by `duckdbVersion` in `lakefile.lean`, the archive is downloaded into
-`.lake/duckdb` (not committed), and the library is found through that path. A
-system DuckDB upgrade is not picked up in either linkage. Updating means
-changing `duckdbVersion` and rebuilding.
+By default `linen` uses the version pinned by `duckdbVersion` in `lakefile.lean`.
+The download is a target of `LinenDuckDB`, not a side effect of loading the
+lakefile. Lake resolves `Linen.Database.DuckDB.*` to that library and follows
+its native target for consumers; there are no package-wide DuckDB flags.
+![Focused pure imports skip optional native targets; DuckDB imports reach the pinned archive through their own native target](figures/native-imports.svg)
+
+The archive is cached in linen's own `.lake/duckdb`, even as a dependency.
+Builds with no DuckDB imports don't create that cache or link DuckDB.
+`import Linen` intentionally includes the DuckDB modules.
+
+On Linux the native target returns the audited sealed library. On macOS and
+in the explicit unsealed Linux configuration it returns a separate shim with
+its own rpath to DuckDB. Linked consumers refer to the shim or sealed library
+in the dependency's build directory; no DuckDB flags in the consumer's
+lakefile are needed. The consumer matrix tests both a cold non-DuckDB build
+with `curl` blocked and an executable and `#eval` that actually call DuckDB.
 
 What sealing changes:
 
@@ -660,5 +675,5 @@ than re-litigated from estimates.
   [Rust client](https://duckdb.org/docs/current/clients/rust/overview),
   release assets for `v1.5.4`
 - `linen`: `lakefile.lean` (`duckdbArchiveName`, `duckdbSealedArchives`,
-  `duckdbSealedLib`, `duckdbLinkArgs`), `ci/check-sealed-duckdb.sh`,
+  `duckdbSealedLib`, `duckdbNative`), `ci/check-sealed-duckdb.sh`,
   `docs/imports/sqlite-simple/dependencies.md`

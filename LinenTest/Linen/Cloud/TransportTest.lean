@@ -108,6 +108,18 @@ def broken : Transport :=
 
 -- ── Success ─────────────────────────────────────────────────────────────────
 
+private def responseWith (body : ByteArray) : Response :=
+  { statusCode := status200, headers := [], body }
+
+#guard (bodyJson (responseWith " \t\n ".toUTF8)).toOption == some .null
+#guard (bodyJson (responseWith " true ".toUTF8)).toOption == some (.bool true)
+#guard match bodyJson (responseWith "{".toUTF8) with
+  | .error e => e.klass == .protocol
+  | .ok _ => false
+#guard match bodyJson (responseWith ⟨#[0xff]⟩) with
+  | .error e => e.klass == .protocol
+  | .ok _ => false
+
 /-- info: (true, "<ListBucketResult/>") -/
 #guard_msgs in
 #eval show IO (Bool × String) from do

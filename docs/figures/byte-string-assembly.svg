@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 168" role="img" aria-labelledby="title desc">
+  <title id="title">Strict byte-string assembly</title>
+  <desc id="desc">Two strict slices select bytes 1, 2 and 3 from two backing arrays. Concatenation copies only the selected bytes to one destination, growing its capacity when needed.</desc>
+  <rect width="660" height="168" rx="12" fill="#f6f8fa"/>
+  <g font-family="system-ui,sans-serif" fill="#24292f" font-size="16">
+    <text x="28" y="32" font-weight="700">Backing arrays and selected slices</text>
+    <text x="434" y="32" font-weight="700">Destination buffer</text>
+    <g fill="#e2e8ef">
+      <rect x="28" y="53" width="172" height="32" rx="5"/>
+      <rect x="28" y="105" width="129" height="32" rx="5"/>
+    </g>
+    <g fill="#b6d6fb">
+      <rect x="70" y="53" width="86" height="32"/>
+      <rect x="70" y="105" width="43" height="32"/>
+      <rect x="434" y="79" width="129" height="32" rx="5"/>
+    </g>
+    <g font-family="ui-monospace,monospace" text-anchor="middle">
+      <text x="49" y="75">9</text><text x="91" y="75">1</text><text x="134" y="75">2</text><text x="177" y="75">9</text>
+      <text x="49" y="127">9</text><text x="91" y="127">3</text><text x="134" y="127">9</text>
+      <text x="455" y="101">1</text><text x="498" y="101">2</text><text x="541" y="101">3</text>
+    </g>
+    <path d="M 218,68 H 285 L 322,95 H 410 M 170,121 H 285 L 322,95 M 401,89 L 410,95 L 401,101" fill="none" stroke="#576575" stroke-width="2"/>
+    <text x="434" y="139" font-size="14">Append at destination size</text>
+  </g>
+</svg>

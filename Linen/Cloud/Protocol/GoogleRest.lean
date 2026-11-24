@@ -52,7 +52,6 @@
 import Linen.Cloud.Transport
 import Linen.Cloud.Page
 import Linen.Data.Json.Encode
-import Linen.Data.Json.Decode
 
 namespace Cloud.Protocol.GoogleRest
 
@@ -101,18 +100,8 @@ def callBytes (token host method path : String) (query : Query := [])
 /-- Issue a call and parse the reply as JSON.
 
     An empty body becomes `.null`: `DELETE` answers `200` with nothing. -/
-def send (t : Transport) (c : Call) : IO (Except Error Value) := do
-  match ← performNow t c with
-  | .error e => return .error e
-  | .ok resp =>
-    match bodyText resp with
-    | .error e => return .error e
-    | .ok text =>
-      let trimmed := text.trimAscii.toString
-      if trimmed.isEmpty then return .ok .null
-      match Data.Json.Decode.decode trimmed with
-      | .ok v    => return .ok v
-      | .error m => return .error (Error.protocol s!"malformed JSON response: {m}")
+def send (t : Transport) (c : Call) : IO (Except Error Value) :=
+  (·.bind bodyJson) <$> performNow t c
 
 /-- Issue a call and return the response body as bytes — a media download. -/
 def sendBytes (t : Transport) (c : Call) : IO (Except Error ByteArray) := do

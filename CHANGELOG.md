@@ -7,6 +7,24 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-24
+
+### Changed
+
+- Lake now links linen's PostgreSQL, zlib, Keychain and DuckDB shims through
+  the imports that use them. Remove any linen-only linker flags or copied
+  link-helper blocks from 1.x consumer lakefiles. Public Lean imports and
+  APIs are unchanged; system development libraries are still required.
+- Byte-string concatenation and separator joining now copy slices into one
+  growing buffer, avoiding repeated prefix copies when flattening lazy
+  strings or builders. Cloud JSON protocols share the same success decoder.
+
+### Fixed
+
+- Loading linen or building a consumer with no DuckDB imports no longer
+  downloads or links DuckDB. DuckDB imports build the native dependency on
+  demand and no longer require manual DuckDB flags in consumer lakefiles.
+
 ## [1.14.0] - 2026-11-24
 
 ### Added

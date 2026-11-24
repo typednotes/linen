@@ -43,6 +43,11 @@ namespace Tests.Data.ByteString
 #guard ((ByteString.pack [1, 2]) ++ (ByteString.pack [3, 4])).unpack == [1, 2, 3, 4]
 #guard (ByteString.concat [ByteString.pack [1], ByteString.pack [2, 3], ByteString.pack [4]]).unpack == [1, 2, 3, 4]
 #guard (ByteString.intercalate (ByteString.pack [0]) [ByteString.pack [1], ByteString.pack [2], ByteString.pack [3]]).unpack == [1, 0, 2, 0, 3]
+#guard (ByteString.concat [
+  (ByteString.pack [9, 1, 2, 9]).drop 1 |>.take 2,
+  ByteString.empty, (ByteString.pack [9, 3, 9]).drop 1 |>.take 1]).unpack == [1, 2, 3]
+#guard (ByteString.intercalate (ByteString.pack [0])
+  [ByteString.empty, ByteString.pack [1], ByteString.empty]).unpack == [0, 1, 0]
 
 /-! ### transform -/
 

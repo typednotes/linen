@@ -58,7 +58,7 @@ def toChunks : LazyByteString → List ByteString
 def fromStrict (bs : ByteString) : LazyByteString :=
   chunk' bs (Thunk.mk fun () => .nil)
 
-/-- Force all chunks into one strict byte string. O(n). -/
+/-- Force all chunks and concatenate them into one strict byte string. -/
 def toStrict (lbs : LazyByteString) : ByteString :=
   ByteString.concat lbs.toChunks
 
