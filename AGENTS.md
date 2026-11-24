@@ -11,7 +11,7 @@ this project. `CLAUDE.md` imports this file; edit this one.
 
 | Task | Command |
 | --- | --- |
-| Install | Lean via elan (toolchain pinned in `lean-toolchain`, `leanprover/lean4:v4.34.0`); native libs — Linux: `sudo apt-get install $(sed 's/#.*//' ci/native-deps/apt.txt \| xargs)`, macOS: `brew install libpq openssl pkg-config` plus the `PKG_CONFIG_PATH` from `.github/actions/setup-native-deps/action.yml`; Lake fetches Lean deps on `lake build` |
+| Install | Lean via elan (toolchain pinned in `lean-toolchain`, `leanprover/lean4:v4.36.0`); native libs — Linux: `sudo apt-get install $(sed 's/#.*//' ci/native-deps/apt.txt \| xargs)`, macOS: `brew install libpq openssl pkg-config` plus the `PKG_CONFIG_PATH` from `.github/actions/setup-native-deps/action.yml`; Lake fetches Lean deps on `lake build` |
 | Type-check | `lake build --wfail` (warnings fail the build, as in CI) |
 | Test | `lake test --wfail` (builds `LinenTest`, running every `#guard`); integration: `lake exe gitfn-integration`, `lake exe gitfn-remote` (needs network + deploy key); `./ci/check-sealed-duckdb.sh` (Linux) |
 | Lint / format | `TODO(agents-md): no linter or formatter is configured (no lintDriver in lakefile.lean, none in CI)` |
@@ -156,7 +156,7 @@ experiments are logged too.
 
 - Use the standard type-checker of the language/framework in its strictest practical mode, run it in
   CI, and keep it at zero errors.
-  **This project:** Lean 4 (`leanprover/lean4:v4.34.0`, pinned in `lean-toolchain`), checked by
+  **This project:** Lean 4 (`leanprover/lean4:v4.36.0`, pinned in `lean-toolchain`), checked by
   the elaborator and kernel; `lake build --wfail` locally and in CI (and `lake test --wfail`), so
   every warning, `sorry` above all, fails the build; `autoImplicit` stays on (Lean's default) — it
   automates implicit binders, which are still fully checked. `partial def` is forbidden by the
