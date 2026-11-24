@@ -155,6 +155,9 @@ jobs:
           lake-package-directory: linen
           build: false
           test: false
+      - name: Build a cold consumer without DuckDB
+        shell: bash
+        run: bash linen/ci/check-consumer-without-duckdb.sh
       - name: Build a package that requires linen as a dependency
         run: |
           set -euo pipefail
@@ -163,64 +166,17 @@ jobs:
           cp ../linen/lean-toolchain .
           cat > lakefile.lean <<'LAKE'
           import Lake
-          open System Lake DSL
+          open Lake DSL
 
           require linen from ".." / "linen"
-          LAKE
-          # The link helpers are the canonical block consumers copy
-          # (`ci/consumer/link-helpers.lean`), spliced in rather than written
-          # out here, so this job's executable link is what tests that block —
-          # and the checker is run on the result, so it is tested too.
-          cat ../linen/ci/consumer/link-helpers.lean >> lakefile.lean
-          cat >> lakefile.lean <<'LAKE'
-
-          open Lean Elab Command in
-          run_cmd do
-            let mkDef (n : Name) (flags : Array String) : CommandElabM Unit := do
-              let lits : Array (TSyntax `term) := flags.map (fun s => quote s)
-              elabCommand (← `(def $(mkIdent n) : Array String := #[$lits,*]))
-            let pq ← pkgAbsoluteLibs "libpq"
-            -- DuckDB flags: a consumer's `lean_exe` needs its own, because
-            -- Lake resolves `moreLinkArgs` per package — a dependency's never
-            -- reach the consumer's final link (the same gap `ledger`'s
-            -- lakefile documents for libpq) — and DuckDB's symbols live
-            -- outside `liblinenffi.a`: in `libduckdb.dylib` on macOS, in the
-            -- sealed `libduckdb_sealed.so` on Linux.
-            --
-            -- Both directories are anchored to *this file's* location, never
-            -- to the working directory: a relative anchor here names the
-            -- wrong tree from any other cwd. Absolute, so the `-rpath`
-            -- baked into the executable is valid wherever it runs from (a
-            -- relative rpath resolves against the binary's own directory).
-            -- On macOS the sealed-library branch does not exist at all, so
-            -- the flags name the unpacked `libduckdb.dylib` in the
-            -- workspace's `.lake/duckdb` (where linen's lakefile downloads
-            -- it when elaborated with this consumer as the root).
-            let pkgDir : FilePath := (FilePath.mk (← getFileName)).parent.getD "."
-            let sealedDir :=
-              (pkgDir / ".." / "linen" / ".lake" / "build" / "ffi").normalize
-            let dylibDir := ((← IO.currentDir) / ".lake" / "duckdb").normalize
-            let duckdb : Array String :=
-              if System.Platform.isOSX then
-                #["-L", dylibDir.toString, "-lduckdb",
-                  "-Wl,-rpath," ++ dylibDir.toString]
-              else
-                #["-L", sealedDir.toString, "-lduckdb_sealed",
-                  "-Wl,-rpath," ++ sealedDir.toString]
-            mkDef `nativeLinkArgs (pq ++ duckdb)
-
           package consumer
 
           lean_lib Consumer where
             precompileModules := true
 
-          /-- An *executable* consumer: the shape Lake refuses to give a
-              dependency's `moreLinkArgs` to, and so the only shape that would
-              have caught the `-L` bug. The library above never links
-              `Scrt1.o`; this does. -/
+          -- Deliberately no linker helpers or moreLinkArgs.
           lean_exe consumerApp where
             root := `ConsumerApp
-            moreLinkArgs := nativeLinkArgs
           LAKE
           mkdir -p Consumer
           # One import per FFI-bearing subsystem, so the link covers every
@@ -245,27 +201,18 @@ jobs:
               Database.DuckDB.FFI.OpenConnect.close db
             | .error m => throw (IO.userError s!"consumer could not open duckdb: {m}")
           SRC
-          # An *executable* consumer — the shape a dependency's `moreLinkArgs`
-          # can never reach. `main` references a `linen_pg_*` and a
-          # `linen_jose_hmac` symbol, pulling `postgres.o` (libpq) and `jose.o`
-          # (OpenSSL) into the link, and *opens a DuckDB database for real*:
-          # the executable link is the one shape where `ld.lld` checks the
-          # sealed library's undefined symbols (`--no-allow-shlib-undefined`),
-          # and for a whole release this job dodged DuckDB here because the
-          # host C++ runtime sealed in referenced glibc symbols Lean's bundle
-          # predates (`__isoc23_strtoul`, `__libc_single_threaded`,
-          # `_dl_find_object`). Since `ffi/duckdb_glibc_compat.c` shims them,
-          # this is the pinned regression test for that fix — and running the
-          # executable (the step below) exercises the sealed library beyond
-          # its link, on the rpath the consumer lakefile bakes in.
+          # An executable link also checks Scrt1.o and the sealed library's
+          # glibc references. Import and reference each auto-linked shim.
           cat > ConsumerApp.lean <<'SRC'
           import Linen.Database.PostgreSQL.LibPQ
           import Linen.Crypto.JOSE.FFI
+          import Linen.Crypto.Zlib.FFI
+          import Linen.System.Keychain
           import Linen.Database.DuckDB.FFI.OpenConnect
 
           open Database.PostgreSQL.LibPQ
 
-          def main : IO Unit := do
+          def main (args : List String) : IO Unit := do
             -- DuckDB, opened for real: this is what the executable link
             -- exists to pin (see the comment above this file).
             match ← Database.DuckDB.FFI.OpenConnect.openDatabase none with
@@ -281,21 +228,19 @@ jobs:
               let _ ← connect "host=127.0.0.1 port=1 dbname=linktest"
             catch _ => pure ()
             let _ ← Crypto.JOSE.FFI.hmac "key".toUTF8 "data".toUTF8 0
-            pure ()
+            let bytes := "zlib link test".toUTF8
+            let roundTrip ← Crypto.Zlib.decompress (← Crypto.Zlib.compress bytes)
+            unless String.fromUTF8? roundTrip == some "zlib link test" do
+              throw (IO.userError "zlib round trip failed")
+            -- Link the keychain entry point without consulting a real store.
+            if args.contains "--keychain" then
+              let _ ← System.Keychain.getImpl "linen-ci-link" "unused"
+              pure ()
           SRC
-          ../linen/ci/consumer/check-link-helpers.sh lakefile.lean
           lake build --wfail Consumer
-          # The regression tests: with the old `-L<libdir> -lpq` recipe this
-          # executable link fails on Linux with an undefined `__libc_csu_init`
-          # in Lean's vendored `Scrt1.o`; `pkgAbsoluteLibs` links it. And
-          # before the glibc compat shims, the same link failed with
-          # `undefined reference: __isoc23_strtoul` et al., referenced by
-          # `libduckdb_sealed.so` under `--no-allow-shlib-undefined`.
           lake build --wfail consumerApp
-          # The link is not the whole story: the sealed library also has to
-          # *load and run* at executable scope, through the consumer's own
-          # rpath rather than anything lake set up.
-          .lake/build/bin/consumerApp | grep -q '^duckdb '
+          out=$(./.lake/build/bin/consumerApp)
+          grep -q '^duckdb ' <<< "$out"
 
   # ── Does the build refuse to produce a broken library? ──────────────────────
   #

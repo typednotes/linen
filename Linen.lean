@@ -1,5 +1,6 @@
 -- This module serves as the root of the `Linen` library.
 -- Import modules here that should be built as part of the library.
+-- This umbrella includes DuckDB; use narrower imports to avoid building it.
 import Linen.Control.Applicative
 import Linen.Control.Arrow
 import Linen.Control.Concurrent

@@ -126,9 +126,8 @@ def macSdkFrameworkArgs : IO (Array String) := do
 -- vendor (unlike SQLite's `sqlite3.c`), so per AGENTS.md's FFI precedence
 -- note this is the "download a pinned prebuilt release archive" path: a
 -- fixed DuckDB release version's platform archive is downloaded (if not
--- already cached) and unpacked into `.lake/duckdb/` at lakefile-elaboration
--- time, exactly like `pkgLinkFlags` shells out to `pkg-config` above — just
--- to `curl`/`unzip` instead. The archive itself is git-ignored (`.lake/` is
+-- already cached) and unpacked into linen's `.lake/duckdb/` only when a
+-- build requests DuckDB. The archive itself is git-ignored (`.lake/` is
 -- already in `.gitignore`), matching "do not check prebuilt per-platform
 -- binaries into git".
 
@@ -138,11 +137,7 @@ def macSdkFrameworkArgs : IO (Array String) := do
     surface `duckdb-ffi-1.5.0.0`'s `OpenConnect.hs` binds against. -/
 def duckdbVersion : String := "1.5.4"
 
-/-- Directory the pinned DuckDB archive is unpacked into (or, for
-    `DUCKDB_PREFIX`, where a local install already lives). Relative to the
-    package root, which is Lake's cwd when it elaborates `lakefile.lean` and
-    runs `target`/`extern_lib` actions — the same assumption `pkgConfig`'s
-    relative-path-free design already relies on. -/
+/-- DuckDB's pinned archive cache, relative to linen's package directory. -/
 def duckdbCacheDir : FilePath := ".lake" / "duckdb"
 
 /-- The pinned release's platform- (and, on Linux, architecture-) specific
@@ -153,7 +148,7 @@ def duckdbCacheDir : FilePath := ".lake" / "duckdb"
 
     macOS takes `libduckdb-osx-universal.zip`, whose `libduckdb.dylib` is
     linked dynamically — two-level namespace makes it immune to the unwinder
-    problem described at `duckdbLinkArgs` below.
+    problem described in `docs/linking.md`.
 
     Linux takes **`static-libs-linux-*.zip`**, not `libduckdb-linux-*.zip`,
     because Linux links DuckDB statically and *sealed*. This is not the
@@ -205,8 +200,7 @@ def toAbsolute (p : FilePath) : IO FilePath := do
     inside, no subdirectory). Idempotent: a `duckdb.h` already present short-
     circuits the whole check before any network call, so re-running `lake
     build` (including in CI, on a cold cache) only ever downloads once. -/
-def ensureDuckdbUnpacked : IO FilePath := do
-  let dir := duckdbCacheDir
+def ensureDuckdbUnpacked (dir : FilePath) : IO FilePath := do
   let header := dir / "duckdb.h"
   -- On Linux the short-circuit also checks for an archive that only the
   -- `static-libs-*` asset carries. A cache left behind by an earlier revision
@@ -243,13 +237,13 @@ def ensureDuckdbUnpacked : IO FilePath := do
     entirely, for local dev machines with `libduckdb` already installed some
     other way — else the pinned download-and-unpack path above (a single
     flat directory serving as both). Both are returned absolute. -/
-def duckdbDirs : IO (FilePath × FilePath) := do
+def duckdbDirs (pkgDir : FilePath) : IO (FilePath × FilePath) := do
   match ← IO.getEnv "DUCKDB_PREFIX" with
   | some prefixDir =>
     let p ← toAbsolute (prefixDir : FilePath)
     return (p / "include", p / "lib")
   | none =>
-    let dir ← toAbsolute (← ensureDuckdbUnpacked)
+    let dir ← ensureDuckdbUnpacked (pkgDir / duckdbCacheDir)
     return (dir, dir)
 
 /-- Whether this is a Linux build — the one platform needing the sealed-DSO
@@ -289,8 +283,7 @@ def duckdbLibArchives (duckdbLibDir : FilePath) : IO (Array FilePath) := do
     which case the caller falls back to linking DuckDB dynamically and says so
     loudly.
 
-    See `duckdbLinkArgs`' comment in the `run_cmd` block below for *why* Linux
-    needs this at all. -/
+    See `docs/linking.md` for why Linux needs this. -/
 def duckdbSealedArchives (duckdbLibDir : FilePath) : IO (Option (Array String)) := do
   let ddArchives ← duckdbLibArchives duckdbLibDir
   unless ddArchives.any (·.fileName == some "libduckdb_static.a") do
@@ -298,7 +291,7 @@ def duckdbSealedArchives (duckdbLibDir : FilePath) : IO (Option (Array String)) 
       so DuckDB cannot be sealed into a self-contained shared library on this \
       Linux build. Falling back to linking libduckdb dynamically — on which \
       every DuckDB error path aborts the process under Lean (see \
-      lakefile.lean's duckdbLinkArgs comment). Unset DUCKDB_PREFIX to use the \
+      docs/linking.md). Unset DUCKDB_PREFIX to use the \
       pinned static-libs release archive."
     return none
   -- Sealing without the `core_functions` extension would silently cost Linux
@@ -456,7 +449,7 @@ header for the three already covered and why each is safe.\n\
     `duckdbSealedArchives` warns and answers `none` when a piece is missing, and
     the dynamic linking that follows is not a degraded-but-working
     configuration: it is the one on which *every* DuckDB error path aborts the
-    process (see `duckdbLinkArgs`). There is nothing to fall back *to*, so
+    process (see `docs/linking.md`). There is nothing to fall back *to*, so
     continuing only moves the failure somewhere that names neither the cause nor
     the fix.
 
@@ -513,169 +506,10 @@ set LINEN_ALLOW_UNSEALED_DUCKDB=1.\n\
 \n\
   Background: docs/linking.md section 4, and leanprover/lean4#15112."
 
--- Resolve the native link flags at lakefile-elaboration time via `pkg-config`.
--- This runs on the build machine (Lake recompiles the lakefile per checkout),
--- so the Ubuntu runner gets Linux paths and dev boxes get their own — with no
--- library location hardcoded. Defines `libpqLinkArgs`, `zlibLinkArgs`,
--- `keychainLinkArgs`, `duckdbLinkArgs` and `nativeLinkArgs` as plain
--- `Array String` literals.
-open Lean Elab Command in
-run_cmd do
-  let mkDef (n : Name) (flags : Array String) : CommandElabM Unit := do
-    let lits : Array (TSyntax `term) := flags.map (fun s => quote s)
-    elabCommand (← `(def $(mkIdent n) : Array String := #[$lits,*]))
-  -- libpq and zlib name their library file outright on Linux: a
-  -- `-L<multiarch>` there shadows the glibc Lean bundles and breaks every
-  -- executable link with an undefined `__libc_csu_init` (see `pkgLinkFlags`).
-  -- macOS keeps `pkgLinkFlags`: Homebrew is keg-only, its `-L` is the only way
-  -- `-lpq` resolves, and there is no system multiarch directory to shadow.
-  let pq ← if System.Platform.isOSX then pkgLinkFlags "libpq" else pkgAbsoluteLibs "libpq"
-  let zlib ← if System.Platform.isOSX then pkgLinkFlags "zlib" else pkgAbsoluteLibs "zlib"
-  let macSdk ← macSdkLibArgs
-  -- OpenSSL link flags are deliberately absent on every platform, though
-  -- `jose.o`/`tls.o` reference it. Lean's own toolchain already ends every
-  -- link with `-lssl -lcrypto`, resolving against the *static*
-  -- `libssl.a`/`libcrypto.a` it bundles (`script/prepare-llvm-linux.sh`), so
-  -- those symbols are satisfied without any flag here. Naming the system
-  -- OpenSSL as well is not merely redundant on Linux, it is fatal: a current
-  -- `libssl.so` needs `__isoc23_strtol@GLIBC_2.38` and friends, which the
-  -- glibc Lean bundles predates, so `ld.lld` fails on symbols no code here can
-  -- reach. Dropping it also retires the macOS reason to point at Homebrew's
-  -- OpenSSL (a static archive cannot be re-bound to the system's incompatible
-  -- `libboringssl` at load time). `infra/lakefile.lean` reached the same
-  -- conclusion from the same failure; see the comment there.
-  -- Keychain link flags are OS-conditional: frameworks on macOS and system
-  -- libraries on Windows have no `pkg-config` file, so — unlike `libpq`/
-  -- `zlib` above — they're picked via the pure, compile-time
-  -- `System.Platform.isOSX`/`isWindows` constants (the same ones Lake's own
-  -- config code, e.g. `Lake/Config/LeanLib.lean`, uses for this kind of
-  -- per-platform link decision) rather than any `pkg-config` probe. Linux is
-  -- the one branch with a `.pc` file (`libsecret-1`), so it goes through
-  -- `pkgAbsoluteLibs` — the executable-safe form, for the same reason as
-  -- libpq above — which degrades to `#[]` if that package is absent, matching
-  -- every other optional native dependency in this file.
-  let keychainLinkArgs : Array String ←
-    if System.Platform.isOSX then
-      macSdkFrameworkArgs.map (· ++ #["-framework", "Security", "-framework", "CoreFoundation"])
-    else if System.Platform.isWindows then
-      pure #["-ladvapi32", "-lcredui"]
-    else
-      pkgAbsoluteLibs "libsecret-1"
-  -- DuckDB: downloaded pinned prebuilt archive (see the block above), not
-  -- pkg-config. `-rpath` (supported by Lean's bundled `ld.lld` on both
-  -- platforms, same flag spelling) is baked into every linked
-  -- binary/shared-lib — including `linenffi`'s own `:shared` dynlib the
-  -- interpreter dlopen's for `#eval` — so the dynamic loader finds
-  -- `libduckdb.{dylib,so}` at its unpacked/`DUCKDB_PREFIX` location without
-  -- `DYLD_LIBRARY_PATH`/`LD_LIBRARY_PATH`. Chosen over copying the shared
-  -- library next to every build output because rpath is a one-time link-time
-  -- flag applying uniformly to `lean_exe`, `LinenTest`' `#eval`s, and `Examples`
-  -- alike, whereas copying would need repeating (and re-syncing on upgrade)
-  -- for every one of those separate output locations.
-  --
-  -- On **Linux** DuckDB is *not* linked dynamically. It is sealed into one
-  -- self-contained `libduckdb_sealed.so` (see `duckdbSealedLib` below)
-  -- together with a static libstdc++ and libgcc, every symbol of which is
-  -- localized, and everything then links against that one shared object.
-  --
-  -- The reason is a Lean-toolchain interaction, not a DuckDB bug. Lean's Linux
-  -- toolchain statically links LLVM's libunwind into `libleanshared.so` and
-  -- exports only *part* of the unwind ABI at default visibility: 10 symbols,
-  -- where the system `libstdc++.so.6` imports 11. The four it does not export
-  -- — `_Unwind_GetIPInfo`, `_Unwind_GetDataRelBase`, `_Unwind_GetTextRelBase`,
-  -- `_Unwind_Resume_or_Rethrow` — fall through to `libgcc_s.so.1`. Since
-  -- `libleanshared.so` is a `DT_NEEDED` of `bin/lean`, it precedes
-  -- `libstdc++.so.6`/`libgcc_s.so.1` in the global lookup scope, so a
-  -- dynamically linked libduckdb unwinds through *two* unwinders: LLVM's
-  -- raises the exception, then libstdc++'s personality routine calls libgcc's
-  -- `_Unwind_GetIPInfo` on an LLVM-layout context, reads a garbage IP, matches
-  -- no landing pad, and calls `std::terminate` — even though DuckDB's own
-  -- `catch (...)` sits in the very frame being unwound. Every DuckDB error
-  -- path therefore aborted the process with SIGABRT (`terminate called after
-  -- throwing an instance of 'duckdb::…Exception'` / `terminate called
-  -- recursively`), which is what nine `LinenTest/Linen/Database/DuckDB/**` modules
-  -- hit on Linux and none hit on macOS.
-  --
-  -- Measured, not guessed: from plain C with no Lean in the process the
-  -- identical calls return `DuckDBError` normally, and `LD_PRELOAD`ing the one
-  -- complete unwinder made all nine modules pass. Sealing achieves the same
-  -- thing without asking anyone to set an environment variable — DuckDB's
-  -- throw, its catch, its C++ runtime and its unwinder all end up inside one
-  -- shared object, bound at link time and invisible to the global scope, so
-  -- Lean's partial export cannot interpose any of it. Verified on the built
-  -- artifact: no undefined `_Unwind_*`/`__cxa_throw`/`__cxa_begin_catch`/
-  -- `__gxx_personality_v0` remain, and no `libstdc++.so.6` in `DT_NEEDED`.
-  --
-  -- macOS needs none of this: `libduckdb.dylib` is two-level-namespace bound
-  -- directly to `/usr/lib/libc++.1.dylib`, so nothing in the process can
-  -- interpose its C++ runtime or unwinder in the first place.
-  let (duckdbInc, duckdbLibDir) ← duckdbDirs
-  let duckdbIncludeArgs : Array String := #["-I", duckdbInc.toString]
-  let duckdbDynamicLinkArgs : Array String :=
-    #["-L", duckdbLibDir.toString, "-lduckdb", "-Wl,-rpath," ++ duckdbLibDir.toString]
-  let sealedArchives ← if isLinuxBuild then duckdbSealedArchives duckdbLibDir else pure none
-  -- Whether a *shared* libduckdb exists to fall back to. On Linux the pinned
-  -- asset is `static-libs-linux-*.zip`, which contains archives only — so the
-  -- unsealed path has nothing to link and is available solely to someone who
-  -- supplied their own DuckDB through `DUCKDB_PREFIX`.
-  let hasSharedDuckdb ← (duckdbLibDir / "libduckdb.so").pathExists
-  -- `IO.currentDir` here is the **workspace** root, not this package's own
-  -- directory: when `linen` is a dependency, Lake elaborates this lakefile with
-  -- the *consumer's* root as the working directory. Every other path in this
-  -- block is content with that — the DuckDB download and its `-I`/`-L` all live
-  -- under the workspace's `.lake/duckdb` and agree with each other — but
-  -- `duckdbSealedLib` is a Lake *target*, and Lake writes a target's output to
-  -- `pkg.buildDir`, which is always *this* package's directory. So the `-L`
-  -- naming that library must be derived from this file's location rather than
-  -- from the working directory, or the two name different trees.
-  --
-  -- They did, and it broke every Linux consumer while this project's own CI
-  -- stayed green: built standalone, the workspace root *is* the package
-  -- directory and the two coincide. As a dependency they diverge, and the
-  -- consumer's link fails with
-  --
-  --     ld.lld: error: unable to find library -lduckdb_sealed
-  --
-  -- moments after its log says `✔ Built linen/duckdbSealedLib` — the library
-  -- exists, one directory tree over from where the linker was told to look.
-  -- Standalone CI cannot catch this by construction; only a consumer build can.
-  --
-  -- `getFileName` is absolute here (Lake passes the resolved lakefile path), so
-  -- `toAbsolute` is belt-and-braces rather than load-bearing.
-  let pkgDir : FilePath := (FilePath.mk (← getFileName)).parent.getD "."
-  let sealedLibDir ← toAbsolute (pkgDir / ".lake" / "build" / "ffi")
-  let duckdbLinkArgs : Array String :=
-    if sealedArchives.isSome then
-      #["-L", sealedLibDir.toString, "-lduckdb_sealed",
-        "-Wl,-rpath," ++ sealedLibDir.toString]
-    else
-      duckdbDynamicLinkArgs
-  mkDef `libpqLinkArgs pq
-  mkDef `zlibLinkArgs (macSdk ++ zlib)
-  mkDef `keychainLinkArgs keychainLinkArgs
-  mkDef `duckdbIncludeArgs duckdbIncludeArgs
-  mkDef `duckdbLinkArgs duckdbLinkArgs
-  -- The pieces the sealed DSO is built from, and whether to build it at all.
-  mkDef `duckdbSealedLinkArgs (sealedArchives.getD #[])
-  elabCommand (← `(def $(mkIdent `duckdbUsesSealedLib) : Bool :=
-    $(quote sealedArchives.isSome)))
-  mkDef `nativeLinkArgs (pq ++ macSdk ++ zlib ++ keychainLinkArgs ++ duckdbLinkArgs)
-  -- **Last**, after every `mkDef`. Throwing earlier aborts the rest of this
-  -- block, so the definitions below it are never generated and the real message
-  -- arrives buried under four `Unknown identifier nativeLinkArgs` errors that
-  -- make it look as though the lakefile is broken rather than the host.
-  requireSealedOrExplain isLinuxBuild sealedArchives hasSharedDuckdb
-
--- `moreLinkArgs` here also flows into `ExternLib.linkArgs` (`self.pkg.moreLinkArgs`),
--- so `linenffi`'s `:shared` dynlib — loaded directly by the interpreter for `#eval` —
--- is linked with the libpq/zlib/keychain flags too, not just Lean's own `Linen`
--- targets. OpenSSL needs none of them: Lean's toolchain ends every link with
--- `-lssl -lcrypto` against its bundled static archives (see `nativeLinkArgs`).
 package linen where
-  version := v!"1.14.0"
+  version := v!"2.0.0"
   -- `lake test` builds `LinenTest`, whose `#guard`s run as it elaborates.
   testDriver := "LinenTest"
-  moreLinkArgs := nativeLinkArgs
 
 -- ── Native FFI (POSIX sockets + kqueue/epoll, PostgreSQL libpq) ──
 -- The C shims in `ffi/` are portable across macOS and Linux. `network.c`
@@ -737,6 +571,40 @@ target keychain.o pkg : FilePath := do
   let weakArgs := #["-I", (← getLeanIncludeDir).toString] ++ libsecretCFlags
   buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
 
+-- A shared shim owns its platform flags; Lake propagates its Dynlib through
+-- imports. Use an absolute identity on Unix so dependents need no rpath.
+private def buildFFIBridge (pkg : Package) (name : String) (obj : Job FilePath)
+    (args : Array String) : FetchM (Job Dynlib) := do
+  let out := pkg.buildDir / "ffi" / nameToSharedLib name
+  if Platform.isWindows then
+    buildLeanSharedLib name out #[obj] #[] (traceArgs := args)
+  else if Platform.isOSX then
+    let cc ← getLeanCc
+    buildSharedLib name out #[obj] #[]
+      (traceArgs := #["-Wl,-install_name," ++ out.toString, "-Wl,-undefined,dynamic_lookup"] ++ args)
+      (linker := cc.toString)
+  else
+    buildSharedLib name out #[obj] #[]
+      (traceArgs := #["-Wl,-soname," ++ out.toString] ++ args) (linker := "leanc")
+
+/-- Build the PostgreSQL shim and link to the discovered libpq. -/
+target postgresNative pkg : Dynlib := do
+  let args ← if Platform.isOSX then pkgLinkFlags "libpq" else pkgAbsoluteLibs "libpq"
+  buildFFIBridge pkg "linen_postgres" (← postgres.o.fetch) ((← macSdkLibArgs) ++ args)
+
+/-- Build the zlib shim and link to the system zlib (SDK stub on macOS). -/
+target zlibNative pkg : Dynlib := do
+  let args ← if Platform.isOSX then pkgLinkFlags "zlib" else pkgAbsoluteLibs "zlib"
+  buildFFIBridge pkg "linen_zlib" (← zlib.o.fetch) ((← macSdkLibArgs) ++ args)
+
+/-- Build the Keychain shim and link to the platform credential store. -/
+target keychainNative pkg : Dynlib := do
+  let args ← if Platform.isOSX then
+      macSdkFrameworkArgs.map (· ++ #["-framework", "Security", "-framework", "CoreFoundation"])
+    else if Platform.isWindows then pure #["-ladvapi32", "-lcredui"]
+    else pkgAbsoluteLibs "libsecret-1"
+  buildFFIBridge pkg "linen_keychain" (← keychain.o.fetch) args
+
 /-- Compile the vendored SQLite amalgamation (`ffi/vendor/sqlite3/sqlite3.c`)
     into an object file. No `pkg-config` probe is needed: SQLite ships as a
     small, self-contained, public-domain single `.c`/`.h` amalgamation, so it
@@ -762,6 +630,18 @@ target sqlite3_shim.o pkg : FilePath := do
     "-I", (pkg.dir / "ffi" / "vendor" / "sqlite3").toString]
   buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
 
+private structure DuckDBBuild where
+  includeDir : FilePath
+  libDir : FilePath
+  sealedArchives : Option (Array String)
+
+/-- Discover or download DuckDB only when the DuckDB library requests it. -/
+target duckdbConfig pkg : DuckDBBuild := do
+  let (includeDir, libDir) ← duckdbDirs pkg.dir
+  let sealedArchives ← if isLinuxBuild then duckdbSealedArchives libDir else pure none
+  requireSealedOrExplain isLinuxBuild sealedArchives (← (libDir / "libduckdb.so").pathExists)
+  return Job.pure { includeDir, libDir, sealedArchives }
+
 /-- Compile `ffi/duckdb_shim.c` (the `@[extern]` entry points used by
     `Linen.Database.DuckDB.FFI.OpenConnect`, and by future `duckdb-ffi`
     modules as they're ported) into an object file. DuckDB's include path
@@ -770,8 +650,12 @@ target sqlite3_shim.o pkg : FilePath := do
 target duckdb.o pkg : FilePath := do
   let oFile := pkg.buildDir / "ffi" / "duckdb.o"
   let srcJob ← inputTextFile <| pkg.dir / "ffi" / "duckdb_shim.c"
-  let weakArgs := #["-I", (← getLeanIncludeDir).toString] ++ duckdbIncludeArgs
-  buildO oFile srcJob weakArgs (traceArgs := #["-O2", "-fPIC"]) (extraDepTrace := getLeanTrace)
+  let config ← (← duckdbConfig.fetch).await
+  let headerJob ← inputTextFile (config.includeDir / "duckdb.h")
+  let weakArgs := #["-I", (← getLeanIncludeDir).toString]
+  buildO oFile (srcJob.zipWith (fun src _ => src) headerJob) weakArgs
+    (traceArgs := #["-I", config.includeDir.toString, "-O2", "-fPIC"])
+    (extraDepTrace := getLeanTrace)
 
 /-- Compile `ffi/duckdb_glibc_compat.c` — the shims for the handful of
     host-glibc symbols the sealed-in C++ runtime references but Lean's
@@ -794,7 +678,7 @@ target duckdb_compat.o pkg : FilePath := do
     static libgcc into one self-contained shared library, localizing every
     symbol that came from an archive.
 
-    Linux only — see `duckdbLinkArgs`' comment above for the split-unwinder
+    Linux only — see `docs/linking.md` for the split-unwinder
     problem this exists to solve. Two details matter:
 
     - `--exclude-libs` names every archive explicitly instead of using `ALL`.
@@ -825,9 +709,12 @@ target duckdb_compat.o pkg : FilePath := do
     than a consumer's `ld.lld` error. -/
 target duckdbSealedLib pkg : Dynlib := do
   let soFile := pkg.buildDir / "ffi" / nameToSharedLib "duckdb_sealed"
+  let config ← (← duckdbConfig.fetch).await
+  let some archives := config.sealedArchives
+    | error "DuckDB sealing is unavailable on this host"
   let objJob ← duckdb.o.fetch
   let compatJob ← duckdb_compat.o.fetch
-  -- `duckdbSealedLinkArgs` already carries the `--start-group`ed archives and
+  -- `archives` already carries the `--start-group`ed archives and
   -- the matching `--exclude-libs`; see `duckdbSealedArchives`.
   --
   -- These go in `traceArgs`, NOT `weakArgs`: Lake includes `traceArgs` in the
@@ -838,95 +725,104 @@ target duckdbSealedLib pkg : Dynlib := do
   -- core-only archive — which then failed at load with `undefined symbol:
   -- duckdb::ExtensionHelper::LoadAllExtensions`. The archive set is a real
   -- input to this artifact and has to be traced like one.
-  buildSharedLib "duckdb_sealed" soFile #[objJob, compatJob] #[]
-    (traceArgs := duckdbSealedLinkArgs ++ #["-fPIC", "-lm", "-ldl", "-lpthread"])
+  let sealed ← buildSharedLib "duckdb_sealed" soFile #[objJob, compatJob] #[]
+    (traceArgs := archives ++ #["-Wl,-soname," ++ soFile.toString, "-fPIC", "-lm", "-ldl", "-lpthread"])
     (linker := "leanc")
+  let sysLibDir ← getLeanSystemLibDir
+  sealed.mapM fun lib => do
+    liftM <| auditSealedDuckdbLib lib.path #[sysLibDir, sysLibDir / "glibc", sysLibDir / "lean"]
+    return lib
+
+/-- Build the DuckDB shim as an import-scoped native dependency. On macOS
+    and the explicit unsealed Linux path, only the shim lives in this DSO. -/
+target duckdbNative pkg : Dynlib := do
+  let config ← (← duckdbConfig.fetch).await
+  if config.sealedArchives.isSome then
+    duckdbSealedLib.fetch
+  else
+    let name := "linen_duckdb"
+    let out := pkg.buildDir / "ffi" / nameToSharedLib name
+    let lib := config.libDir / nameToSharedLib "duckdb"
+    let libJob ← inputBinFile lib
+    let obj ← duckdb.o.fetch
+    let identity := if Platform.isOSX then
+      #["-Wl,-install_name," ++ out.toString, "-Wl,-undefined,dynamic_lookup"]
+    else #["-Wl,-soname," ++ out.toString]
+    let linker ← getLeanCc
+    buildSharedLib name out #[obj.zipWith (fun path _ => path) libJob] #[]
+      (traceArgs := identity ++ #[lib.toString, "-Wl,-rpath," ++ config.libDir.toString])
+      (linker := linker.toString)
 
 /-- Bundle the FFI object(s) into a static lib that Lake links automatically. -/
 extern_lib linenffi pkg := do
   let networkObj ← network.o.fetch
-  let postgresObj ← postgres.o.fetch
   let joseObj ← jose.o.fetch
   let tlsObj ← tls.o.fetch
-  let zlibObj ← zlib.o.fetch
-  let keychainObj ← keychain.o.fetch
   let sqlite3Obj ← sqlite3.o.fetch
   let sqlite3ShimObj ← sqlite3_shim.o.fetch
-  let mut objs :=
-    #[networkObj, postgresObj, joseObj, tlsObj, zlibObj, keychainObj, sqlite3Obj, sqlite3ShimObj]
+  -- OpenSSL is supplied by Lean's linker. Adding the system OpenSSL could
+  -- select an incompatible libc or TLS implementation.
+  let objs := #[networkObj, joseObj, tlsObj, sqlite3Obj, sqlite3ShimObj]
   let staticLibFile := pkg.staticLibDir / nameToStaticLib "linenffi"
-  if duckdbUsesSealedLib then
-    -- `duckdb.o` must NOT also go into this static archive: it is already
-    -- inside the sealed library, and a static copy would win at link time,
-    -- pulling in the dynamic `libduckdb.so` again and reinstating the very
-    -- abort the sealing removes.
-    --
-    -- The sealed library is sequenced *before* this archive's own job with
-    -- `bindM`, not merely fetched alongside it. Everything that links against
-    -- `linenffi` passes `-lduckdb_sealed` (via `nativeLinkArgs`), starting
-    -- with `linenffi`'s own `:shared` facet — and a bare
-    -- `let _ ← duckdbSealedLib.fetch` only *schedules* that build rather than
-    -- waiting for it, which lost the race and failed the `:shared` link with
-    -- `ld.lld: error: unable to find library -lduckdb_sealed`.
-    --
-    -- Once the sealed library is *linked*, `auditSealedDuckdbLib` checks its
-    -- undefined symbols against everything the toolchain can resolve, before
-    -- anything else builds on top of it. This is the one link shape where a
-    -- shared library's undefined references are checked downstream (`ld.lld`
-    -- `--no-allow-shlib-undefined` on every `lean_exe`), and the failure it
-    -- prevents is invisible to every build in this repository — a library
-    -- link simply keeps the reference. The audit is why
-    -- `ffi/duckdb_glibc_compat.c`'s shim list cannot silently drift out of
-    -- date with whatever host C++ runtime sealed in.
-    let sealedJob ← duckdbSealedLib.fetch
-    let sysLibDir ← getLeanSystemLibDir
-    let sealedSoFile := pkg.buildDir / "ffi" / nameToSharedLib "duckdb_sealed"
-    sealedJob.bindM fun _ => do
-      liftM <| auditSealedDuckdbLib sealedSoFile
-        #[sysLibDir, sysLibDir / "glibc", sysLibDir / "lean"]
-      buildStaticLib staticLibFile objs
-  else
-    objs := objs.push (← duckdb.o.fetch)
-    buildStaticLib staticLibFile objs
+  buildStaticLib staticLibFile objs
+
+-- DuckDB modules import ordinary Linen modules, so the umbrella cannot
+-- belong to their shared dependency: it would introduce a shared-facet cycle.
+lean_lib LinenCore where
+  roots := #[]
+  globs := #[
+    `Linen.CDP.*, `Linen.Cloud.*, `Linen.Codec.+, `Linen.Control.+,
+    .one `Linen.Crypto.AES, .one `Linen.Crypto.ConstantTime, `Linen.Crypto.JOSE.+,
+    .one `Linen.Crypto.MD5, .one `Linen.Crypto.RC4, .one `Linen.Crypto.SecureRandom,
+    .one `Linen.Crypto.SHA1, .one `Linen.Crypto.SHA256, .one `Linen.Crypto.SigV4,
+    `Linen.Data.+, `Linen.DataFrame.+, `Linen.Database.Redis.*,
+    `Linen.Database.SQL.+, `Linen.Database.SQLite.*,
+    `Linen.Graphics.+, `Linen.Network.+, `Linen.Numeric.+, `Linen.Options.+,
+    `Linen.PostgREST.+, `Linen.System.Console.+, `Linen.System.Exit.*,
+    `Linen.System.FilePath.+, `Linen.System.Git.+, `Linen.System.GitFn.*,
+    .one `Linen.System.IO, .one `Linen.System.LakeLog, `Linen.System.Log.+,
+    `Linen.System.Posix.+, .one `Linen.System.Process, .one `Linen.System.TimeManager,
+    .one `Linen.System.Worker, `Linen.Text.+, `Linen.Time.+, `Linen.Web.+]
+  needs := #[linenffi]
+  -- Keep ordinary imports cheap; callers can opt into precompilation when
+  -- they use `#eval` on imported FFI bindings.
+  precompileModules := false
+
+-- These small libraries own their imports exclusively, so their shared
+-- facets cannot form a cycle with LinenCore.
+lean_lib LinenPostgreSQL where
+  roots := #[`Linen.Database.PostgreSQL.LibPQ]
+  needs := #[postgresNative]
+  moreLinkLibs := #[postgresNative]
+
+lean_lib LinenZlib where
+  roots := #[`Linen.Crypto.Zlib]
+  globs := #[.submodules `Linen.Crypto.Zlib]
+  needs := #[zlibNative]
+  moreLinkLibs := #[zlibNative]
+
+lean_lib LinenKeychain where
+  roots := #[]
+  globs := #[.one `Linen.System.Keychain]
+  needs := #[keychainNative]
+  moreLinkLibs := #[keychainNative]
+
+-- This is a library dependency, not an `extern_lib` (package-wide).
+lean_lib LinenDuckDB where
+  roots := #[`Linen.Database.DuckDB]
+  globs := #[.submodules `Linen.Database.DuckDB]
+  needs := #[duckdbNative]
+  moreLinkLibs := #[duckdbNative]
 
 @[default_target]
 lean_lib Linen where
-  -- Link the native socket FFI, and precompile so the test suite's `#eval`
-  -- checks can call the `@[extern]` bindings through the interpreter.
-  -- `needs := #[linenffi]` alone already pulls in every native link flag
-  -- (`nativeLinkArgs`, via `package linen`'s `moreLinkArgs` feeding
-  -- `linenffi`'s `ExternLib.linkArgs`) — do NOT also set `moreLinkArgs`
-  -- here: that would add the same flags a second time to this target's own
-  -- link command, which is exactly what caused every per-module `:dynlib`
-  -- link (and every downstream consumer's link) to pass `-rpath` twice,
-  -- triggering `ld64.lld: warning: duplicate -rpath ... ignored`.
-  needs := #[linenffi]
-  -- **Deliberately not precompiled.** `precompileModules := true` forces
-  -- `Linen:shared`, a whole-library artifact, so nothing can link against one
-  -- module until all ~770 are compiled: a consumer whose only import is
-  -- `Linen.Data.Functor` took 2333 jobs and 5m04s, against 16 jobs and 13s
-  -- here. README's "linking against linen" section warns consumers off
-  -- `precompileModules` for this same reason.
-  --
-  -- `LinenTest` below still precompiles, which is what keeps `Linen:shared` built
-  -- for the `#eval`s that call `@[extern]` bindings through the interpreter.
-  -- A consumer needing that sets it on its own library, as the consumer job
-  -- in `lean_action_ci.yml` does.
-  --
-  -- Do not try to go finer by splitting `linenffi` per subsystem and giving
-  -- each `lean_lib` only the archives it reaches. Two Lake rules defeat it: a
-  -- library claims every module beneath its root prefix, so the `Linen`-rooted
-  -- library's `needs` governs all ~770 whatever globs the others declare; and
-  -- anything that links builds every `extern_lib` in the package regardless of
-  -- `needs`.
-  precompileModules := false
+  roots := #[]
+  globs := #[.one `Linen]
 
 lean_lib LinenTest where
   -- `LinenTest.Linen.Database.DuckDB.FFI.TestSupport` (a `LinenTest`-tree module, not
   -- a `Linen` one) declares its own `@[extern]` bindings for later test
-  -- files' `#eval`s to call through the interpreter — same reason `Linen`
-  -- itself precompiles, just one level down. See `Linen`'s comment above for
-  -- why `moreLinkArgs` is deliberately NOT also set here.
+  -- files' `#eval`s to call through the interpreter.
   needs := #[linenffi]
   precompileModules := true
 
@@ -940,15 +836,8 @@ lean_lib LinenTest where
 -- `consumer-exe` job in `.github/workflows/lean_action_ci.yml` is what now
 -- closes it, by linking a consumer executable that names libpq's file outright.
 --
--- This exe no longer dodges the DuckDB leg of that test: since
--- `ffi/duckdb_glibc_compat.c` shims the host-glibc symbols the sealed
--- library used to reference (`__isoc23_strtoul`, `__libc_single_threaded`,
--- `_dl_find_object` — each newer than the glibc Lean bundles, each
--- previously fatal under `ld.lld`'s `--no-allow-shlib-undefined`), it
--- links `-lduckdb_sealed` like any other consumer would. The consumer job
--- remains the *pinned* regression test (a `lean_exe` in a *separate
--- package*, which Lake gives different treatment) — but it now links DuckDB
--- too instead of importing around it.
+-- The consumer job tests both an executable that uses the sealed library and
+-- one that does not import or link DuckDB.
 lean_exe linen where
   root := `Main
   needs := #[linenffi]

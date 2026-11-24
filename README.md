@@ -361,60 +361,20 @@ open Data.Functor Control.Monad
 
 ### Using the FFI-backed modules
 
-Pure modules need nothing beyond the `require` above. The modules backed by
-native code — `System.Keychain`, `Crypto.*`, `Network.TLS`, `Network.HTTP`
-(over HTTPS), `Database.*` — need link flags in **your** lakefile.
+Linen handles native linking for its own modules. Consumers do not need a
+link-helper block or extra `moreLinkArgs` for PostgreSQL, zlib, Keychain,
+DuckDB, or the other linen shims. On an upgrade from 1.x, remove arguments
+copied solely for linen; keep flags required by your own native code. The
+[native development packages](.github/actions/setup-native-deps/action.yml)
+are still required for the modules that use them.
 
-Lake does not propagate a dependency's `moreLinkArgs` to a dependent's
-executable: `liblinenffi.a` lands on your link line, but the flags its members
-need do not, so you get `undefined symbol: SecItemCopyMatching` or similar.
-Because the flags are platform-conditional, this needs `lakefile.lean` rather
-than `lakefile.toml`.
+Lake downloads and links DuckDB only when a build reaches a DuckDB import.
+The pinned archive is cached under linen’s own `.lake/duckdb` directory.
+`import Linen` is an umbrella import and still includes DuckDB.
+See [native linking](docs/linking.md#44-pinning-and-updates) for details.
 
-The helpers are one canonical block, **[`ci/consumer/link-helpers.lean`](https://github.com/typednotes/linen/blob/main/ci/consumer/link-helpers.lean)**:
-paste it — markers included — into your lakefile, and check it against the
-tag you pin with `ci/consumer/check-link-helpers.sh lakefile.lean`, run from
-that checkout (`.lake/packages/linen`). A copy is unavoidable, since Lake gives
-an executable only its own package's `moreLinkArgs`; a *checked* copy is what
-keeps six of them from drifting. Then choose the libraries yourself:
-
-```lean
-import Lake
-open System Lake DSL
-
--- ⟪linen-link-helpers:begin⟫
--- … the block from ci/consumer/link-helpers.lean …
--- ⟪linen-link-helpers:end⟫
-
-open Lean Elab Command in
-run_cmd do
-  let mkDef (n : Name) (flags : Array String) : CommandElabM Unit := do
-    let lits : Array (TSyntax `term) := flags.map (fun s => quote s)
-    elabCommand (← `(def $(mkIdent n) : Array String := #[$lits,*]))
-  -- `System.Keychain`. No OpenSSL flags, on any platform: Lean's toolchain
-  -- already ends every link with its bundled static `libssl.a`/`libcrypto.a`,
-  -- and naming the system `.so` as well breaks the executable link on Linux.
-  mkDef `nativeLinkArgs (← keychainLinkArgs)
-
-package myapp where
-  moreLinkArgs := nativeLinkArgs
-```
-
-For `Database.PostgreSQL` add `pkgAbsoluteLibs "libpq"`, for `Crypto.Zlib`
-`pkgAbsoluteLibs "zlib"`. For `Database.DuckDB` the flags point at where
-linen put DuckDB, so they are platform-conditional: on Linux it is
-`-L<linen>/.lake/build/ffi -lduckdb_sealed` plus the same as an `-rpath`
-(linen seals DuckDB, its C++ runtime and a glibc-compat layer into one
-self-contained `libduckdb_sealed.so`, so nothing DuckDB-shaped is needed at
-run time); on macOS it is `-L<workspace>/.lake/duckdb -lduckdb` plus its
-`-rpath` (the pinned `libduckdb.dylib` linen downloads when your package
-elaborates its lakefile). Both must be absolute — an `-rpath` is resolved
-relative to the *executable* at run time, not the caller's directory. The
-`consumer` job in [`.github/workflows/lean_action_ci.yml`](https://github.com/typednotes/linen/blob/main/.github/workflows/lean_action_ci.yml) is a complete,
-working recipe, including the executable link.
-
-**Why the absolute-path form exists.** A `lean_lib` never links the executable
-startup object, but your `lean_exe` does — and `pkgLinkFlags`' `-L<libdir>` is
+**Why linen keeps discovery local to the link.** A `lean_lib` never links the executable
+startup object, but a `lean_exe` does — and `pkgLinkFlags`' `-L<libdir>` is
 fatal there on Linux. `pkg-config --variable=libdir` reports
 `/usr/lib/<multiarch>`, which holds the *system* `libc.so`: passing it as `-L`
 puts it ahead of the glibc Lean bundles, and Lean's vendored `Scrt1.o` still
@@ -425,11 +385,9 @@ shadows nothing. (`pkgAbsoluteLibs` falls back to the bare `-lfoo` token when
 the file is absent; on macOS the keg-only Homebrew directory is safe to pass as
 `-L`, since it contains no libc.)
 
-Setting `precompileModules := true` on this package *would* make all of the
-above automatic, since Lake then links the extern library's shared form, which
-carries these flags. It is deliberately not the default: the shared form links
-the whole archive, so every dependent would need libpq, SQLite and DuckDB
-installed even to use, say, `Crypto.SigV4`.
+If a consumer evaluates imported FFI functions with `#eval`, enable
+`precompileModules := true` on that consumer's library. Ordinary executables
+do not need precompilation.
 
 `linen`'s own `Linen` library is not precompiled either, and for the same
 reason — **you build only the modules you import.** A package whose only

@@ -130,7 +130,7 @@ runs:
 
     # DuckDB (ffi/duckdb_shim.c) needs no step here. lakefile.lean's own
     # `ensureDuckdbUnpacked` (curl + unzip, both preinstalled on the GitHub
-    # runners) runs on demand during `lake build`, on both platforms, exactly
+    # runners) runs only for targets importing DuckDB, on both platforms, exactly
     # as it does on a contributor's machine — and short-circuits when a
     # `duckdb.h` is already unpacked under `.lake/duckdb/`. Duplicating its
     # version and URL here would only be a second place to keep in sync.
