@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Exercise a cold linen checkout with the native development libraries installed.
+# Exercise a source-only snapshot, even when CI restored the checkout's cache.
 set -euo pipefail
-linen=$(cd "$(dirname "$0")/.." && pwd)
-[[ ! -e "$linen/.lake/duckdb" ]] || { echo 'Expected a cold linen DuckDB cache' >&2; exit 1; }
+checkout=$(cd "$(dirname "$0")/.." && pwd)
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/linen-no-duckdb.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
-mkdir "$scratch/bin"
-ln -s "$linen" "$scratch/linen"
+linen="$scratch/linen"
+mkdir "$scratch/bin" "$linen"
+git -C "$checkout" archive HEAD | tar -xf - -C "$linen"
+[[ ! -e "$linen/.lake/duckdb" ]]
 cp "$linen/lean-toolchain" "$scratch"
 cd "$scratch"
 unset DUCKDB_PREFIX LINEN_ALLOW_UNSEALED_DUCKDB
