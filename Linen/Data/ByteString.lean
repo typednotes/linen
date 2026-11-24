@@ -126,15 +126,16 @@ def append (a b : ByteString) : ByteString :=
 
 instance : Append ByteString := ⟨ByteString.append⟩
 
-/-- Concatenate a list of `ByteString`s. -/
+/-- Concatenate slices into one contiguous byte string. In compiled code the
+    destination grows geometrically instead of copying the full prefix on
+    every append. -/
 def concat (bss : List ByteString) : ByteString :=
-  bss.foldl (· ++ ·) empty
+  ofByteArray <| bss.foldl (fun dest bs =>
+    bs.data.copySlice bs.off dest dest.size bs.len (exact := false)) ByteArray.empty
 
 /-- Intercalate a separator between `ByteString`s. -/
-def intercalate (sep : ByteString) : List ByteString → ByteString
-  | [] => empty
-  | [x] => x.copy
-  | x :: xs => xs.foldl (fun acc b => acc ++ sep ++ b) x
+def intercalate (sep : ByteString) (bss : List ByteString) : ByteString :=
+  concat (bss.intersperse sep)
 
 /-! ── Transform ── -/
 

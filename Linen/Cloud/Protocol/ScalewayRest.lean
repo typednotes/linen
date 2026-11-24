@@ -32,7 +32,6 @@
 -/
 import Linen.Cloud.Transport
 import Linen.Data.Json.Encode
-import Linen.Data.Json.Decode
 
 namespace Cloud.Protocol.ScalewayRest
 
@@ -62,18 +61,8 @@ def call (creds : Credentials) (region method path : String) (query : Query := [
   , auth := Auth.authToken creds.secretKey }
 
 /-- Issue a call and parse the reply as JSON. An empty body becomes `.null`. -/
-def send (t : Transport) (c : Call) : IO (Except Error Value) := do
-  match ← performNow t c with
-  | .error e => return .error e
-  | .ok resp =>
-    match bodyText resp with
-    | .error e => return .error e
-    | .ok text =>
-      let trimmed := text.trimAscii.toString
-      if trimmed.isEmpty then return .ok .null
-      match Data.Json.Decode.decode trimmed with
-      | .ok v    => return .ok v
-      | .error m => return .error (Error.protocol s!"malformed JSON response: {m}")
+def send (t : Transport) (c : Call) : IO (Except Error Value) :=
+  (·.bind bodyJson) <$> performNow t c
 
 /-- Build and issue a call in one step. -/
 def invoke (t : Transport) (creds : Credentials) (region method path : String)

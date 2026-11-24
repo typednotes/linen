@@ -15,6 +15,9 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
   the imports that use them. Remove any linen-only linker flags or copied
   link-helper blocks from 1.x consumer lakefiles. Public Lean imports and
   APIs are unchanged; system development libraries are still required.
+- Byte-string concatenation and separator joining now copy slices into one
+  growing buffer, avoiding repeated prefix copies when flattening lazy
+  strings or builders. Cloud JSON protocols share the same success decoder.
 
 ### Fixed
 

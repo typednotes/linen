@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen LinenTest --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen LinenTest --include='*.lean' | wc -l -->
-  <strong>799 modules</strong> · <strong>511 compile-time theorems</strong> · <strong>11659 <code>#guard</code> checks</strong>
+  <strong>799 modules</strong> · <strong>511 compile-time theorems</strong> · <strong>11668 <code>#guard*</code> directives</strong>
 </p>
 
 ## Overview
@@ -405,7 +405,7 @@ you imported only pure-Lean modules.
 
 ## Modules
 
-See **[docs/modules.md](https://github.com/typednotes/linen/blob/main/docs/modules.md)** for the full module table (all 798 modules).
+See the **[documentation index](docs/README.md)** and the **[module reference](docs/modules.md)**.
 
 ## Build & Test
 

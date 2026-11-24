@@ -24,6 +24,8 @@ the project overview and quick start.
   Haskell-`Data.ByteString` API (pack/unpack, folds, scans, search,
   group/inits/tails, prefix/suffix/infix, file & handle I/O) plus `BEq`/`Ord`/
   `Hashable`. All loops are structural (no `partial`/fuel).
+  `concat` appends each slice directly to a geometrically growing buffer in
+  compiled code; `intercalate` and lazy flattening reuse that path.
 - `Data.ByteString.Char8` — a Latin-1 `Char` view of `ByteString` (`String ↔
   ByteString`, char-wise `map`/`filter`/`fold`/search), with `lines`/`words`/
   `unlines`/`unwords` as structural recursions over the byte list.

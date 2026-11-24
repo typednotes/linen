@@ -46,6 +46,7 @@
 -/
 import Linen.Cloud.Auth
 import Linen.Cloud.Error
+import Linen.Data.Json.Decode
 import Linen.Network.HTTP.Client.Retry
 import Linen.Network.HTTP.Types.URI
 import Linen.Data.CaseInsensitive
@@ -215,6 +216,15 @@ def bodyText (resp : Response) : Except Error String :=
   match String.fromUTF8? resp.body with
   | some s => .ok s
   | none   => .error (Error.protocol "response body is not valid UTF-8")
+
+/-- Decode a successful JSON response, treating an empty or whitespace-only
+    body as JSON `null`. Invalid UTF-8 and malformed JSON are protocol errors. -/
+def bodyJson (resp : Response) : Except Error Data.Json.Value := do
+  let text := (← bodyText resp).trimAscii.toString
+  if text.isEmpty then return .null
+  match Data.Json.Decode.decode text with
+  | .ok value => return value
+  | .error message => throw (Error.protocol s!"malformed JSON response: {message}")
 
 /-- The body as text, or the empty string if it is not UTF-8.
 

@@ -266,6 +266,8 @@ By default `linen` uses the version pinned by `duckdbVersion` in `lakefile.lean`
 The download is a target of `LinenDuckDB`, not a side effect of loading the
 lakefile. Lake resolves `Linen.Database.DuckDB.*` to that library and follows
 its native target for consumers; there are no package-wide DuckDB flags.
+![Focused pure imports skip optional native targets; DuckDB imports reach the pinned archive through their own native target](figures/native-imports.svg)
+
 The archive is cached in linen's own `.lake/duckdb`, even as a dependency.
 Builds with no DuckDB imports don't create that cache or link DuckDB.
 `import Linen` intentionally includes the DuckDB modules.
