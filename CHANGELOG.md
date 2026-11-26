@@ -7,6 +7,8 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-11-26
+
 ### Added
 
 - An `OperationHTTP` cookbook for read-only operations carried by POST, with
@@ -20,6 +22,9 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ### Changed
 
+- `ResourceT` now uses a mutex-protected cleanup registry. Code that
+  supplied or inspected the former `IO.Ref` environment directly must
+  migrate to `runResourceT`, `allocate`, and `release`.
 - The simple HTTP client sends and receives through a scoped exchange.
 - WebApp response actions use the shared indexed transition machinery while
   keeping the existing application and middleware API.
