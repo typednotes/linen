@@ -104,6 +104,25 @@ def send (data : ByteArray) : SocketM .connected .connected SendOutcome :=
 def recv (maxLen : Nat := 4096) : SocketM .connected .connected RecvOutcome :=
   use (Network.Socket.recv · maxLen)
 
+/-- A receive leaves the socket available on data or backpressure. An
+    end-of-input or error result from `recvOrClose` means it was closed. -/
+def recvOrCloseState : RecvOutcome → SocketState
+  | .data _ | .wouldBlock => .connected
+  | .eof | .error _ => .closed
+
+/-- Attempt a receive, then close on EOF or an error before running the
+    continuation. For stream protocols that treat either result as terminal.
+    Use `recv` to retry errors or write after the peer finishes sending.
+    A positive buffer size prevents an empty read from being treated as EOF. -/
+def recvOrClose (maxLen : Nat := 4096) (_ : 0 < maxLen := by decide) :
+    SocketProgram .connected RecvOutcome recvOrCloseState :=
+  Program.step socketAccess.property fun s => do
+    match ← Network.Socket.recv s maxLen with
+    | .data bytes => return ⟨.data bytes, s⟩
+    | .wouldBlock => return ⟨.wouldBlock, s⟩
+    | .eof => return ⟨.eof, ← Network.Socket.close s⟩
+    | .error error => return ⟨.error error, ← Network.Socket.close s⟩
+
 /-- Send all bytes, waiting for backpressure to clear. -/
 def sendAll (data : ByteArray) (timeoutMillis : Nat := Blocking.defaultTimeoutMillis) :
     SocketM .connected .connected Unit :=

@@ -16,3 +16,8 @@
   interpreting primitives requires the resource's authorization proof.
   Implementers must keep the proof, native handles and aliased callbacks
   private. Each invocation operates on a single interpreter's world.
+- **S5. External state.** The interpreter can guarantee indexed invariants
+  for aspects of the resource it controls, including through synchronization.
+  An external actor can change other aspects between operations. When an
+  operation depends on external state, it can observe the runtime outcome
+  and use it to select the continuation's index.

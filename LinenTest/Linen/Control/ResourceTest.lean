@@ -8,14 +8,19 @@ private def ExampleWorld : Bool → Type
 
 -- S1: a value selects the concrete world available to its continuation.
 #eval show IO Unit from do
-  let start : Program True ExampleWorld false Bool id :=
-    Program.step trivial fun n => return ⟨true, toString ((show Nat from n) + 1)⟩
+  let start (promote : Bool) : Program True ExampleWorld false Bool id :=
+    Program.step trivial fun n => do
+      if promote then
+        return ⟨true, toString ((show Nat from n) + 1)⟩
+      return ⟨false, n⟩
   let next (b : Bool) : Action True ExampleWorld (id b) false String :=
     match b with
     | true => Program.step trivial fun text => return ⟨text, (0 : Nat)⟩
     | false => Program.step trivial fun n => return ⟨toString (show Nat from n), (0 : Nat)⟩
-  let result ← Program.run trivial (Program.bind start next) (41 : Nat)
-  unless result.1 == "42" do throw (IO.userError "wrong dependent world")
+  for (promote, expected) in [(false, "41"), (true, "42")] do
+    let result ← Program.run trivial (Program.bind (start promote) next) (41 : Nat)
+    unless result.1 == expected do
+      throw (IO.userError s!"wrong dependent world after outcome {promote}")
 
 -- S2 and S3: ordinary return, early close, an aborted body, and failed
 -- cleanup each invoke release exactly once. Cleanup preserves the body error.

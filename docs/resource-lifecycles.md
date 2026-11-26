@@ -40,6 +40,13 @@ A refused connection throws and the bracket closes the socket. The same
 dependent bind lets you read SQLite columns in the `.row` branch of a
 statement step. The `.done` branch can reset or finalize the statement.
 
+`SocketM.recvOrClose` applies the same pattern to events from a peer.
+`Program.bind` gives the data and backpressure handlers a connected
+socket. On EOF or error, the operation closes the socket and the handler
+starts closed. Choose `SocketM.recv` if your protocol writes after the
+peer has finished sending or needs its own error recovery. This adapts
+the result-dependent receive in the [Idris socket example](https://docs.idris-lang.org/en/latest/st/examples.html).
+
 ## Pick the boundary
 
 | Import | Runner or boundary | Lifecycle |
@@ -68,8 +75,12 @@ receive events from other actors. Those implementations still decide
 readiness, expiry and cancellation at runtime. C bindings continue to expose
 native statuses and their own ownership rules. QUIC's transport is stubbed.
 
-Indices describe actions a caller is allowed to attempt. The OS may return
-an error, a peer may disconnect, and a database can reject an operation.
+An index can guarantee an invariant while the interpreter controls that
+part of the resource. Exclusive ownership prevents another local caller
+from closing the socket. A peer can still reset the connection after a
+successful connect. If another actor can invalidate a prerequisite, check
+it at the operation boundary and represent the outcome in the API.
+An earlier observation can become stale before the next call.
 For example, nested SQL transaction statements and transaction control
 issued as raw SQL are checked by the database. The scoped connection APIs
 do not parse SQL or RESP commands. TLS sessions rely on a live transport.

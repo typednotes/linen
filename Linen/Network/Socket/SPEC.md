@@ -23,3 +23,10 @@
   A non-blocking connect selects connected or connecting on success.
   Refusal throws. A nested accept owns the child until it closes and
   leaves the listener listening.
+- **S6. Peer changes.** A peer can end its send side or reset the connection
+  while the local scope is indexed as connected. `SocketM.recvOrClose`
+  keeps the socket connected on data or `wouldBlock`. On EOF or error
+  it closes the local socket before passing control to the closed branch.
+  Use it for streams when both outcomes are terminal for the application.
+  `SocketM.recv` keeps the scope available for applications that need
+  different recovery or write after a peer half-close.

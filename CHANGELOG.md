@@ -15,6 +15,8 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
   and private ownership. Scoped APIs cover POSIX sockets, TLS, HTTP/1.1, WebSockets,
   PostgreSQL connections and pools, Redis, SQLite connections and statements,
   DuckDB connections and child resources, and worker processes.
+- `SocketM.recvOrClose` uses the receive outcome to select the handler's
+  socket state and closes the socket before the EOF or error handler runs.
 
 ### Changed
 
