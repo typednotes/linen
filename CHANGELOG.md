@@ -7,12 +7,18 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-11-26
+
+### Changed
+
+- The PostgreSQL pool constructor and state field are private. Use
+  `Pool.create` to construct a pool and `Pool.stats` to inspect its usage.
+
 ### Fixed
 
 - PostgreSQL pools enforce the configured capacity across concurrent checkouts.
   Failed connection attempts restore their reservation and leave creation
-  counts unchanged. Create pools through `Pool.create` to keep the state
-  under the pool's mutex.
+  counts unchanged.
 - Socket, SQLite, PostgreSQL, DuckDB, and zlib shims synchronize first-use
   registration of native resource classes.
 - JSON equality uses Lean's built-in float equality, removing the extra
