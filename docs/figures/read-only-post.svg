@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 116" role="img" aria-labelledby="title desc">
+  <title id="title">Read-only POST authority</title>
+  <desc id="desc">
+    The consumer submits a typed read and state filter. The trusted policy encoder builds
+    POST / with a fixed DescribeInstances action, then hands it to the mock transport.
+  </desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#41647a"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="698" height="114" rx="10" fill="#f8fafc" stroke="#94a3b8"/>
+  <rect x="238" y="12" width="448" height="92" rx="8" fill="#e5f0f5" stroke="#7999ad"/>
+  <g fill="#fff" stroke="#7999ad">
+    <rect x="14" y="39" width="196" height="54" rx="8"/>
+    <rect x="251" y="39" width="204" height="54" rx="8"/>
+    <rect x="490" y="39" width="183" height="54" rx="8"/>
+  </g>
+  <g fill="none" stroke="#41647a" stroke-width="2" marker-end="url(#arrow)">
+    <path d="M 211 66 H 248"/>
+    <path d="M 456 66 H 487"/>
+  </g>
+  <g font-family="system-ui, sans-serif" font-size="14" text-anchor="middle" fill="#152d3d">
+    <text x="462" y="29" font-weight="600">Trusted code</text>
+    <text x="112" y="61" font-weight="600">Consumer</text>
+    <text x="112" y="80">Typed read + state</text>
+    <text x="353" y="61" font-weight="600">Allowlist + encoder</text>
+    <text x="353" y="80">POST / · DescribeInstances</text>
+    <text x="582" y="61" font-weight="600">Mock transport</text>
+    <text x="582" y="80">Inspects the request</text>
+  </g>
+</svg>

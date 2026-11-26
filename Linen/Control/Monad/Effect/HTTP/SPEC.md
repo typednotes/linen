@@ -26,3 +26,5 @@ For AWS Query, for example, an application can allow `ListRoles` and
 `GetCallerIdentity` while denying `CreateRole` and `AssumeRole`, even though
 all use POST. The [offline test](../../../../../LinenTest/Linen/Control/Monad/Effect/HTTPTest.lean)
 shows an allowlist, an operation-indexed input type, and a stub transport.
+The [read-only POST cookbook](../../../../../docs/read-only-post.md) walks
+through a read with a typed filter and a fixed action and endpoint.

@@ -4,6 +4,7 @@ Start with the [Quick Start](../README.md#quick-start) to add linen as a Lake
 dependency. Import a specific module if you do not want everything in `import Linen`.
 
 - [Module reference](modules.md) — find APIs by subsystem.
+- [Cookbook: read-only POST](read-only-post.md) — allow a typed read without exposing raw HTTP.
 - [Byte strings and builders](byte-strings.md) — choose slices, chunks, or contiguous output.
 - [Native linking](linking.md) — which imports pull in a native library and why Linux DuckDB is sealed.
 - [Upstream imports](imports/index.md) — provenance and dependency order for ported code.

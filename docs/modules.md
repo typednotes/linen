@@ -316,7 +316,8 @@ the project overview and quick start.
   where reads and writes share the same method and URL, use `OperationHTTP`
   instead of raw `HTTP` in the effect row. A typed operation allowlist is
   checked before the trusted encoder constructs the scoped request.
-  See the [HTTP capability contract](../Linen/Control/Monad/Effect/HTTP/SPEC.md).
+  See the [HTTP capability contract](../Linen/Control/Monad/Effect/HTTP/SPEC.md)
+  and the [read-only POST cookbook](read-only-post.md).
 - `Control.Monad.Effect.PostgreSQL` — the idiom over a database, restricting in
   three parts of decreasing strength, `linen`-original. **Connection target:**
   `host`/`port`/`database`/`user` are capability fields and `runPostgreSQL`
