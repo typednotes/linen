@@ -281,6 +281,28 @@ Look out for tasks the user does by hand again and again, and propose to automat
 This section holds the rules that were in linen's own AGENTS.md before it adopted the
 standard; they are project rules and stay in force.
 
+### Resource lifecycles
+
+- Make invalid caller-controlled states and operation sequences unrepresentable.
+  For resources Linen owns, expose scoped actions indexed by the states they
+  require and produce. Composition must check that each next action can run
+  in the current state. If an operation's result determines the next state,
+  make the continuation's type depend on that result.
+- Keep handles and state transition constructors inside their owning module.
+  A scope must release its resource on exceptional exit. An explicit close,
+  finalize, or other terminal operation must consume the usable state, so
+  clients cannot reuse an earlier alias or repeat the terminal operation
+  through the scoped API. When a resource must be shared across tasks, enforce
+  its lifecycle at the shared owner and document the synchronization boundary.
+- Model external state changes and failures explicitly. State indices
+  describe the caller's permitted actions and what the program has observed.
+  Guarantee an invariant through the index only while the owner controls
+  it, including through synchronization for shared state. If another actor
+  can invalidate it, check it as part of the operation and use the result
+  to select the next index when appropriate. An earlier observation alone
+  cannot justify a guarantee across calls. Test invalid sequences with
+  compile errors and exercise outcome handlers and cleanup at runtime.
+
 ### Project layout
 
 - Library sources live under `Linen/`, mirroring their module path

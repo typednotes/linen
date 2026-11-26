@@ -1,11 +1,10 @@
 /-
   Linen.Network.Socket — High-level socket API with POSIX lifecycle states
 
-  Provides a safe, high-level API for POSIX sockets where the full lifecycle
-  (fresh, bound, listening, connected, closed) is tracked as a **phantom type
-  parameter** on `Socket`. The Lean 4 kernel verifies every state transition at
-  compile time; the parameter is **erased at runtime** -- zero overhead, zero
-  branches, same codegen as raw C.
+  The high-level POSIX API uses a phantom state index on `Socket`.
+  Lean checks the index supplied to each operation and erases it at runtime.
+  Operations such as bind and close return a new tag for the same underlying
+  socket. Earlier aliases retain their original tags and still type-check.
 
   ## Specifications
 
@@ -22,11 +21,7 @@
   - **RFC 791** / **RFC 8200** — the IPv4 and IPv6 address families `.inet` and
     `.inet6` select.
 
-  ## How Lean 4's Dependent Types Enforce the POSIX Protocol
-
-  Every function in this module declares its pre- and post-state in the type
-  signature. The compiler threads these constraints through the program and
-  rejects any code path that would violate the protocol:
+  ## State indices in operation signatures
 
   | Function        | Requires            | Produces           | Enforced by            |
   |-----------------|---------------------|--------------------|------------------------|
@@ -41,11 +36,10 @@
   | `sendAll`/`sendTo`/`recvFrom` | `Socket .connected` | `Unit`/`ℕ`/`ByteArray × SockAddr` | argument type |
   | `close`         | `Socket state`, `state ≠ .closed` | `Socket .closed` | **proof obligation** |
 
-  The `close` function is the most interesting case: it accepts a socket in
-  **any** state, but requires the caller to supply a proof that the state is
-  not already `.closed`. For concrete states this proof is discharged
-  automatically by `decide`. For a `Socket .closed` the proof is impossible,
-  making double-close a **compile-time error** -- not a runtime exception.
+  The proof on `close` rules out passing the returned `Socket .closed` to
+  `close`. An alias with an earlier tag can still be passed to `close`.
+  After a successful close, a later close through such an alias is a no-op
+  in the native shim.
 
   ## Design
 
@@ -60,25 +54,18 @@
   ## POSIX Socket State Machine
 
   ```
-  Fresh ──bind──→ Bound ──listen──→ Listening ──accept──→ Connected
-    │                                                      (send/recv)
+  Fresh ──bind──→ Bound ──listen──→ Listening
+    │                                  └──accept──→ new Connected socket
     ├──connect──→ Connected (immediate)
     └──connect──→ Connecting ──connectFinish──→ Connected
-                                                               │
-  Any state ──close(proof: state ≠ .closed)──→ Closed
+
+  Any non-closed state ──close──→ Closed
   ```
 
-  ## Compile-Time Guarantees (all zero-cost)
-
-  - Can't send/recv on a non-connected socket (type error)
-  - Can't accept on a non-listening socket (type error)
-  - Can't bind an already-bound socket (type error)
-  - Can't listen on an unbound socket (type error)
-  - Can't close an already-closed socket (proof obligation fails)
-  - `withSocket` ensures sockets are closed even on exceptions (try/finally)
-  - `withEventLoop` ensures event loops are closed even on exceptions
-  - SO_REUSEADDR is set by default for server sockets via `listenTCP`
-  - All IO errors from POSIX calls are surfaced as `IO.Error`
+  Use the returned handle after a transition. Coordinate close with other
+  operations on aliases, including when sharing handles across tasks.
+  `withSocket`, `withListenTCP`, and `withEventLoop` run cleanup in
+  `finally`. `listenTCP` enables SO_REUSEADDR before binding.
 -/
 
 import Linen.Network.Socket.FFI
@@ -102,22 +89,12 @@ def socket (fam : Family) (typ : SocketType) : IO (Socket .fresh) := do
     $$\text{close} : \text{Socket}\ s \to (s \neq \texttt{.closed}) \to \text{IO}(\text{Socket}\ \texttt{.closed})$$
     POSIX: close(2) is valid in any state.
 
-    **Lean 4 dependent-type guarantee — double-close is a compile-time error.**
+    The proof checks the argument's type index. On success, the returned
+    value has index `.closed`, for which no such proof exists. An earlier
+    alias retains its original index. A sequential close through that alias
+    after a successful close is a no-op in the native shim.
 
-    The second parameter `_h : state ≠ .closed` is a proof obligation that
-    the Lean kernel must discharge before the program type-checks.
-
-    - For `Socket .fresh`, `.bound`, `.listening`, `.connected`: the default
-      tactic `by decide` produces the proof automatically (zero effort for
-      the caller, zero cost at runtime -- proofs are erased).
-    - For `Socket .closed`: the proposition `.closed ≠ .closed` is **false**,
-      so no proof can exist.  The call is rejected at compile time.
-
-    The returned `Socket .closed` carries no valid operations -- every
-    function in this module requires a non-closed state. This is
-    enforced by the type system, not by runtime checks.
-
-    Prefer `withSocket` for bracket-style resource safety. -/
+    Prefer `withSocket` for bracket-style resource cleanup. -/
 @[inline] def close (s : Socket state) (_h : state ≠ .closed := by decide) : IO (Socket .closed) := do
   socketClose s.raw
   pure (Socket.mk s.raw)

@@ -3,9 +3,7 @@
 
   Two kinds of checks:
 
-  * compile-time `example`s pin down the phantom-typed state machine — each
-    transition has exactly the right pre/post states in its type. (If the
-    protocol types ever drift, these stop elaborating.)
+  * compile-time `example`s check the state indices in operation signatures.
   * `#eval` round-trips exercise the real syscalls — all **local and
     non-blocking** (loopback, ephemeral port, 0 ms waits), so no network and no
     hangs. They need the `linenffi` native lib, which `precompileModules`
@@ -18,7 +16,7 @@ open Network.Socket
 
 namespace Tests.Network.Socket
 
-/-! ### Compile-time: the POSIX lifecycle is encoded in the types -/
+/-! ### S1. State indices in operation signatures -/
 
 example : Family → SocketType → IO (Socket .fresh)     := socket
 example : Socket .fresh → SockAddr → IO (Socket .bound) := bind
@@ -31,11 +29,25 @@ example : Socket .connected → IO RecvOutcome            := (recv ·)
 example : Socket .connected → ByteArray → IO Unit       := sendAll
 example : Socket .connected → ByteArray → SockAddr → IO Nat := sendTo
 example : Socket .connected → IO (ByteArray × SockAddr) := (recvFrom ·)
--- `close` accepts any non-closed state; the `state ≠ .closed` proof is
--- discharged by `decide` for a concrete state. (Closing a `Socket .closed`
--- is rejected at compile time — no proof of `.closed ≠ .closed` exists.)
 example : Socket .fresh → IO (Socket .closed)           := (close ·)
 example : Socket .connected → IO (Socket .closed)       := (close ·)
+
+example : True := by
+  fail_if_success
+    have _closedAction : Socket .closed → IO (Socket .closed) := fun s => close s
+  trivial
+
+/-! ### S2–S3. Earlier aliases and sequential close -/
+
+-- The pre-close alias still type-checks at both calls. The closed descriptor
+-- fails at runtime on accept, and a second close through the alias succeeds.
+#eval show IO Unit from do
+  let listener ← listenTCP "127.0.0.1" 0
+  setNonBlocking listener
+  let _ ← close listener
+  unless (← accept listener) matches .error _ do
+    throw (IO.userError "expected accept through the closed listener alias to fail")
+  let _ ← close listener
 
 /-! ### Runtime: typed lifecycle round-trip on loopback -/
 

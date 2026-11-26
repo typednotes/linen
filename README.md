@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen LinenTest --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen LinenTest --include='*.lean' | wc -l -->
-  <strong>799 modules</strong> · <strong>511 compile-time theorems</strong> · <strong>11668 <code>#guard*</code> directives</strong>
+  <strong>808 modules</strong> · <strong>511 compile-time theorems</strong> · <strong>11666 <code>#guard*</code> directives</strong>
 </p>
 
 ## Overview
@@ -67,6 +67,10 @@ for the full per-module feature list and module table.
   missing from core (`Compose`/`Product`/`FunctorSum`, `Bifunctor`,
   `Foldable`/`Traversable`, `mtl`-style `Reader`/`State`/`Except`, STM,
   green-thread concurrency, …).
+- **`Control.Resource`** — scoped, state-indexed resource programs for
+  sockets, TLS, HTTP/1.1, WebSockets, database connections, and workers. The state
+  indices rule out a second close or operations after close in the same
+  program. See [Scoped resource lifecycles](docs/resource-lifecycles.md).
 - **`Control.Monad.Effect`** — extensible effects ported from `freer-simple`:
   an open union over an effect row (`Data.OpenUnion`), the `Eff` monad with
   `send`/`interpret`/`interpose`/`reinterpret`/`run`, and the
@@ -143,7 +147,10 @@ for the full per-module feature list and module table.
   `WebSockets`** — a network stack: HTTP/1.1 client & wire types, an
   HTTP/2 server (multiplexed, flow-controlled; passes all 146 h2spec
   conformance cases) with HPACK, HTTP/3 + QPACK wire formats, POSIX sockets
-  with a green-thread event dispatcher and millisecond timers, TLS 1.2/1.3
+  with a green-thread event dispatcher and millisecond timers. Socket state
+  tags are checked at compile time, and aliases retain their tags across
+  transitions. See the [socket contract](Linen/Network/Socket/SPEC.md).
+  The stack also includes TLS 1.2/1.3
   over OpenSSL with ALPN, and WebSockets (client and server). QUIC connections are **not implemented**:
   `Network.QUIC.Client`/`Server` are stubs that throw.
 - **`Network.WebApp` / `Network.WebApp.Server`** — a WAI-style application

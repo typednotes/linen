@@ -13,37 +13,12 @@
   `Response` is an inductive type covering file, builder, and streaming
   response modes.
 
-  ## How Lean 4's Dependent Types Enforce Exactly-Once Response
+  ## Response lifecycle
 
-  In Haskell's WAI, the contract "call `respond` exactly once" is a
-  gentleman's agreement -- nothing in the type system prevents calling it
-  zero times or twice.  Lean 4's dependent types let us do better.
-
-  `AppM` is an **indexed monad** parameterised by a pre-state and a
-  post-state (`ResponseState`).  The key insight:
-
-  1. `AppM.respond` is the **only** combinator that transitions
-     `.pending → .sent`.
-  2. After one `respond`, the state is `.sent`.  A second `respond` would
-     need a combinator of type `AppM .sent .sent ResponseReceived`, but
-     **no such combinator exists** -- double-respond is a type error.
-  3. `AppM.mk` is `private`, so application code cannot fabricate an
-     `AppM .pending .sent` value without actually calling `respond`.
-
-  The result: the Lean 4 kernel verifies at compile time that every
-  `Application` invokes the response callback exactly once. The `AppM`
-  wrapper is erased at runtime (it is just `Green` underneath).
-
-  ## Guarantees (compile-time, zero-cost)
-
-  - `ResponseReceived` is an opaque token ensuring the response callback
-    was invoked (application must return it; only `respond` produces it)
-  - `AppM .pending .sent` enforces exactly-once response via indexed state
-  - `private mk` prevents circumventing the guarantee
-  - `Application` CPS type enables safe resource bracketing by the server
-  - `Middleware` is `Application → Application` -- proven associative
-  - `AppM` wraps `Green` — all application code runs on the fair green
-    thread monad, freeing pool threads when awaiting I/O
+  `AppM` uses the shared indexed resource program over `Green`. The
+  response action moves from pending to sent. Servers interpret the program,
+  and middleware that implements its own synchronization has an explicit
+  escape hatch.
 -/
 
 import Linen.Network.HTTP.Types.Header
@@ -55,6 +30,7 @@ import Linen.Data.Vault
 import Linen.Network.Socket.Types
 import Linen.Network.Sendfile
 import Linen.Control.Concurrent.Green
+import Linen.Control.Resource
 
 namespace Network.WebApp
 
@@ -63,13 +39,8 @@ open Network.Socket (SockAddr)
 open Network.Sendfile (FilePart)
 open Control.Concurrent.Green (Green)
 
-/-- Opaque token proving a response was sent.
-
-    `private mk` ensures that application code cannot fabricate this token.
-    Only server implementations (via `ResponseReceived.done`) and the
-    `AppM.respond` combinator produce it.  Combined with the `AppM` indexed
-    monad, this means: an application that type-checks has necessarily
-    invoked the response callback exactly once. -/
+/-- Completion token returned by a server's response callback. The
+`AppM` state tracks the order of the indexed actions. -/
 structure ResponseReceived where
   private mk ::
 
@@ -237,14 +208,7 @@ theorem mapResponseStatus_id_responseStream (s : Status) (h : ResponseHeaders) (
 
 end Response
 
-/-- Response lifecycle state for the indexed `AppM` monad.
-
-    This two-element type is the key to compile-time exactly-once enforcement.
-    The `AppM` monad is parameterised by a pre-state and a post-state drawn
-    from `ResponseState`.  Since `.pending ≠ .sent` (proven below), the
-    compiler can distinguish "haven't responded yet" from "already responded"
-    and reject any code path that would respond twice or not at all.
-    $$\text{ResponseState} = \text{pending} \mid \text{sent}$$ -/
+/-- State of the response as tracked by the indexed application program. -/
 inductive ResponseState where
   /-- No response has been sent yet. -/
   | pending
@@ -255,113 +219,57 @@ deriving BEq, DecidableEq, Repr
 /-- Response states are distinct. -/
 theorem ResponseState.pending_ne_sent : ResponseState.pending ≠ ResponseState.sent := by decide
 
-/-- Indexed Green monad tracking response lifecycle state transitions.
+private opaque responseAccess : {p : Prop // p} := ⟨True, trivial⟩
 
-    This is the core dependent-type mechanism that enforces the
-    exactly-once-response contract at compile time.
-
-    `AppM pre post α` represents a Green computation that transitions the
-    response lifecycle from state `pre` to state `post`.  The state indices
-    are checked by the Lean 4 kernel during type-checking and **erased at
-    runtime** -- `AppM` compiles to exactly the same code as plain `Green`.
-
-    **Why `private mk`?**  The constructor is private, so the only ways to
-    build an `AppM` value are through the provided combinators:
-    `respond`, `respondIO`, `liftIO`, `ipure`, `ibind`, `ioThen`.
-    Application code cannot fabricate `AppM .pending .sent` without actually
-    invoking the response callback -- the type system forces the real work.
-
-    **Why double-respond is impossible:**
-    - `AppM.respond` has type `AppM .pending .sent ResponseReceived`.
-    - After one call the state is `.sent`.
-    - `AppM.ibind` chains: `AppM s₁ s₂ α → (α → AppM s₂ s₃ β) → AppM s₁ s₃ β`.
-    - A second `respond` would require `AppM .sent _ _` with pre-state `.sent`,
-      but `respond`'s pre-state is `.pending` -- **type mismatch, compile-time error**.
-
-    **Trust boundary:** Server code extracts the `Green` via `.run` at the
-    edge. Middleware that needs full control can use the `protected`
-    escape hatch `AppM.unsafeLift`, which requires an explicit `open`.
-
-    $$\text{AppM}\ s_1\ s_2\ \alpha = \text{Green}(\alpha) \text{ (opaque, indexed by state)}$$ -/
-structure AppM (pre post : ResponseState) (α : Type) where
-  private mk ::
-  /-- Extract the underlying Green computation. For server/framework code only. -/
-  run : Green α
+/-- A Green computation indexed by the response lifecycle. A successful
+application starts pending and ends sent. -/
+abbrev AppM := Control.Resource.ActionT Green responseAccess.val (fun _ : ResponseState => Unit)
 
 namespace AppM
 
-/-- Lift a pure value without changing state.
-    $$\text{ipure} : \alpha \to \text{AppM}\ s\ s\ \alpha$$ -/
-@[inline] def ipure (a : α) : AppM s s α := ⟨pure a⟩
+open Control.Resource (ProgramT)
 
-/-- Lift a plain IO action without changing state.
-    IO is automatically lifted into Green via `MonadLift IO Green`.
-    $$\text{liftIO} : \text{IO}(\alpha) \to \text{AppM}\ s\ s\ \alpha$$ -/
-@[inline] def liftIO (action : IO α) : AppM s s α := ⟨(action : Green α)⟩
+/-- Interpret an application action. Intended for servers and middleware. -/
+@[inline] def run (action : AppM pre post α) : Green α :=
+  (·.1) <$> ProgramT.run responseAccess.property action ()
 
-/-- Indexed bind: chains state transitions.
-    $$\text{ibind} : \text{AppM}\ s_1\ s_2\ \alpha \to (\alpha \to \text{AppM}\ s_2\ s_3\ \beta) \to \text{AppM}\ s_1\ s_3\ \beta$$ -/
-@[inline] def ibind (ma : AppM s₁ s₂ α) (f : α → AppM s₂ s₃ β) : AppM s₁ s₃ β :=
-  ⟨ma.run >>= fun a => (f a).run⟩
+/-- Lift a value without changing response state. -/
+@[inline] def ipure (a : α) : AppM s s α := ProgramT.pure a
 
-/-- Send a response, transitioning from `.pending` to `.sent`.
-    This is the **only** way to produce `AppM .pending .sent ResponseReceived`.
-    The callback returns `Green ResponseReceived` — all response sending
-    happens on the non-blocking Green monad.
-    $$\text{respond} : (\text{Response} \to \text{Green}\ \text{ResponseReceived}) \to \text{Response} \to \text{AppM}\ \texttt{.pending}\ \texttt{.sent}\ \text{ResponseReceived}$$ -/
+/-- Lift an IO action without changing response state. -/
+@[inline] def liftIO (action : IO α) : AppM s s α := ProgramT.lift (action : Green α)
+
+/-- Sequence actions whose response states agree at the boundary. -/
+@[inline] def ibind (first : AppM pre mid α) (next : α → AppM mid post β) : AppM pre post β :=
+  ProgramT.ibind first next
+
+/-- Send through the supplied callback and mark the response sent on success. -/
 @[inline] def respond (callback : Response → Green ResponseReceived) (resp : Response) :
     AppM .pending .sent ResponseReceived :=
-  ⟨callback resp⟩
+  ProgramT.step responseAccess.property fun () => do return ⟨← callback resp, ()⟩
 
-/-- Perform IO then respond with the computed Response.
-    Convenient for the common pattern of "compute a response, then send it."
-    $$\text{respondIO} : (\text{Response} \to \text{Green}\ \text{ResponseReceived}) \to \text{IO}(\text{Response}) \to \text{AppM}\ \texttt{.pending}\ \texttt{.sent}\ \text{ResponseReceived}$$ -/
+/-- Compute a response in IO, then send it through the supplied callback. -/
 @[inline] def respondIO (callback : Response → Green ResponseReceived) (action : IO Response) :
     AppM .pending .sent ResponseReceived :=
-  ⟨(action : Green Response) >>= callback⟩
+  ibind (liftIO action) (respond callback)
 
-/-- Perform an IO action then continue with a state-changing computation.
-    Useful for middleware that needs IO before deciding whether to delegate or respond.
-    $$\text{ioThen} : \text{IO}(\alpha) \to (\alpha \to \text{AppM}\ s_1\ s_2\ \beta) \to \text{AppM}\ s_1\ s_2\ \beta$$ -/
-@[inline] def ioThen (action : IO α) (f : α → AppM s₁ s₂ β) : AppM s₁ s₂ β :=
-  ⟨(action : Green α) >>= fun a => (f a).run⟩
+/-- Perform IO, then choose a continuation. -/
+@[inline] def ioThen (action : IO α) (next : α → AppM pre post β) : AppM pre post β :=
+  ibind (liftIO action) next
 
-/-- Escape hatch for framework/middleware code that needs full IO control
-    over state transitions. **Not for application code.** The caller is
-    responsible for ensuring exactly-once response semantics.
-    $$\text{unsafeLift} : \text{IO}(\alpha) \to \text{AppM}\ s_1\ s_2\ \alpha$$ -/
-protected def unsafeLift (action : IO α) : AppM pre post α := ⟨(action : Green α)⟩
+/-- Escape hatch for middleware that implements its own response synchronization.
+The caller must enforce the response protocol. -/
+protected def unsafeLift (action : IO α) : AppM pre post α :=
+  ProgramT.step responseAccess.property fun () => do return ⟨← (action : Green α), ()⟩
 
 end AppM
 
-/-- `AppM s s` is a standard Monad (for non-state-changing operations).
-    Enables `do` notation inside `AppM.respondIO` or `AppM.ioThen` blocks. -/
-instance : Monad (AppM s s) where
-  pure := AppM.ipure
-  bind := AppM.ibind
-
-/-- IO actions lift into `AppM s s` automatically (via IO → Green → AppM). -/
+/-- IO actions lift into response state preserving code automatically. -/
 instance : MonadLiftT IO (AppM s s) where
   monadLift := AppM.liftIO
 
-/-- A web application.
-    $$\text{Application} = \text{Request} \to (\text{Response} \to \text{Green}(\text{ResponseReceived})) \to \text{AppM}\ \texttt{.pending}\ \texttt{.sent}\ \text{ResponseReceived}$$
-
-    The return type `AppM .pending .sent ResponseReceived` encodes three
-    compile-time guarantees simultaneously:
-
-    1. **Response was sent** (post-state is `.sent`, not `.pending`).
-    2. **Response was sent exactly once** (no path from `.sent` back to
-       `.pending`; no second `respond` accepted after `.sent`).
-    3. **Response was sent through the callback** (`private mk` prevents
-       fabricating the `AppM` value without calling `respond`).
-
-    Server implementations extract the underlying `Green` via `.run` at the
-    trust boundary. Application code never touches `.run`.
-
-    The callback takes `Response → Green ResponseReceived` — all response
-    sending happens on the non-blocking Green monad, freeing pool threads
-    while awaiting socket I/O. -/
+/-- A web application returns a program that consumes a pending response.
+The supplied callback and the framework escape hatch are the trust boundary. -/
 abbrev Application := Request → (Response → Green ResponseReceived) → AppM .pending .sent ResponseReceived
 
 /-- A web-application middleware transforms an application.

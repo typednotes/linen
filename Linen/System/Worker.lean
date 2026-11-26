@@ -1,6 +1,7 @@
 /- Bounded reusable line-protocol processes. Requests are serialized, deadlines
    include pipe writes/reads, and failures destroy the entire process group. -/
 import Linen.System.Process
+import Linen.Control.Resource
 import Std.Sync.Mutex
 
 namespace System.Worker
@@ -85,5 +86,30 @@ def Worker.pid (w : Worker) : UInt32 := w.child.pid
 
 /-- A stopped worker cannot be returned to a cache. -/
 def Worker.isAlive (w : Worker) : IO Bool := w.alive.atomically (m := IO) get
+
+open Control.Resource
+
+private opaque workerAccess : {p : Prop // p} := ⟨True, trivial⟩
+
+/-- Program over an owned worker process. A request failure aborts the
+program, and a stopped worker cannot receive more requests. -/
+abbrev WorkerM := Owned workerAccess.val Worker
+
+namespace WorkerM
+
+/-- Spawn a worker for the duration of the program and reap it on exit. -/
+def run (cmd : String) (action : WorkerM .open_ post α) (args : Array String := #[])
+    (env : Array (String × Option String) := #[]) : IO α :=
+  Owned.run workerAccess.property (spawn cmd args env) Worker.stop action
+
+/-- Send one line and wait up to `timeoutMs` for its response. -/
+def call (line : Line) (timeoutMs : Nat) : WorkerM .open_ .open_ String :=
+  Owned.use workerAccess.property (·.call line timeoutMs)
+
+/-- Stop and reap the process early. -/
+def stop : WorkerM .open_ .closed Unit :=
+  Owned.close workerAccess.property Worker.stop
+
+end WorkerM
 
 end System.Worker

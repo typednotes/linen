@@ -574,11 +574,10 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
 - `Network.Socket.Types` — the type layer for a phantom-typed socket API:
   `Family` / `SocketType` / `ShutdownHow` enums with their FFI tag encodings, an
   `EventType` readiness bitmask (kqueue/epoll), `SockAddr` / `AddrInfo`, and a
-  `Socket (state : SocketState)` handle whose POSIX lifecycle (`fresh → bound →
-  listening`, `connecting → connected`, `closed`) is **enforced at compile time**
-  (15 state-distinctness theorems; `close` carries a `state ≠ .closed` proof
-  obligation that makes double-close a type error). Non-blocking operations
-  return `Accept` / `Connect` / `Recv` / `Send` / `Poll` outcome sum types.
+  `Socket (state : SocketState)` handle whose tag is checked against each
+  operation's signature. Earlier aliases keep their tags after a transition.
+  Non-blocking operations return `Accept` / `Connect` / `Recv` / `Send` /
+  `Poll` outcome sum types.
 - `Network.Socket.FFI` — `@[extern]` bindings to a portable C shim
   (`ffi/network.c`): socket create / bind / listen / accept / connect, blocking
   and non-blocking send / recv, UDP `sendto` / `recvfrom`, socket options,
@@ -588,13 +587,11 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   `precompileModules`-enabled, so importing one module does not build all of
   them; `LinenTest` is, which is what makes the bindings callable from `#eval`.
   A consumer that needs the same sets it on its own library.
-- `Network.Socket` — the safe, high-level API over the FFI: `socket → bind →
-  listen → accept` (and `connect`/`connectFinish`, `send`/`recv`, `sendAll`,
-  UDP `sendTo`/`recvFrom`) with each transition's pre/post state in its
-  signature, a `close` whose `state ≠ .closed` proof obligation makes
-  double-close a type error, `withSocket` / `withListenTCP` / `withEventLoop`
-  bracket helpers, `listenTCP`/`listenTCP6`, address introspection, and an
-  `EventLoop` (kqueue/epoll) wrapper.
+- `Network.Socket` — the high-level API for lifecycle operations, socket
+  I/O, address introspection, and event multiplexing (kqueue/epoll).
+  `close` requires an argument whose tag differs from `.closed`. After a
+  successful close, a sequential repeat through an earlier alias succeeds
+  without closing a descriptor again. See the [socket contract](../Linen/Network/Socket/SPEC.md).
 - `Network.Socket.EventDispatcher` — the bridge from socket readiness to the
   green-thread model: a **sharded** set of dispatch threads (fds partitioned by
   `fd % N`, each shard its own kqueue/epoll loop + waiter map) resolves an
@@ -2407,6 +2404,7 @@ the secrets, never their values.
 | `Linen.Control.Monad.State` | `State` alias + `mtl` names over core `StateT`: `put`, `gets`, `runStateT`, `evalStateT`, `execStateT`, `runState`, `evalState`, `execState` (`get`/`set`/`modify` reused as-is) |
 | `Linen.Control.Monad.Trans` | `mtl` name `lift` over core `MonadLift`/`monadLift`, plus generic `lift_pure`/`lift_bind` laws (no bespoke `MonadTrans` class or per-transformer instances) |
 | `Linen.Control.Monad.Trans.Resource` | `ResourceT` (deterministic LIFO cleanup) over core `ReaderT`: `allocate`/`release`/`runResourceT`, `releaseKey_eq` |
+| `Linen.Control.Resource` | Shared indexed resource programs, dependent bind and deterministic owned scopes |
 | `Linen.Control.Monad.IO.Unlift` | `MonadUnliftIO` (CPS `withRunInIO` over `MonadLiftT IO m`) + `toIO`/`liftIOOp`, `IO`/`ReaderT r IO` instances |
 | `Linen.Control.Category` | `Category`, `LawfulCategory`, `Fun`, the `≫` operator |
 | `Linen.Control.Arrow` | `Arrow`/`ArrowChoice`: `arr`/`first`/`split`/`left`/`right`/`fanin`, `Fun` instances |
@@ -2462,6 +2460,7 @@ the secrets, never their values.
 | `Linen.Network.HTTP.Client.Types` | HTTP/1.1 client types: transport `Connection` (TCP/TLS callbacks), `Request`, `Response` (`findHeader`/`contentLength`/`isSuccess`) |
 | `Linen.Network.HTTP.Client.Request` | HTTP/1.1 request serialization (`serializeRequest` — auto Host/Content-Length/Connection) + `sendRequest` |
 | `Linen.Network.HTTP.Client.Response` | HTTP/1.1 response parsing (`receiveResponse`/`performRequest`): status/headers + Content-Length/chunked/until-close bodies |
+| `Linen.Network.HTTP.Client.Scoped` | One HTTP/1.1 exchange with indexed send and receive phases and transport cleanup |
 | `Linen.Network.HTTP.Client.Connection` | HTTP/1.1 client connections: `connect` (TCP/TLS), `defaultPort`, `Connection.connClose` |
 | `Linen.Network.HTTP.Client.Redirect` | HTTP redirect following: `executeWithRedirects` (bounded hop count, relative/absolute `Location` resolution) |
 | `Linen.Network.HTTP.Client.Retry` | retry transient failures (connection errors, 408/429/5xx) with capped exponential backoff, equal jitter, and `Retry-After` support |
@@ -2486,9 +2485,10 @@ the secrets, never their values.
 | `Linen.Network.HTTP3.QPACK.Encode` | static-only QPACK encoding: `encodeQInt`/`encodeStringLiteral` + `encodeHeaders`, round-trip tested |
 | `Linen.Network.Socket.Types` | phantom-typed `Socket` lifecycle, `Family`/`SockAddr`/`EventType`, non-blocking outcome types |
 | `Linen.Network.Socket.FFI` | `@[extern]` C bindings: sockets, options, UDP, `getAddrInfo`, kqueue/epoll event loop |
-| `Linen.Network.Socket` | safe phantom-typed lifecycle API, `withSocket`/`listenTCP`/`withEventLoop`, `EventLoop`, `sendAll`/`sendTo`/`recvFrom`, `peek` |
+| `Linen.Network.Socket` | high-level API with phantom state tags, `withSocket`/`listenTCP`/`withEventLoop`, `EventLoop`, `sendAll`/`sendTo`/`recvFrom`, `peek` |
 | `Linen.Network.Socket.EventDispatcher` | kqueue/epoll → `Green` bridge, one-shot registrations: `waitReadable`/`waitWritable`(`For`), `awaitReadableFor`/`awaitWritableFor`, `recvFor`/`recvAwait`, `sendAllGreen`(`For`)/`sendAllAwait` |
 | `Linen.Network.Socket.Blocking` | blocking-style `accept`/`connect`/`send`/`sendAll`/`recv` over the non-blocking API, retrying on `wouldBlock` |
+| `Linen.Network.Socket.Scoped` | Owned socket programs with asynchronous connect and nested accept/TLS |
 | `Linen.Network.Sendfile` | portable `sendFile`/`sendFileSimple` (chunked read + `Blocking.sendAll`, no zero-copy syscall); `sendFileWith` over any write action |
 | `Linen.Data.Streaming.Network` | `AppData`, `bindPortTCP`/`getSocketTCP`/`mkAppData`/`runTCPServer`, `acceptSafe` (retry loop, no `partial`) |
 | `Linen.Network.Mime` | MIME lookup (`mime-types`): `defaultMimeMap`, `fileNameExtensions`, `mimeByExt`, `defaultMimeLookup` |
@@ -2513,6 +2513,7 @@ the secrets, never their values.
 | `Linen.Database.SQL.Session` | session monad (`ReaderT`/`ExceptT IO` stack): `sql`/`query`, `transaction`, `run`, `SessionError` |
 | `Linen.Database.SQL.Decoders` | result decoders: `Value`/`Row`/`Result` levels, `singleRow`/`rowList`/`maybeRow`, row width laws |
 | `Linen.Database.SQL.Pool` | thread-safe connection pool (`IO.Ref`): `PoolSettings` (bounded proofs), `create`/`use`/`destroy`/`stats`, `PoolError` |
+| `Linen.Database.SQL.Scoped` | Scoped PostgreSQL connections and pools for typed statements |
 | `Linen.Database.SQL.Statement` | type-safe `Statement p r` = `Params p` + `Result r`: `run`/`command`/`sql_`, `mapResult`/`contramapParams` |
 | `Linen.Database.SQLite.Bindings.Types` | opaque `Database`/`Statement` handles + SQLite result-code (`Error`) and `ColumnType`/`StepResult` enums |
 | `Linen.Database.SQLite.Bindings` | `@[extern]` bindings to the raw `sqlite3_*` C API (vendored amalgamation, no pkg-config) |
@@ -2529,6 +2530,7 @@ the secrets, never their values.
 | `Linen.Database.SQLite.Simple.ToRow` | `ToRow` class, `Unit`/`Only`/tuple (up to arity 7)/`Cons` instances → `Array SQLData` |
 | `Linen.Database.SQLite.Simple.QQ` | the `sql "…"` syntax/`macro_rules` substitute for upstream's Template-Haskell quasiquoter, elaborating directly to `Query.ofString` |
 | `Linen.Database.SQLite.Simple` | the public facade: `withConnection`, `query`/`query_`/`execute`/`execute_`, `fold`/`fold_`, `withTransaction`/`withImmediateTransaction`/`withExclusiveTransaction`/`withSavepoint`, `lastInsertRowId`/`changes`/`totalChanges` |
+| `Linen.Database.SQLite.Scoped` | Scoped SQLite connections and dependent statement cursor actions |
 | `Linen.Database.SQLite.Simple.Function` | user-defined scalar SQL function registration, `createFunction0`–`createFunction3`/`deleteFunction`, built on `sqlite3_create_function_v2` |
 | `Linen.Database.DuckDB.FFI.Types` | opaque `Database`/`Connection`/`Result`/`PreparedStatement`/`Appender`/`LogicalType`/`DataChunk`/`Vector` handles; `duckdb_state`/`duckdb_type`/`duckdb_error_type`/`duckdb_statement_type` enums |
 | `Linen.Database.DuckDB.FFI.OpenConnect` | open/close a `Database` and `Connection` (`ffi/duckdb_shim.c`, links `libduckdb`), idempotent `close` |
@@ -2565,6 +2567,7 @@ the secrets, never their values.
 | `Linen.Database.DuckDB.Simple.Function` | user-defined scalar SQL function registration via `ScalarFunctions` |
 | `Linen.Database.DuckDB.Simple.Generic` | hand-written `STRUCT`/`UNION` decode combinators standing in for GHC-`Generic`-derived instances |
 | `Linen.Database.DuckDB.Simple` | public facade: `withConnection`, `query`/`query_`/`execute`/`execute_`, `fold`/`fold_`, `withTransaction` |
+| `Linen.Database.DuckDB.Scoped` | Scoped DuckDB connections, appenders and files |
 | `Linen.Database.Redis.Types` | `hedis`'s `Database.Redis.Types`: the `RedisArg`/`RedisResult` encode/decode classes over `Reply`, with hand-written `readSignedDecimal`/`readSignedExponential` number parsers substituting for `bytestring-lexing` |
 | `Linen.Database.Redis.Protocol` | `hedis`'s `Database.Redis.Protocol`: the RESP2 `Reply` type, `renderRequest`, and incremental `reply` parser over `Std.Internal.Parsec.ByteArray` (substitutes for the `scanner` package) |
 | `Linen.Database.Redis.ProtocolPipelining` | `hedis`'s `Database.Redis.ProtocolPipelining`: a request/response pipeline queue over a `ConnectionContext`, batching writes with strict `IO` (no `unsafeInterleaveIO`) |
@@ -2574,6 +2577,7 @@ the secrets, never their values.
 | `Linen.Database.Redis.Commands` | `hedis`'s `Database.Redis.Commands`: the uniform "simple" command surface, each command building a RESP request list handed to `sendRequest` |
 | `Linen.Database.Redis.ManualCommands` | `hedis`'s `Database.Redis.ManualCommands`: commands with irregular argument/reply encodings (`SET`/`ZADD`/`SCAN`/`SORT`/Stream/Geo/Cluster families), option records as `structure`s |
 | `Linen.Database.Redis.Connection` | `hedis`'s `Database.Redis.Connection`: `ConnectInfo`/`defaultConnectInfo`, the `connect`/`checkedConnect`/`connectCluster` family, `runRedis`, and an `IO.Ref`-guarded connection pool (substitutes `resource-pool`) |
+| `Linen.Database.Redis.Scoped` | Scoped Redis requests and pool shutdown |
 | `Linen.Database.Redis.Transactions` | `hedis`'s `Database.Redis.Transactions`: `MULTI`/`EXEC`/`WATCH` transactions, `multiExec`, and the `Queued`/`TxResult`/`RedisTx` (an `abbrev` for `StateT Nat Redis`) types |
 | `Linen.Database.Redis.PubSub.Types` | the pure Pub/Sub value types (`Message`/`PubSub`/`Cmd`) and subscription-change algebra, split into a dependency-free module to break the `Hooks`↔`PubSub` import cycle (the Lean substitute for upstream's `{-# SOURCE #-}` boot file) |
 | `Linen.Database.Redis.Hooks` | `hedis`'s `Database.Redis.Hooks`: before/after-request instrumentation hooks (all five, including the Pub/Sub-typed `sendPubSubHook`/`callbackHook`) |
@@ -2713,6 +2717,7 @@ the secrets, never their values.
 | `Linen.PostgREST.Response.OpenAPI` | OpenAPI 3.0 spec generation: `pgTypeToOpenAPI`, `columnSchema`, `generateOpenAPISpec` |
 | `Linen.Network.TLS.Types` | `TLSVersion` (`tls10`–`tls13`), `CipherID`, `TLSOutcome` (`.ok`/`.wantRead`/`.wantWrite`/`.error`) |
 | `Linen.Network.TLS.Context` | OpenSSL `SSL_CTX`/`SSL` FFI (`ffi/tls.c`): `createContext`/`acceptSocket`/`read`/`write`/`getVersion`/`getAlpn`, resumable `newServerSession`/`newClientSession`/`handshakeNB`/`readNB`/`writeNB`/`handshake`, `createClientContext(WithCA)`/`fallbackCaBundle`/`connectSocket` |
+| `Linen.Network.TLS.Scoped` | Handshake and established TLS actions with scoped shutdown |
 | `Linen.Network.TLS.Green` | TLS on green threads over the `EventDispatcher`: `accept`/`connect`/`read`/`write` |
 | `Linen.Network.QUIC.Types` | QUIC (RFC 9000) core types: proof-carrying `ConnectionId`, `Version`, `TransportParams`, `StreamId`, `TransportError`, `TLSConfig` |
 | `Linen.Network.QUIC.Config` | `ServerConfig`/`ClientConfig` with TLS, transport-parameter, and host/port defaults |
@@ -2796,6 +2801,7 @@ the secrets, never their values.
 | `Linen.Network.WebSockets.Handshake` | the RFC 6455 §4 upgrade handshake: `computeAcceptKey`/`isValidHandshake`/`buildHandshakeResponse` |
 | `Linen.Network.WebSockets.Connection` | `mkConnection`: frames outgoing sends, decodes/dispatches incoming frames |
 | `Linen.Network.WebSockets.Client` | `runClient`: outbound (client-side) connections, RFC 6455 §4.1 opening handshake with `Sec-WebSocket-Accept` verification |
+| `Linen.Network.WebSockets.Scoped` | Scoped WebSocket send and receive actions with explicit close states |
 | `Linen.Network.WebSockets` | the package aggregator: `Types`/`Frame`/`Handshake`/`Connection`/`Client` |
 | `Linen.Data.Word8` | ASCII byte classification (`isUpper`/`isDigit`/…), case conversion, named byte constants |
 | `Linen.Numeric.Lens` | `lens`'s `Numeric.Lens`: `integral` (`Prism' Int Nat`), `base`/`binary`/`octal`/`decimal`/`hex` (`Prism' String Nat`), `adding`/`subtracting`/`negated`/`multiplying`/`dividing`/`exponentiating` (`Iso'`) |
@@ -2846,7 +2852,7 @@ the secrets, never their values.
 | `Linen.CDP.Runtime` | the client runtime: `runClient`, `sendCommand`/`sendCommandWait`, `subscribe`/`unsubscribe` |
 | `Linen.CDP` | the package aggregator: `CDP.Domains` + `CDP.Runtime` |
 | `Linen.System.Process` | commands with a deadline and an abort flag, the process group killed; `runBytes`, `Result.describe`, `hermeticGit` |
-| `Linen.System.Worker` | reusable serialized processes, private bounded/newline-free `Line`, deadlines, bounded UTF-8 replies and running-group retirement |
+| `Linen.System.Worker` | reusable serialized processes, private bounded/newline-free `Line`, deadlines, bounded UTF-8 replies and scoped calls and retirement |
 | `Linen.System.LakeLog` | `lake build` output → `Diagnostic`s (`parse`, `splitLocation`, `render`, `isSummary`) |
 | `Linen.System.Git.Remote` | `isBranchName`; `Repository.parse` (`Host`, segments, canonical clone URL) |
 | `Linen.System.GitFn` | functions defined by their git location, run securely: re-exports `Descriptor`, `Policy`, `Build`, `Worker` |

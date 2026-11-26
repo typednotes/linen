@@ -11,6 +11,26 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 - An `OperationHTTP` cookbook for read-only operations carried by POST, with
   a typed EC2 Query filter and an offline mock-transport regression.
+- Idris-inspired indexed resource programs with result-dependent transitions
+  and private ownership. Scoped APIs cover POSIX sockets, TLS, HTTP/1.1, WebSockets,
+  PostgreSQL connections and pools, Redis, SQLite connections and statements,
+  DuckDB connections and child resources, and worker processes.
+- `SocketM.recvOrClose` uses the receive outcome to select the handler's
+  socket state and closes the socket before the EOF or error handler runs.
+
+### Changed
+
+- The simple HTTP client sends and receives through a scoped exchange.
+- WebApp response actions use the shared indexed transition machinery while
+  keeping the existing application and middleware API.
+
+### Fixed
+
+- `ResourceT` cleanup keys remain unique after early release and cannot
+  release resources belonging to a nested run.
+- Clarified that socket state tags check the argument at each call and can
+  become stale on aliases. Added a loopback regression test for alias use
+  after close and sequential repeat close ([#13](https://github.com/typednotes/linen/issues/13)).
 
 ## [2.0.0] - 2026-11-24
 

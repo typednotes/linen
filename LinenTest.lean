@@ -796,3 +796,12 @@ import LinenTest.Linen.Cloud.QueueTest
 import LinenTest.Linen.Cloud.SecretTest
 import LinenTest.Linen.Cloud.BindingTest
 import LinenTest.Linen.CloudTest
+import LinenTest.Linen.Control.ResourceTest
+import LinenTest.Linen.Network.Socket.ScopedTest
+import LinenTest.Linen.Network.TLS.ScopedTest
+import LinenTest.Linen.Network.WebSockets.ScopedTest
+import LinenTest.Linen.Database.SQL.ScopedTest
+import LinenTest.Linen.Database.Redis.ScopedTest
+import LinenTest.Linen.Database.SQLite.ScopedTest
+import LinenTest.Linen.Database.DuckDB.ScopedTest
+import LinenTest.Linen.Network.HTTP.Client.ScopedTest
