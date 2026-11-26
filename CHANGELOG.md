@@ -7,6 +7,11 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+### Added
+
+- An `OperationHTTP` cookbook for read-only operations carried by POST, with
+  a typed EC2 Query filter and an offline mock-transport regression.
+
 ## [2.0.0] - 2026-11-24
 
 ### Changed

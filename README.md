@@ -93,6 +93,7 @@ for the full per-module feature list and module table.
     `/v1-admin` are all rejected. For APIs that use the same `POST` endpoint
     for reads and writes, [`OperationHTTP`](Linen/Control/Monad/Effect/HTTP/SPEC.md)
     adds a typed operation allowlist without exposing raw requests.
+    See the [read-only POST cookbook](docs/read-only-post.md) for an offline example.
   - `PostgreSQL` — the database, instance and role are capability fields the
     handler builds its connection from, so no computation can reach another;
     statement kinds and tables are separately grantable. Queries are a

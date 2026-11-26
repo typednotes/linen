@@ -320,6 +320,78 @@ private def callQueryRead? (op : QueryOp) (input : QueryInput op) :
        "POST sts.amazonaws.com/ Action=GetCallerIdentity&Version=2011-06-15"] do
     throw (IO.userError s!"Unexpected operation requests: {requests}")
 
+-- ── Cookbook: a read carried by POST ────────────────────────────────────────
+
+/-- EC2 Query operations in this example; only the describe is granted. -/
+private inductive Ec2Op where
+  | describeInstances | terminateInstances
+
+/-- Filter values this consumer is allowed to send. -/
+private inductive InstanceState where
+  | running | stopped
+
+/-- The read takes a state filter; the denied write would take an instance ID. -/
+private def Ec2Input : Ec2Op → Type
+  | .describeInstances => InstanceState
+  | .terminateInstances => String
+
+private abbrev ec2Url : Url := u!"https://ec2.example.test/"
+private abbrev ec2Transport : Capability :=
+  { canPost := true, scopes := [under ec2Url [.POST]] }
+
+/-- Encode the action and endpoint in the policy, not in the caller's input. -/
+private def ec2Reads : OperationPolicy ec2Transport Ec2Op Ec2Input where
+  allows
+    | .describeInstances => true
+    | .terminateInstances => false
+  encode
+    | .describeInstances, _, state =>
+      let stateValue := match state with
+        | .running => "running"
+        | .stopped => "stopped"
+      let body := "Action=DescribeInstances&Version=2016-11-15" ++
+        "&Filter.1.Name=instance-state-name&Filter.1.Value.1=" ++ stateValue
+      .request .POST rfl ec2Url (by decide)
+        [(hContentType, "application/x-www-form-urlencoded")] [] (some body.toUTF8)
+    | .terminateInstances, denied, _ => nomatch denied
+
+/-- Consumer code gets the operation effect, not the raw transport effect. -/
+private def describeInstances (state : InstanceState) : Eff [OperationHTTP ec2Reads] Response :=
+  callOperation ec2Reads .describeInstances state
+
+-- S2: even the effect constructor needs this impossible proof for termination.
+example : ec2Reads.allows .terminateInstances ≠ true := by decide
+
+example : True := by
+  fail_if_success
+    have _ : Eff [OperationHTTP ec2Reads] Response :=
+      callOperation ec2Reads .terminateInstances "i-example"
+  fail_if_success
+    have _ : Eff [OperationHTTP ec2Reads] Response :=
+      post (cap := ec2Transport) ec2Url ByteArray.empty
+  trivial
+
+-- S3/S4: both values change only the filter. The transport sees one request
+-- per call, with the same method, endpoint and action and no alternate inputs.
+#eval show IO Unit from do
+  let log ← IO.mkRef ([] : List Request)
+  let _ ← runOperationHTTPWith ec2Reads (fun req => do
+    log.modify (· ++ [req])
+    pure { statusCode := status200, headers := [], body := ByteArray.empty }) do
+      let _ ← describeInstances .running
+      describeInstances .stopped
+  let requests ← log.get
+  unless requests.length == 2 do
+    throw (IO.userError s!"Expected two EC2 mock requests, got {requests.length}")
+  for (req, state) in requests.zip ["running", "stopped"] do
+    let expected := "Action=DescribeInstances&Version=2016-11-15" ++
+      "&Filter.1.Name=instance-state-name&Filter.1.Value.1=" ++ state
+    unless req.method == .standard .POST && req.host == "ec2.example.test" &&
+        req.path == "/" && req.port == 443 && req.isSecure && req.queryString == "" &&
+        req.headers == [(hContentType, "application/x-www-form-urlencoded")] &&
+        req.body == some expected.toUTF8 do
+      throw (IO.userError s!"Unexpected DescribeInstances request for {state}")
+
 -- ── End to end: a round trip through a stub transport ───────────────────────
 
 /-- A transport that records what it was asked to send and answers with a canned
