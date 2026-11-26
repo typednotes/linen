@@ -70,7 +70,8 @@ for the full per-module feature list and module table.
 - **`Control.Resource`** — scoped, state-indexed resource programs for
   sockets, TLS, HTTP/1.1, WebSockets, database connections, and workers. The state
   indices rule out a second close or operations after close in the same
-  program. See [Scoped resource lifecycles](docs/resource-lifecycles.md).
+  program. See [Scoped resource lifecycles](docs/resource-lifecycles.md)
+  and [Indexed monads by example](docs/indexed-monad-examples.md).
 - **`Control.Monad.Effect`** — extensible effects ported from `freer-simple`:
   an open union over an effect row (`Data.OpenUnion`), the `Eff` monad with
   `send`/`interpret`/`interpose`/`reinterpret`/`run`, and the

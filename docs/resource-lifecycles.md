@@ -8,6 +8,9 @@ as a value and run that action again on a newly acquired resource.
 
 ![A listener owns an accepted TCP connection, which can in turn own TLS. Cleanup proceeds in reverse order.](figures/resource-lifecycles.svg)
 
+[Indexed monads by example](indexed-monad-examples.md) walks through a
+complete program for each API.
+
 ## Compose actions
 
 For fixed transitions, use `Control.Resource.Program.ibind`. In the example
