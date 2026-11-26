@@ -34,3 +34,18 @@ private def check (b : Bool) (message : String) : IO Unit :=
   let result ← (w.call line 5000).toBaseIO
   check result.toOption.isNone "invalid UTF-8 reply was accepted"
   check (!(← w.isAlive)) "malformed worker remained reusable"
+
+open Control.Resource
+
+example (_line : Line) : True := by
+  fail_if_success
+    have _ : WorkerM .open_ .closed String :=
+      Program.ibind WorkerM.stop fun () => WorkerM.call _line 2000
+  trivial
+
+#eval show IO Unit from do
+  let line ← IO.ofExcept ((Line.check "scoped request").mapError IO.userError)
+  let answer ← WorkerM.run "cat" <|
+    Program.ibind (WorkerM.call line 2000) fun reply =>
+    Program.map (fun () => reply) WorkerM.stop
+  check (answer == line.value) "scoped worker returned the wrong response"

@@ -3,8 +3,7 @@
 
   Low-level `@[extern]` declarations mapping to the C shim in `ffi/network.c`
   (built and linked by the package's `lakefile.lean` via `extern_lib linenffi`).
-  These are not intended for direct use; see `Network.Socket` for the safe,
-  phantom-typed API.
+  See `Network.Socket` for the high-level API with phantom state tags.
 
   ## Design
 
@@ -67,8 +66,9 @@ opaque recvBufReadN (buf : @& RecvBuffer) (n : USize) : IO ByteArray
 @[extern "linen_socket_create"]
 opaque socketCreate (domain : UInt8) (socktype : UInt8) : IO RawSocket
 
-/-- Close a socket. The fd is also closed by the GC finalizer, but
-    explicit close is preferred for deterministic resource release.
+/-- Close a socket deterministically. After successful close, a sequential
+    call on the same handle does nothing. The finalizer closes handles that
+    still own a descriptor.
     $$\text{socketClose} : \text{Socket} \to \text{IO}(\text{Unit})$$ -/
 @[extern "linen_socket_close"]
 opaque socketClose (sock : @& RawSocket) : IO Unit

@@ -3,6 +3,7 @@
 -- This umbrella includes DuckDB; use narrower imports to avoid building it.
 import Linen.Control.Applicative
 import Linen.Control.Arrow
+import Linen.Control.Resource
 import Linen.Control.Concurrent
 import Linen.Control.Exception
 import Linen.Control.AutoUpdate
@@ -312,6 +313,7 @@ import Linen.Database.SQL.Encoders
 import Linen.Database.SQL.Session
 import Linen.Database.SQL.Decoders
 import Linen.Database.SQL.Pool
+import Linen.Database.SQL.Scoped
 import Linen.Database.SQL.Statement
 import Linen.Crypto.JOSE.FFI
 import Linen.Crypto.JOSE.Types
@@ -398,6 +400,7 @@ import Linen.Network.HTTP.Client.Types
 import Linen.Network.HTTP.Client.Contrib
 import Linen.Network.HTTP.Client.Request
 import Linen.Network.HTTP.Client.Response
+import Linen.Network.HTTP.Client.Scoped
 import Linen.Network.HTTP.Client.Connection
 import Linen.Network.HTTP.Client.Redirect
 import Linen.Network.HTTP.Client.Retry
@@ -423,10 +426,12 @@ import Linen.Network.Socket.FFI
 import Linen.Network.Socket
 import Linen.Network.Socket.EventDispatcher
 import Linen.Network.Socket.Blocking
+import Linen.Network.Socket.Scoped
 import Linen.Network.Sendfile
 import Linen.Data.Streaming.Network
 import Linen.Network.TLS.Types
 import Linen.Network.TLS.Context
+import Linen.Network.TLS.Scoped
 import Linen.Network.TLS.Green
 import Linen.Network.Mime
 import Linen.Network.URI
@@ -579,6 +584,7 @@ import Linen.Network.WebSockets.Frame
 import Linen.Network.WebSockets.Handshake
 import Linen.Network.WebSockets.Connection
 import Linen.Network.WebSockets.Client
+import Linen.Network.WebSockets.Scoped
 import Linen.Network.WebSockets
 import Linen.Network.WebApp.Server.WebSockets
 import Linen.CDP
@@ -672,6 +678,7 @@ import Linen.Database.SQLite.Simple.FromRow
 import Linen.Database.SQLite.Simple.ToRow
 import Linen.Database.SQLite.Simple.QQ
 import Linen.Database.SQLite.Simple
+import Linen.Database.SQLite.Scoped
 import Linen.Database.SQLite.Simple.Function
 import Linen.Database.DuckDB.FFI.Appender
 import Linen.Database.DuckDB.FFI.BindValues
@@ -708,7 +715,9 @@ import Linen.Database.DuckDB.Simple.ToField
 import Linen.Database.DuckDB.Simple.ToRow
 import Linen.Database.DuckDB.Simple.Types
 import Linen.Database.DuckDB.Simple
+import Linen.Database.DuckDB.Scoped
 import Linen.Database.Redis
+import Linen.Database.Redis.Scoped
 import Linen.Database.Redis.Cluster
 import Linen.Database.Redis.Cluster.Command
 import Linen.Database.Redis.Cluster.HashSlot

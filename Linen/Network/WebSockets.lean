@@ -10,3 +10,5 @@ import Linen.Network.WebSockets.Types
 import Linen.Network.WebSockets.Frame
 import Linen.Network.WebSockets.Handshake
 import Linen.Network.WebSockets.Connection
+
+import Linen.Network.WebSockets.Scoped

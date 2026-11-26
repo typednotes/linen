@@ -6,34 +6,20 @@
   module hierarchy and built on the standard library (`IO.Error`, `ByteArray`,
   `USize`, …).
 
-  ## Dependent-Type Encoding of POSIX Socket Lifecycle
+  ## Socket state indices
 
-  The POSIX socket API is a state machine: a socket must be created, then
-  bound, then set to listen, before it can accept connections. Calling
-  operations in the wrong order returns an error code that nothing forces
-  you to check.
-
-  Lean 4's dependent types let us encode this state machine directly in the
-  type system via a **phantom type parameter** on `Socket`:
-
-  ```
-  Socket (state : SocketState)    -- state is erased at runtime (zero cost)
-  ```
-
-  Every API function declares which state it requires and which state it
-  produces. The Lean kernel rejects any program that violates the protocol
-  -- no runtime check, no assert, no exception. Just a type error.
-
-  The `.closed` state and the proof obligation `state ≠ .closed` on `close`
-  additionally prevent **double-close** at compile time: once a socket enters
-  the `.closed` state, no operation (including `close` itself) will accept it.
+  `Socket (state : SocketState)` tags a socket value with the state recorded
+  when it was returned. Signatures use this index to reject a mismatched
+  tag, such as passing `Socket .fresh` to `send`. The index is erased at
+  runtime. Earlier aliases share the underlying socket and keep their
+  original tags when a transition returns a new value.
 
   ## Non-blocking I/O and External State Changes
 
-  All socket operations are non-blocking by default and return **outcome
+  The non-blocking I/O operations return **outcome
   sum types** (`AcceptOutcome`, `RecvOutcome`, `SendOutcome`, `ConnectOutcome`)
-  that force callers to handle every possibility: success, `wouldBlock`
-  (EAGAIN), EOF (peer closed), and errors. This models the fact that OS-level
+  that represent success, `wouldBlock` (EAGAIN), EOF (peer closed), and
+  errors. This models the fact that OS-level
   state can change asynchronously (peer disconnect, non-blocking connect in
   progress, send buffer full).
 
@@ -203,56 +189,21 @@ opaque SocketHandle : NonemptyType
 abbrev RawSocket : Type := SocketHandle.type
 instance : Nonempty RawSocket := SocketHandle.property
 
-/-- POSIX socket lifecycle states.
-
-    Lean 4's dependent types encode the full POSIX state machine as a phantom
-    parameter on `Socket`. Each API function constrains which state it accepts
-    and which state it returns, so the compiler enforces the protocol:
-
-    - `bind`          requires `.fresh`,      produces `.bound`
-    - `listen`        requires `.bound`,      produces `.listening`
-    - `accept`        requires `.listening`,  returns `AcceptOutcome`
-    - `connect`       requires `.fresh`,      returns `ConnectOutcome`
-    - `connectFinish` requires `.connecting`, returns `ConnectOutcome`
-    - `send`          requires `.connected`,  returns `SendOutcome`
-    - `recv`          requires `.connected`,  returns `RecvOutcome`
-    - `close`         requires `state ≠ .closed` (proof obligation), produces `.closed`
-
-    The parameter is fully erased at runtime (zero cost). Protocol violations
-    are compile-time errors -- not exceptions, not asserts, not runtime checks. -/
+/-- State tags used in the signatures of the high-level socket operations. -/
 inductive SocketState where
   | fresh       -- Created via socket(), not yet bound or connected
   | bound       -- bind() succeeded
   | listening   -- listen() succeeded
   | connecting  -- Non-blocking connect() returned EINPROGRESS
   | connected   -- connect() or accept() produced this socket
-  | closed      -- close() succeeded — no further operations are valid
+  | closed      -- A successful close returned this tag
 deriving BEq, DecidableEq, Repr
 
-/-- A socket tagged with its POSIX lifecycle state.
+/-- A socket handle tagged with the state recorded when this value was returned.
 
-    This is the central example of Lean 4's phantom-type-parameter technique:
-    the `state` parameter exists only at the type level and is **completely
-    erased** at runtime. A `Socket .connected` and a `Socket .fresh` have
-    identical runtime representations (both are opaque FFI handles), yet the
-    compiler statically distinguishes them and rejects invalid transitions.
-
-    ```
-    Fresh ──bind──→ Bound ──listen──→ Listening ──accept──→ Connected
-      │                                                      (send/recv)
-      ├──connect──→ Connected (immediate)
-      └──connect──→ Connecting ──connectFinish──→ Connected
-                                                                 │
-    Any state ──close(proof: state ≠ .closed)──→ Closed
-    ```
-
-    **Double-close prevention:** `close` requires a proof `state ≠ .closed`.
-    For concrete states (`.fresh`, `.connected`, ...) the proof is discharged
-    automatically by `decide`. For a `Socket .closed` value the proof is
-    **impossible** -- the compiler rejects the call at type-checking time.
-
-    The constructor is `protected` to prevent casual state fabrication.
-    Use the high-level API in `Network.Socket` for state transitions. -/
+    `state` is erased at runtime. The high-level API checks it at each call.
+    Earlier aliases can carry stale tags, and the low-level API exposes the
+    raw handle. Use the handle returned by each high-level transition. -/
 structure Socket (state : SocketState) where
   protected mk ::
   raw : RawSocket
@@ -284,12 +235,9 @@ theorem SocketState.beq_refl (s : SocketState) : (s == s) = true := by
 
 /-! ### Outcome Sum Types
 
-    Non-blocking socket operations return **outcome types** that force callers
-    to handle every possibility. The type system models the programmer's
-    *knowledge* of the socket state, updated at each synchronization point.
-
-    These encode the fact that OS-level state can change asynchronously:
-    peer disconnect, non-blocking connect in progress, send buffer full, etc. -/
+    Outcome types represent the results of non-blocking socket calls.
+    An outcome can report a peer disconnect, a connection still in progress,
+    or a full send buffer. -/
 
 /-- Outcome of a non-blocking `accept` on a listening socket.
     - `.accepted` — a new connected socket and the peer address

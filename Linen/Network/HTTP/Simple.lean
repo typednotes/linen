@@ -8,9 +8,7 @@
   `Network.HTTP.Simple` from the `http-conduit` package.
 -/
 
-import Linen.Network.HTTP.Client.Types
-import Linen.Network.HTTP.Client.Connection
-import Linen.Network.HTTP.Client.Response
+import Linen.Network.HTTP.Client.Scoped
 
 namespace Network.HTTP.Simple
 
@@ -71,22 +69,13 @@ def parseUrl! (url : String) : IO Request := do
     $$\text{simpleHttp} : \text{String} \to \text{IO ByteArray}$$ -/
 def simpleHttp (url : String) : IO ByteArray := do
   let req ← parseUrl! url
-  let conn ← connect req.host req.port req.isSecure req.timeoutMillis
-  try
-    let resp ← performRequest conn req
-    return resp.body
-  finally
-    conn.connClose
+  (·.body) <$> ExchangeM.request req
 
 /-- Perform an HTTP request and return the full response with a ByteArray body.
     $$\text{httpBS} : \text{Request} \to \text{IO Response}$$ -/
-def httpBS (req : Request) : IO Response := do
+def httpBS (req : Request) : IO Response :=
   let port := if req.port == 0 then defaultPort req.isSecure else req.port
-  let conn ← connect req.host port req.isSecure req.timeoutMillis
-  try
-    performRequest conn req
-  finally
-    conn.connClose
+  ExchangeM.request { req with port }
 
 /-- Perform an HTTP request and return the response body as a ByteArray.
     Alias for `httpBS` that returns just the body.

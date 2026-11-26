@@ -57,7 +57,7 @@ inductive ConnectionState where
   | open_     -- data transfer active
   | closing   -- close frame sent, awaiting response
   | closed    -- connection terminated
-deriving BEq, Repr
+deriving BEq, DecidableEq, Repr
 
 /-- WebSocket connection options. -/
 structure ConnectionOptions where

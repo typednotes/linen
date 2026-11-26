@@ -103,4 +103,13 @@ def echoApp : Request → (Response → Green ResponseReceived) → AppM .pendin
   let n ← Green.block (AppM.unsafeLift (α := Nat) (pre := .pending) (post := .pending) (pure 7)).run tok
   unless n == 7 do throw (IO.userError s!"unsafeLift expected 7, got {n}")
 
+-- A successful application needs a response transition. It cannot perform two.
+example (_callback : Response → Green ResponseReceived) (_response : Response) : True := by
+  fail_if_success
+    have _ : AppM .pending .sent ResponseReceived := AppM.ipure ResponseReceived.done
+  fail_if_success
+    have _ : AppM .pending .sent ResponseReceived :=
+      AppM.ibind (AppM.respond _callback _response) fun _ => AppM.respond _callback _response
+  trivial
+
 end Tests.Network.WebApp.Internal

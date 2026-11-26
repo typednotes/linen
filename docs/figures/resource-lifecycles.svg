@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 240" role="img"
+     aria-labelledby="title desc">
+  <title id="title">Nested resource scopes</title>
+  <desc id="desc">A listening socket stays owned while an accepted TCP socket runs.
+  A TLS session can be established within the accepted socket. TLS is released
+  first, then the accepted socket, and finally the listener.</desc>
+  <rect x="2" y="2" width="676" height="236" rx="14" fill="#f8fafc" stroke="#64748b"/>
+  <g font-family="system-ui, sans-serif" font-size="16" fill="#0f172a">
+    <rect x="24" y="26" width="632" height="188" rx="12" fill="#e0f2fe" stroke="#0369a1"/>
+    <text x="44" y="55" font-weight="650">1  Listening socket</text>
+    <rect x="74" y="68" width="562" height="112" rx="10" fill="#dcfce7" stroke="#15803d"/>
+    <text x="94" y="96" font-weight="650">2  Accepted TCP socket</text>
+    <rect x="124" y="108" width="492" height="38" rx="8" fill="#fef3c7" stroke="#a16207"/>
+    <text x="144" y="133" font-weight="650">3  TLS session</text>
+    <text x="596" y="133" text-anchor="end">Release TLS</text>
+    <text x="616" y="169" text-anchor="end">Close accepted socket</text>
+    <text x="636" y="202" text-anchor="end">Close listener</text>
+  </g>
+</svg>

@@ -57,6 +57,24 @@ namespace Tests.Control.Monad.Trans.Resource
 
 /-! ### `ReleaseKey` equality -/
 
+-- Early release leaves other keys valid. A key from an outer scope
+-- cannot release anything in an inner scope.
+#eval show IO Unit from do
+  let events ← IO.mkRef (#[] : Array String)
+  runResourceT do
+    let (first, _) ← allocate (pure ()) (fun () => events.modify (·.push "first"))
+    let (second, _) ← allocate (pure ()) (fun () => events.modify (·.push "second"))
+    release first
+    let _ ← allocate (pure ()) (fun () => events.modify (·.push "third"))
+    runResourceT do
+      let _ ← allocate (pure ()) (fun () => events.modify (·.push "inner"))
+      release second
+      unless (← events.get) == #["first"] do
+        throw (IO.userError "an outer key released an inner resource")
+    release second
+  unless (← events.get) == #["first", "inner", "second", "third"] do
+    throw (IO.userError "an early release invalidated a different resource")
+
 example (k : ReleaseKey) : k = k ↔ k.id = k.id := releaseKey_eq k k
 
 end Tests.Control.Monad.Trans.Resource
