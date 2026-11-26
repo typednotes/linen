@@ -1,7 +1,7 @@
 # `zlib` module dependencies
 
 Topological order of every module of the [`zlib`](https://hackage.haskell.org/package/zlib)
-Hackage package imported into `linen`, per [AGENTS.md](../../AGENTS.md)'s
+Hackage package imported into `linen`, per [AGENTS.md](../../../AGENTS.md)'s
 Hackage-import convention. A prerequisite of [`io-streams`](../IoStreams/dependencies.md)
 and, transitively, [`pdf-toolbox-core`](../PdfToolboxCore/dependencies.md) (PDF
 stream data is compressed with `FlateDecode`, the zlib/RFC 1950 format).

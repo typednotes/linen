@@ -16,6 +16,7 @@
 
 #include <lean/lean.h>
 #include <zlib.h>
+#include <pthread.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -45,11 +46,15 @@ static void linen_zlib_noop_foreach(void *mod, b_lean_obj_arg fn) {
     /* no sub-objects to traverse */
 }
 
+static pthread_once_t linen_zlib_inflate_class_once = PTHREAD_ONCE_INIT;
+
+static void register_zlib_inflate_class(void) {
+    g_linen_zlib_inflate_class = lean_register_external_class(
+        linen_zlib_inflate_finalizer, linen_zlib_noop_foreach);
+}
+
 static void ensure_zlib_class(void) {
-    if (!g_linen_zlib_inflate_class) {
-        g_linen_zlib_inflate_class = lean_register_external_class(
-            linen_zlib_inflate_finalizer, linen_zlib_noop_foreach);
-    }
+    pthread_once(&linen_zlib_inflate_class_once, register_zlib_inflate_class);
 }
 
 static lean_obj_res linen_zlib_mk_io_error(const char *msg) {
@@ -290,11 +295,15 @@ static void linen_zlib_deflate_finalizer(void *ptr) {
     }
 }
 
+static pthread_once_t linen_zlib_deflate_class_once = PTHREAD_ONCE_INIT;
+
+static void register_zlib_deflate_class(void) {
+    g_linen_zlib_deflate_class = lean_register_external_class(
+        linen_zlib_deflate_finalizer, linen_zlib_noop_foreach);
+}
+
 static void ensure_zlib_deflate_class(void) {
-    if (!g_linen_zlib_deflate_class) {
-        g_linen_zlib_deflate_class = lean_register_external_class(
-            linen_zlib_deflate_finalizer, linen_zlib_noop_foreach);
-    }
+    pthread_once(&linen_zlib_deflate_class_once, register_zlib_deflate_class);
 }
 
 /*

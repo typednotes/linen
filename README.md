@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen LinenTest --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen LinenTest --include='*.lean' | wc -l -->
-  <strong>808 modules</strong> · <strong>511 compile-time theorems</strong> · <strong>11666 <code>#guard*</code> directives</strong>
+  <strong>808 modules</strong> · <strong>512 compile-time theorems</strong> · <strong>11667 <code>#guard*</code> directives</strong>
 </p>
 
 ## Overview
@@ -44,7 +44,7 @@ Three rules hold across the whole library:
 - **No `partial`, no `sorry`** — all recursion is structural or has a proven
   termination argument, and proofs are complete.
 - **Everything is tested** — each module has a `LinenTest/` counterpart whose
-  `#guard` examples run on every build.
+  `#guard` examples run with `lake test`.
 
 ## CI and releases
 
@@ -398,20 +398,6 @@ If a consumer evaluates imported FFI functions with `#eval`, enable
 `precompileModules := true` on that consumer's library. Ordinary executables
 do not need precompilation.
 
-`linen`'s own `Linen` library is not precompiled either, and for the same
-reason — **you build only the modules you import.** A package whose only
-import is `Linen.Data.Functor` builds one module, not all ~770. If you call an
-`@[extern]` binding from `#eval` or `#guard` (as opposed to from compiled
-code, which is unaffected), set `precompileModules := true` on **your**
-library: that is what makes the bindings reachable through the interpreter, at
-the cost of building the whole dependency.
-
-The native layer is separate. A package that only elaborates modules builds no
-C shims at all; as soon as anything **links** — any `lean_exe`, or a library
-with `precompileModules := true` — Lake builds every `extern_lib` in the
-package, so the shims are compiled and DuckDB's pinned archive fetched even if
-you imported only pure-Lean modules.
-
 ## Modules
 
 See the **[documentation index](docs/README.md)** and the **[module reference](docs/modules.md)**.
@@ -431,8 +417,8 @@ It covers Linux x86_64, Linux arm64 and macOS, consumer library/executable
 builds on those platforms, the unsealable host, and HTTP/2 conformance.
 
 For a release, update the version and CHANGELOG, run
-`ci/check-release.sh vX.Y.Z`, push `main`, and wait for CI on that exact
-commit before pushing its version tag. The
+`ci/check-release.sh vX.Y.Z`, then push the release commit and version tag
+together. The publisher waits for CI on that commit. The
 [`release.yml`](https://github.com/typednotes/linen/blob/main/.github/workflows/release.yml)
 verification job has only read permissions (`contents`, `actions`, `checks`).
 [`ci/require-main-ci.sh`](https://github.com/typednotes/linen/blob/main/ci/require-main-ci.sh)

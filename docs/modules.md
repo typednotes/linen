@@ -789,10 +789,11 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   column: `text`/`int`/`nat`/`float`/`bool`/`nullable`/`map`, with a hand-rolled
   float parser), `Row` (`column`/`seq`/`pair`/`triple` with width laws), and
   `Result` (`rowList`/`rowArray`/`singleRow`/`maybeRow`/`rowsAffected`).
-- `Database.SQL.Pool` — a thread-safe connection pool over `IO.Ref` + `Array`:
-  `PoolSettings` (bounded `maxSize`/`idleTimeout` proofs), on-demand connection
-  creation up to `maxSize`, `use` (auto-return on success/error/exception),
-  `destroy`, `stats`, and a `PoolError` type.
+- `Database.SQL.Pool` — a mutex-protected connection pool. It reserves
+  capacity before opening a connection, reports exhaustion, and returns
+  connections after sessions succeed or fail. `destroy` drains idle
+  connections. `stats` reports successful opens and current usage.
+  See the [pool contract](../Linen/Database/SQL/Pool/SPEC.md).
 - `Database.SQL.Statement` — type-safe parameterized statements
   `Statement p r` composing an `Encoders.Params p` with a `Decoders.Result r`:
   `run` (within a `Session`), `command`/`sql_` constructors, and

@@ -3,7 +3,7 @@
 Topological order of every module of the
 [`network-uri`](https://hackage.haskell.org/package/network-uri) Hackage package,
 source at [haskell/network-uri](https://github.com/haskell/network-uri), imported
-into `linen` per [AGENTS.md](../../AGENTS.md)'s Hackage-import convention.
+into `linen` per [AGENTS.md](../../../AGENTS.md)'s Hackage-import convention.
 
 An edge **A → B** means *module A imports module B*, so **B must be built before A**.
 

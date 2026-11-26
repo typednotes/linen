@@ -2,8 +2,8 @@
   Tests for `Linen.Database.SQL.Pool`.
 
   `PoolSettings` (with its proof fields) and `PoolError` are pure, so they are
-  checked with `#guard`. `create`/`use`/`destroy`/`stats` are `IO` over live
-  connections, so they are pinned at the type level only.
+  checked with `#guard`. An offline regression exercises checkout accounting
+  when libpq cannot open a connection.
 -/
 import Linen.Database.SQL.Pool
 
@@ -47,5 +47,20 @@ example : PoolSettings → IO Pool := Pool.create
 example {α} : Pool → Session α → IO (Except PoolError α) := Pool.use
 example : Pool → IO Unit := Pool.destroy
 example : Pool → IO (Nat × Nat × Nat) := Pool.stats
+
+-- S2: a failed open restores capacity and does not count as a creation.
+#eval show IO Unit from do
+  let settings := Settings.uri "host=/dev/null connect_timeout=2"
+  let pool ← Pool.create { maxSize := 1, connSettings := settings }
+  try
+    for _ in [:2] do
+      match ← pool.use (pure () : Session Unit) with
+      | .error (.connectionError _) => pure ()
+      | .error .poolExhausted => throw (IO.userError "failed checkout kept its reservation")
+      | _ => throw (IO.userError "expected to fail opening the PostgreSQL connection")
+      unless (← pool.stats) == (0, 0, 0) do
+        throw (IO.userError "failed checkout changed pool statistics")
+  finally
+    pool.destroy
 
 end Tests.Database.SQL.Pool

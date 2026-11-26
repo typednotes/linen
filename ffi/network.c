@@ -34,7 +34,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <stdatomic.h>
+#include <pthread.h>
 #include <sched.h>
 
 /* Platform-specific event multiplexing headers */
@@ -65,18 +65,17 @@ static void linen_noop_foreach(void *mod, b_lean_obj_arg fn) {
     /* nothing to traverse */
 }
 
-/* Ensure external classes are registered (lazy, thread-safe via atomic).
- * Uses a simple atomic flag to ensure registration happens exactly once.
- * The Lean runtime must be initialized before this is first called. */
-static atomic_int g_linen_classes_initialized = 0;
+static pthread_once_t linen_classes_once = PTHREAD_ONCE_INIT;
 
-static void linen_ensure_classes_initialized(void) {
-    if (atomic_load_explicit(&g_linen_classes_initialized, memory_order_acquire)) return;
+static void linen_register_classes(void) {
     g_linen_socket_class = lean_register_external_class(
         &linen_socket_finalizer, &linen_noop_foreach);
     g_linen_event_loop_class = lean_register_external_class(
         &linen_event_loop_finalizer, &linen_noop_foreach);
-    atomic_store_explicit(&g_linen_classes_initialized, 1, memory_order_release);
+}
+
+static void linen_ensure_classes_initialized(void) {
+    pthread_once(&linen_classes_once, linen_register_classes);
 }
 
 /* Wrap a raw fd into a Lean external object */
@@ -162,10 +161,15 @@ static void linen_recvbuf_finalizer(void *ptr) {
     free(ptr); /* free the struct, NOT the fd */
 }
 
-static void linen_ensure_recvbuf_class(void) {
-    if (g_linen_recvbuf_class) return;
+static pthread_once_t linen_recvbuf_class_once = PTHREAD_ONCE_INIT;
+
+static void linen_register_recvbuf_class(void) {
     g_linen_recvbuf_class = lean_register_external_class(
         &linen_recvbuf_finalizer, &linen_noop_foreach);
+}
+
+static void linen_ensure_recvbuf_class(void) {
+    pthread_once(&linen_recvbuf_class_once, linen_register_recvbuf_class);
 }
 
 static inline linen_recvbuf_t *get_recvbuf(b_lean_obj_arg obj) {

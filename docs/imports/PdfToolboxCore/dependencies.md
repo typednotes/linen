@@ -4,7 +4,7 @@ Topological order of every module of the
 [`pdf-toolbox-core`](https://hackage.haskell.org/package/pdf-toolbox-core)
 Hackage package, source at [Yuras/pdf-toolbox](https://github.com/Yuras/pdf-toolbox)
 (`core/` subdirectory), imported into `linen` per
-[AGENTS.md](../../AGENTS.md)'s Hackage-import convention, as a prerequisite of
+[AGENTS.md](../../../AGENTS.md)'s Hackage-import convention, as a prerequisite of
 [`pdf-toolbox-content`](../PdfToolboxContent/dependencies.md) and
 [`pdf-toolbox-document`](../PdfToolboxDocument/dependencies.md).
 

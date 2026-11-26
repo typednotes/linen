@@ -1,7 +1,7 @@
 # `io-streams` module dependencies
 
 Topological order of every module of the [`io-streams`](https://hackage.haskell.org/package/io-streams)
-Hackage package imported into `linen`, per [AGENTS.md](../../AGENTS.md)'s
+Hackage package imported into `linen`, per [AGENTS.md](../../../AGENTS.md)'s
 Hackage-import convention. A prerequisite of
 [`pdf-toolbox-core`](../PdfToolboxCore/dependencies.md), the only consumer of
 `io-streams` anywhere in `pdf-toolbox-*`/`linen`.

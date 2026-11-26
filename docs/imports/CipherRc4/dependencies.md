@@ -1,7 +1,7 @@
 # `cipher-rc4` module dependencies
 
 Topological order of every module of the [`cipher-rc4`](https://hackage.haskell.org/package/cipher-rc4)
-Hackage package imported into `linen`, per [AGENTS.md](../../AGENTS.md)'s
+Hackage package imported into `linen`, per [AGENTS.md](../../../AGENTS.md)'s
 Hackage-import convention. A prerequisite of
 [`pdf-toolbox-core`](../PdfToolboxCore/dependencies.md)'s `V2`-algorithm
 (RC4) decryptor.

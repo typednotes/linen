@@ -5,7 +5,7 @@ Topological order of every module of the
 source: https://hackage-content.haskell.org/package/hedis-0.16.1/src/hedis.cabal
 — the real `exposed-modules`/`build-depends` fields were fetched and read
 verbatim, not recalled from memory) planned for import into `linen`, per
-[AGENTS.md](../../AGENTS.md)'s Hackage-import convention.
+[AGENTS.md](../../../AGENTS.md)'s Hackage-import convention.
 
 **Status: planned, not yet ported.** This document is the dependency plan
 only — no `Linen/`/`Tests/` code has been written yet.

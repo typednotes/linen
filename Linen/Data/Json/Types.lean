@@ -197,17 +197,19 @@ theorem lookup_sizeOf_lt {obj : Value} {key : String} {v : Value}
 
 end Value
 
--- ── DecidableEq for Float ────────────────────────────────────────────
-
-/-- Two IEEE 754 floats with identical bit representations are equal.
-    This is a sound axiom: `Float.toBits` is the 64-bit representation. -/
-axiom Float.eq_of_toBits_eq : ∀ (a b : Float), a.toBits = b.toBits → a = b
-
-instance : DecidableEq Float := fun a b =>
-  if h : a.toBits = b.toBits then
-    isTrue (Float.eq_of_toBits_eq a b h)
-  else
-    isFalse (fun hab => h (congrArg Float.toBits hab))
+/-- The bit pattern determines the value in Lean's model of `Float`. -/
+theorem Float.eq_of_toBits_eq (a b : Float) (h : a.toBits = b.toBits) : a = b := by
+  cases a with
+  | ofModel a =>
+    cases b with
+    | ofModel b =>
+      cases a with
+      | mk a ha =>
+        cases b with
+        | mk b hb =>
+          change a = b at h
+          cases h
+          rfl
 
 -- ── DecidableEq for Value ───────────────────────────────────────────
 

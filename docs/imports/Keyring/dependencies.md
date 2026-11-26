@@ -1,7 +1,7 @@
 # `keyring` module dependencies
 
 Topological order of every module of the [`keyring`](https://crates.io/crates/keyring)
-Rust crate imported into `linen`, per [AGENTS.md](../../AGENTS.md)'s
+Rust crate imported into `linen`, per [AGENTS.md](../../../AGENTS.md)'s
 crates.io-import convention.
 
 An edge **A → B** means *module A imports module B*, so **B must be built before A**.

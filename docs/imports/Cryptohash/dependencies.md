@@ -1,7 +1,7 @@
 # `cryptohash` module dependencies
 
 Topological order of every module of the [`cryptohash`](https://hackage.haskell.org/package/cryptohash)
-Hackage package imported into `linen`, per [AGENTS.md](../../AGENTS.md)'s
+Hackage package imported into `linen`, per [AGENTS.md](../../../AGENTS.md)'s
 Hackage-import convention. A prerequisite of
 [`pdf-toolbox-core`](../PdfToolboxCore/dependencies.md), which uses it for the
 PDF Standard Security Handler's key-derivation hashing (ISO 32000 §7.6.3.3).

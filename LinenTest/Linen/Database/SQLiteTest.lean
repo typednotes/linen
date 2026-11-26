@@ -7,6 +7,23 @@ open Database.SQLite3
 
 namespace Tests.Database.SQLite3
 
+-- Native class registration is shared even though each task owns its database.
+#eval show IO Unit from do
+  let start ← IO.Promise.new (α := Unit)
+  let mut tasks := #[]
+  for _ in [:8] do
+    let task ← IO.asTask (prio := .dedicated) do
+      IO.wait start.result!
+      let db ← open_ ":memory:"
+      try
+        exec db "CREATE TABLE test (value INTEGER)"
+      finally
+        close db
+    tasks := tasks.push task
+  start.resolve ()
+  for task in tasks do
+    IO.ofExcept task.get
+
 -- Full create/insert/query exercise against a private in-memory database,
 --    using the untyped `SQLData`/`bind`/`columns` surface.
 #eval show IO Unit from do
