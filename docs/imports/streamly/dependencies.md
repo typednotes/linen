@@ -6,7 +6,7 @@ Topological order of the in-scope modules of the
 https://hackage-content.haskell.org/package/streamly-core-0.3.1/src/streamly-core.cabal
 — the real `exposed-modules`/`build-depends` fields were fetched and read
 verbatim, not recalled from memory) planned for import into `linen`, per
-[AGENTS.md](../../AGENTS.md)'s Hackage-import convention.
+[AGENTS.md](../../../AGENTS.md)'s Hackage-import convention.
 
 **Status: done.** All in-scope modules have been ported to `Linen/` (with
 mirrored `Tests/` counterparts) and merged into `Linen.lean`/`Tests.lean`;

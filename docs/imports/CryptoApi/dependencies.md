@@ -1,7 +1,7 @@
 # `crypto-api` module dependencies
 
 Topological order of every module of the [`crypto-api`](https://hackage.haskell.org/package/crypto-api)
-Hackage package imported into `linen`, per [AGENTS.md](../../AGENTS.md)'s
+Hackage package imported into `linen`, per [AGENTS.md](../../../AGENTS.md)'s
 Hackage-import convention. A prerequisite of
 [`pdf-toolbox-core`](../PdfToolboxCore/dependencies.md)'s `AESV2` decryptor,
 which needs PKCS5 unpadding after the CBC decrypt.

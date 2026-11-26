@@ -1,7 +1,7 @@
 # `cipher-aes` module dependencies
 
 Topological order of every module of the [`cipher-aes`](https://hackage.haskell.org/package/cipher-aes)
-Hackage package imported into `linen`, per [AGENTS.md](../../AGENTS.md)'s
+Hackage package imported into `linen`, per [AGENTS.md](../../../AGENTS.md)'s
 Hackage-import convention. A prerequisite of
 [`pdf-toolbox-core`](../PdfToolboxCore/dependencies.md)'s `AESV2`-algorithm
 decryptor.

@@ -9,7 +9,7 @@ read verbatim, not recalled from memory), together with the AST it is built on,
 the separate [`pandoc-types`](https://hackage.haskell.org/package/pandoc-types)
 package (v1.23.1,
 https://hackage-content.haskell.org/package/pandoc-types-1.23.1/src/pandoc-types.cabal),
-planned for import into `linen` per [AGENTS.md](../../AGENTS.md)'s
+planned for import into `linen` per [AGENTS.md](../../../AGENTS.md)'s
 Hackage-import convention.
 
 **Status: done.** All 34 in-scope modules are ported as `Linen.Text.Pandoc.*`

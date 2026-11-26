@@ -5,7 +5,7 @@ Topological order of every module of the
 https://hackage-content.haskell.org/package/lens-5.3.6/src/lens.cabal — the
 real `exposed-modules`/`build-depends` fields were fetched and read
 verbatim, not recalled from memory) to import into `linen`, per
-[AGENTS.md](../../AGENTS.md)'s Hackage-import convention.
+[AGENTS.md](../../../AGENTS.md)'s Hackage-import convention.
 
 **Status: done.** All 64 planned modules ported, plus `Control.Lens.Zoom`
 (#37) and `Control.Lens.Reified` (#38) — gap-filled after batch B initially

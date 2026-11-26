@@ -37,7 +37,7 @@
 #include "sqlite3.h"
 #include <string.h>
 #include <stdlib.h>
-#include <stdatomic.h>
+#include <pthread.h>
 
 /* ────────────────────────────────────────────────────────────
  * External classes for sqlite3* and sqlite3_stmt*
@@ -97,11 +97,9 @@ typedef struct {
 static void linen_sqlite3_funcctx_finalizer(void *ptr) { free(ptr); }
 static void linen_sqlite3_funcargs_finalizer(void *ptr) { free(ptr); }
 
-static atomic_int g_linen_sqlite3_classes_initialized = 0;
+static pthread_once_t linen_sqlite3_classes_once = PTHREAD_ONCE_INIT;
 
-static void linen_sqlite3_ensure_classes_initialized(void) {
-    if (atomic_load_explicit(&g_linen_sqlite3_classes_initialized, memory_order_acquire))
-        return;
+static void linen_sqlite3_register_classes(void) {
     g_linen_sqlite3_db_class = lean_register_external_class(
         &linen_sqlite3_db_finalizer, &linen_noop_foreach_sqlite3);
     g_linen_sqlite3_stmt_class = lean_register_external_class(
@@ -110,7 +108,10 @@ static void linen_sqlite3_ensure_classes_initialized(void) {
         &linen_sqlite3_funcctx_finalizer, &linen_noop_foreach_sqlite3);
     g_linen_sqlite3_funcargs_class = lean_register_external_class(
         &linen_sqlite3_funcargs_finalizer, &linen_noop_foreach_sqlite3);
-    atomic_store_explicit(&g_linen_sqlite3_classes_initialized, 1, memory_order_release);
+}
+
+static void linen_sqlite3_ensure_classes_initialized(void) {
+    pthread_once(&linen_sqlite3_classes_once, linen_sqlite3_register_classes);
 }
 
 static inline lean_obj_res mk_sqlite3_funcctx(sqlite3_context *ctx) {

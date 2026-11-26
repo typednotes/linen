@@ -101,7 +101,7 @@ for helper in "$@"; do
     export API_RESPONSE API_NEXT_RESPONSE="$good" CI_WAIT_SECONDS=5
     API_RESPONSE=$(jq -c "$change" <<< "$good")
     expect pass "wait for $change then exact-commit success"
-    [[ $(wc -l < "$MOCK_CALLS") == 2 ]]
+    [[ $(wc -l < "$MOCK_CALLS") -eq 2 ]]
   done
   unset API_NEXT_RESPONSE
   pending=$(jq -c '.workflow_runs[0].status = "in_progress" | .workflow_runs[0].conclusion = null' <<< "$good")
@@ -109,7 +109,7 @@ for helper in "$@"; do
     export API_RESPONSE="$pending" API_NEXT_RESPONSE CI_WAIT_SECONDS=5
     API_NEXT_RESPONSE=$(jq -c "$change" <<< "$good")
     expect fail "pending then $change"
-    [[ $(wc -l < "$MOCK_CALLS") == 2 ]]
+    [[ $(wc -l < "$MOCK_CALLS") -eq 2 ]]
   done
   export API_RESPONSE="$pending" API_NEXT_RESPONSE='not json'
   expect fail 'pending then malformed API response'

@@ -11,7 +11,7 @@
     `ofLeanJson` rounds numbers a double cannot hold exactly (e.g. integers
     above $2^{53}$). `toLeanJson` is exact on integer-valued numbers, but
     **non-integer numbers lose precision**: linen's encoder
-    (`Data.Json.Encode.renderNumber`) writes them with 6 significant digits
+    (`Data.Json.Encode.renderNumber`) writes them with six decimal places
     (`0.123456789` ↦ `0.123457`) — a limitation of that encoder, which this
     bridge inherits rather than works around. A `NaN` or an infinity becomes
     `null`, as linen's encoder writes it.

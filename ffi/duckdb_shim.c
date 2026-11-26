@@ -63,7 +63,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <stdatomic.h>
+#include <pthread.h>
 
 /* ────────────────────────────────────────────────────────────
  * External classes for the owning handle types
@@ -342,11 +342,9 @@ static void linen_duckdb_validity_mask_finalizer(void *ptr) {
     if (m) free(m);
 }
 
-static atomic_int g_linen_duckdb_classes_initialized = 0;
+static pthread_once_t linen_duckdb_classes_once = PTHREAD_ONCE_INIT;
 
-static void linen_duckdb_ensure_classes_initialized(void) {
-    if (atomic_load_explicit(&g_linen_duckdb_classes_initialized, memory_order_acquire))
-        return;
+static void linen_duckdb_register_classes(void) {
     g_linen_duckdb_database_class = lean_register_external_class(
         &linen_duckdb_database_finalizer, &linen_duckdb_noop_foreach);
     g_linen_duckdb_connection_class = lean_register_external_class(
@@ -399,7 +397,10 @@ static void linen_duckdb_ensure_classes_initialized(void) {
         &linen_duckdb_borrowed_data_chunk_finalizer, &linen_duckdb_noop_foreach);
     g_linen_duckdb_validity_mask_class = lean_register_external_class(
         &linen_duckdb_validity_mask_finalizer, &linen_duckdb_noop_foreach);
-    atomic_store_explicit(&g_linen_duckdb_classes_initialized, 1, memory_order_release);
+}
+
+static void linen_duckdb_ensure_classes_initialized(void) {
+    pthread_once(&linen_duckdb_classes_once, linen_duckdb_register_classes);
 }
 
 /* ────────────────────────────────────────────────────────────

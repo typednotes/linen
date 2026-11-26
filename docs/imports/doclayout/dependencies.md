@@ -6,7 +6,7 @@ source:
 https://hackage-content.haskell.org/package/doclayout-0.5.0.3/src/doclayout.cabal
 — the real `exposed-modules`/`other-modules`/`build-depends` fields, and every
 module's import list, were fetched and read verbatim, not recalled from
-memory), planned for import into `linen` per [AGENTS.md](../../AGENTS.md)'s
+memory), planned for import into `linen` per [AGENTS.md](../../../AGENTS.md)'s
 Hackage-import convention.
 
 **Status: done.** All 4 in-scope modules have been ported to `Linen/Text/DocLayout*`

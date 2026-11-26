@@ -20,7 +20,7 @@
 #include <libpq-fe.h>
 #include <string.h>
 #include <stdlib.h>
-#include <stdatomic.h>
+#include <pthread.h>
 
 /* ────────────────────────────────────────────────────────────
  * External classes for PGconn and PGresult
@@ -57,19 +57,17 @@ static void linen_noop_foreach_pg(void *mod, b_lean_obj_arg fn) {
     /* no sub-objects to traverse */
 }
 
-/* Ensure external classes are registered (lazy, thread-safe via atomic).
- * Uses a simple atomic flag to ensure registration happens exactly once.
- * The Lean runtime must be initialized before this is first called. */
-static atomic_int g_linen_pg_classes_initialized = 0;
+static pthread_once_t linen_pg_classes_once = PTHREAD_ONCE_INIT;
 
-static void linen_pg_ensure_classes_initialized(void) {
-    if (atomic_load_explicit(&g_linen_pg_classes_initialized, memory_order_acquire))
-        return;
+static void linen_pg_register_classes(void) {
     g_linen_pg_conn_class = lean_register_external_class(
         &linen_pg_conn_finalizer, &linen_noop_foreach_pg);
     g_linen_pg_result_class = lean_register_external_class(
         &linen_pg_result_finalizer, &linen_noop_foreach_pg);
-    atomic_store_explicit(&g_linen_pg_classes_initialized, 1, memory_order_release);
+}
+
+static void linen_pg_ensure_classes_initialized(void) {
+    pthread_once(&linen_pg_classes_once, linen_pg_register_classes);
 }
 
 /* ────────────────────────────────────────────────────────────

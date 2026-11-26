@@ -147,6 +147,11 @@ private def sample : Value :=
 
 -- ── DecidableEq Value ─────────────────────────────────────────────────
 
+-- S2: JSON equality relies on Lean's constructive equality for numbers.
+/-- info: 'Data.Json.instDecidableEqValue' does not depend on any axioms -/
+#guard_msgs in
+#print axioms Data.Json.instDecidableEqValue
+
 #guard (Value.null = Value.null)
 #guard (Value.number 1 = Value.number 1)
 #guard (Value.number 1 ≠ Value.number 2)
