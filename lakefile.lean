@@ -783,7 +783,7 @@ lean_lib LinenCore where
     `Linen.System.FilePath.+, `Linen.System.Git.+, `Linen.System.GitFn.*,
     .one `Linen.System.IO, .one `Linen.System.LakeLog, `Linen.System.Log.+,
     `Linen.System.Posix.+, .one `Linen.System.Process, .one `Linen.System.TimeManager,
-    .one `Linen.System.Worker, .one `Linen.System.Cell, `Linen.Text.+, `Linen.Time.+, `Linen.Web.+]
+    .one `Linen.System.Worker, `Linen.System.Cell.*, `Linen.Text.+, `Linen.Time.+, `Linen.Web.+]
   needs := #[linenffi]
   -- Keep ordinary imports cheap; callers can opt into precompilation when
   -- they use `#eval` on imported FFI bindings.

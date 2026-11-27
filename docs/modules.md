@@ -713,7 +713,10 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
 ### `System.Cell` — precompiled Lean cells
 
 - `System.Cell` — versioned compiler attestations and typed local or HTTPS
-  calls to previously compiled Lean workers. See [cell packages](cell-packages.md).
+  calls to previously compiled Lean workers. Authenticated catalogs resolve
+  releases and transitive dependencies to exact manifest pins. See [cell packages](cell-packages.md).
+- `System.Cell.Version` — SemVer 2.0.0 versions, project-scoped release names,
+  and exact or stable caret requirements.
 
 ### `System.GitFn` — functions from git, run securely
 
@@ -2860,6 +2863,7 @@ the secrets, never their values.
 | `Linen.CDP` | the package aggregator: `CDP.Domains` + `CDP.Runtime` |
 | `Linen.System.Process` | commands with a deadline and an abort flag, the process group killed; `runBytes`, `Result.describe`, `hermeticGit` |
 | `Linen.System.Cell` | Signed native cell packages, input-indexed codecs and precompiled worker calls |
+| `Linen.System.Cell.Version` | Semantic release identities, precedence and version requirements |
 | `Linen.System.Worker` | reusable serialized processes, private bounded/newline-free `Line`, deadlines, bounded UTF-8 replies and scoped calls and retirement |
 | `Linen.System.LakeLog` | `lake build` output → `Diagnostic`s (`parse`, `splitLocation`, `render`, `isSummary`) |
 | `Linen.System.Git.Remote` | `isBranchName`; `Repository.parse` (`Host`, segments, canonical clone URL) |

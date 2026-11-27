@@ -7,6 +7,15 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+### Added
+
+- Cell manifests can sign a named SemVer release. An authenticated catalog
+  resolves exact versions or compatible stable ranges to immutable manifest
+  pins with the required runtime, Lean contract, and policy.
+- Dependency-aware cell manifests declare typed requirements. Resolution
+  locks every selected native variant, and replay verifies the complete
+  transitive closure before exposing any worker.
+
 ## [4.1.0] - 2026-11-27
 
 ### Added

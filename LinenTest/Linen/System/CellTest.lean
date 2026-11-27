@@ -25,6 +25,52 @@ example (_pin : Ref .manifest) : True := by
     have _ : Ref .artifact := _pin
   trivial
 
+example (_package : Attested) (_manifest : Manifest) : True := by
+  fail_if_success
+    have _ : Attested := { _package with manifest := _manifest }
+  trivial
+
+-- S6: Preserve the original v2 rendering and native build key. The signed
+-- optional release changes the manifest pin, and malformed release fields fail.
+#eval show IO Unit from do
+  let io {α : Type} (result : Except String α) : IO α := IO.ofExcept (result.mapError IO.userError)
+  let hash ← io (Digest.check a)
+  let source ← io (GitSource.check "https://github.com/typednotes/lode" (a.take 40).toString
+    "." "Cell.Addition" "Cell.add")
+  let revision : Revision := ⟨⟨hash⟩, ⟨hash⟩, ⟨hash⟩, source⟩
+  let inputs : BuildInputs := ⟨hash, hash, hash, hash⟩
+  let runtime : Runtime := ⟨"lean4", "arm64", "abi", "audit", ⟨hash⟩⟩
+  let legacy ← Manifest.make revision inputs runtime "worker".toUTF8
+  let oldJson := Json.mkObj [("version", toJson (2 : Nat)), ("revision", toJson revision),
+    ("buildKey", toJson legacy.buildKey), ("runtime", toJson runtime),
+    ("artifactSha256", toJson legacy.artifactSha256), ("artifactBytes", toJson (6 : Nat))]
+  unless legacy.render == oldJson.compress && (← io (fromJson? oldJson)) == legacy do
+    throw (IO.userError "an unversioned package must retain its original v2 format")
+  let release : Release := ⟨← io (ReleaseName.parse "math.addition"), ← io (Version.parse "1.2.3")⟩
+  let published ← io (legacy.withRelease release)
+  let publishedJson := toJson published
+  unless (← io (fromJson? publishedJson)) == published && published.buildKey == legacy.buildKey &&
+      (← manifestPin published.render) != (← manifestPin legacy.render) do
+    throw (IO.userError "a release must round-trip and change only the signed manifest identity")
+  for invalid in [Json.null, Json.mkObj [("name", toJson release.name), ("version", .str "01.2.3")]] do
+    unless !(fromJson? (α := Manifest) (oldJson.setObjVal! "release" invalid)).isOk do
+      throw (IO.userError "malformed release metadata was accepted")
+  -- S8: Dependency declarations require the new format and unique names.
+  let dep : Dependency := {
+    name := ← io (ReleaseName.parse "math.units"), version := .exact release.version,
+    contract := ⟨hash⟩, policy := ⟨hash⟩, codec := ⟨hash⟩,
+    runtimeAbi := runtime.runtimeAbi, auditVersion := runtime.auditVersion }
+  let parent ← io (legacy.withRelease release [dep])
+  let json := toJson parent
+  unless (json.getObjValAs? Nat "version").toOption == some dependencyManifestVersion do
+    throw (IO.userError "a dependency manifest must require a dependency-aware reader")
+  unless (← io (fromJson? json)) == parent && parent.buildKey == legacy.buildKey do
+    throw (IO.userError "dependency declarations changed or affected the native key")
+  unless !(fromJson? (α := Manifest) (json.setObjVal! "version" (toJson (2 : Nat)))).isOk &&
+      !(legacy.withRelease release [dep, dep]).isOk &&
+      !(legacy.withRelease release [{ dep with name := release.name }]).isOk do
+    throw (IO.userError "invalid dependency declaration was accepted")
+
 -- S2: configured HTTPS origins and package filenames cannot be redirected by a manifest.
 #guard (HttpsBase.check "https://cells.example.test:443/builds/example/").isOk
 #guard !(HttpsBase.check "http://cells.example.test/builds/example").isOk
