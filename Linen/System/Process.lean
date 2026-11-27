@@ -130,16 +130,26 @@ def run (cmd : String) (args : Array String) (timeoutMs : Nat)
   let stderr ← IO.ofExcept (← IO.wait err)
   return { exitCode := code, stdout, stderr }
 
-/-- Run a command whose stdout is binary (`git cat-file blob …`, an archive),
-    with no stdin, under the same deadline and abort flag as `run`. Throws
-    unless it exits with `0`, with its stderr. -/
-def runBytes (cmd : String) (args : Array String) (timeoutMs : Nat)
-    (cwd : Option System.FilePath := none) (env : Array (String × Option String) := #[])
-    (abort : Option (IO.Ref Bool) := none) : IO ByteArray := do
+/-- Read at most `limit` bytes from a file or binary stream. Refuse the first
+    byte beyond the limit. The caller owns the handle and any read deadline. -/
+def readBounded (handle : IO.FS.Handle) (limit : Nat) : IO ByteArray := do
+  let mut result := ByteArray.empty
+  repeat
+    let chunk ← handle.read (min 65536 (limit - result.size + 1)).toUSize
+    if chunk.isEmpty then return result
+    unless chunk.size ≤ limit - result.size do
+      throw (IO.userError "binary input exceeds its byte limit")
+    result := result ++ chunk
+
+private def runBinary (cmd : String) (args : Array String) (timeoutMs : Nat)
+    (cwd : Option System.FilePath) (env : Array (String × Option String))
+    (abort : Option (IO.Ref Bool)) (maxStdoutBytes : Option Nat) : IO ByteArray := do
   let child ← IO.Process.spawn
     { cmd, args, cwd, env, setsid := true
       stdin := .null, stdout := .piped, stderr := .piped }
-  let out ← IO.asTask child.stdout.readBinToEnd .dedicated
+  let out ← IO.asTask (match maxStdoutBytes with
+    | some limit => readBounded child.stdout limit
+    | none => child.stdout.readBinToEnd) .dedicated
   let err ← IO.asTask child.stderr.readToEnd .dedicated
   let code ← await child ((← IO.monoMsNow) + timeoutMs) abort
   let stdout ← IO.ofExcept (← IO.wait out)
@@ -148,6 +158,18 @@ def runBytes (cmd : String) (args : Array String) (timeoutMs : Nat)
     let what := s!"{cmd} {" ".intercalate args.toList}"
     throw (IO.userError ({ exitCode := code, stdout := "", stderr : Result }.describe what))
   return stdout
+
+/-- Run a command whose stdout is binary, with no stdin, under the same
+    deadline and abort flag as `run`. Throw on a nonzero exit or timeout. -/
+def runBytes (cmd : String) (args : Array String) (timeoutMs : Nat)
+    (cwd : Option System.FilePath := none) (env : Array (String × Option String) := #[])
+    (abort : Option (IO.Ref Bool) := none) : IO ByteArray :=
+  runBinary cmd args timeoutMs cwd env abort none
+
+/-- Run a binary-output command and reject stdout larger than `limit` bytes. -/
+def runBytesBounded (cmd : String) (args : Array String) (timeoutMs limit : Nat) :
+    IO ByteArray :=
+  runBinary cmd args timeoutMs none #[] none (some limit)
 
 -- ── Environments ────────────────────────────────────────────────────────────
 

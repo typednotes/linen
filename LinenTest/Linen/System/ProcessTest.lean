@@ -133,4 +133,11 @@ private def check (b : Bool) (msg : String) : IO Unit :=
   let r ← run "git" #["config", "--global", "--list"] 10000 (env := hermeticGit)
   check (r.stdout.trimAscii.isEmpty) s!"global config visible: {r.stdout}"
 
+-- The bounded binary path accepts the exact limit and refuses one extra byte.
+#eval show IO Unit from do
+  let exact ← runBytesBounded "printf" #["abcd"] 5000 4
+  unless exact == "abcd".toUTF8 do throw (IO.userError "bounded binary output changed")
+  let excess ← (runBytesBounded "printf" #["abcde"] 5000 4).toBaseIO
+  unless !excess.isOk do throw (IO.userError "binary limit did not reject an extra byte")
+
 end Tests.System.Process

@@ -423,7 +423,8 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   read concurrently, optional stdin, and a deadline and an abort flag
   (`IO.Ref Bool`) after which the child's whole process group is killed
   (signalled explicitly: Lean 4.34's `Child.kill` misses the group after
-  `takeStdin`); `runBytes` for binary output; `Result.describe`;
+  `takeStdin`); `runBytes` and `runBytesBounded` for binary output;
+  `readBounded` for streams; `Result.describe`;
   `hermeticGit` (git without the host's configuration or prompts). Moved from
   lode and lun; `System.GitFn.Build` runs its steps through it.
 - `System.LakeLog` — `lake build`'s text output as `Diagnostic`s (severity,
@@ -708,6 +709,11 @@ shim is retired outright — subsumed by `Std.Time.DateTime.Timestamp.now`.
   that it contains no `</script`/`</style` (any case) nor, for scripts,
   `<!--` — from `raw!` literals (checked by the kernel), `RawText.ofString?`,
   or `RawText.jsonString` (proven safe for any input, `safe_of_lt_not_mem`).
+
+### `System.Cell` — precompiled Lean cells
+
+- `System.Cell` — versioned compiler attestations and typed local or HTTPS
+  calls to previously compiled Lean workers. See [cell packages](cell-packages.md).
 
 ### `System.GitFn` — functions from git, run securely
 
@@ -2853,6 +2859,7 @@ the secrets, never their values.
 | `Linen.CDP.Runtime` | the client runtime: `runClient`, `sendCommand`/`sendCommandWait`, `subscribe`/`unsubscribe` |
 | `Linen.CDP` | the package aggregator: `CDP.Domains` + `CDP.Runtime` |
 | `Linen.System.Process` | commands with a deadline and an abort flag, the process group killed; `runBytes`, `Result.describe`, `hermeticGit` |
+| `Linen.System.Cell` | Signed native cell packages, input-indexed codecs and precompiled worker calls |
 | `Linen.System.Worker` | reusable serialized processes, private bounded/newline-free `Line`, deadlines, bounded UTF-8 replies and scoped calls and retirement |
 | `Linen.System.LakeLog` | `lake build` output → `Diagnostic`s (`parse`, `splitLocation`, `render`, `isSummary`) |
 | `Linen.System.Git.Remote` | `isBranchName`; `Repository.parse` (`Host`, segments, canonical clone URL) |

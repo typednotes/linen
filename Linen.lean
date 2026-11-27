@@ -592,6 +592,7 @@ import Linen.Graphics.Netpbm
 import Linen.Graphics.Graphviz
 import Linen.System.Process
 import Linen.System.Worker
+import Linen.System.Cell
 import Linen.System.LakeLog
 import Linen.System.Git.Remote
 import Linen.System.GitFn
