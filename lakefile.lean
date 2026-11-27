@@ -507,7 +507,7 @@ set LINEN_ALLOW_UNSEALED_DUCKDB=1.\n\
   Background: docs/linking.md section 4, and leanprover/lean4#15112."
 
 package linen where
-  version := v!"4.1.0"
+  version := v!"5.0.0"
   -- `lake test` builds `LinenTest`, whose `#guard`s run as it elaborates.
   testDriver := "LinenTest"
 

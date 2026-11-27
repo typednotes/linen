@@ -7,6 +7,8 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-11-27
+
 ### Added
 
 - Cell manifests can sign a named SemVer release. An authenticated catalog
@@ -15,6 +17,11 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 - Dependency-aware cell manifests declare typed requirements. Resolution
   locks every selected native variant, and replay verifies the complete
   transitive closure before exposing any worker.
+
+### Changed
+
+- `System.Cell.RefKind` has a new `.lock` case. Add a branch for it in
+  exhaustive matches over `RefKind`.
 
 ## [4.1.0] - 2026-11-27
 
