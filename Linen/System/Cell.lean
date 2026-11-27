@@ -6,6 +6,7 @@ import Linen.Data.Hex
 import Linen.System.Git.Remote
 import Linen.System.GitFn.Worker
 import Linen.System.Worker
+import Linen.System.Cell.Version
 
 namespace System.Cell
 
@@ -33,7 +34,7 @@ def Digest.ofBytes (bytes : ByteArray) : IO Digest :=
 
 /-- Domain of a content-addressed cell reference. -/
 inductive RefKind where
-  | intent | policy | contract | codec | build | manifest | artifact
+  | intent | policy | contract | codec | build | manifest | artifact | lock
 
 /-- A digest named by its use in the cell format. -/
 structure Ref (_kind : RefKind) where
@@ -109,10 +110,45 @@ structure Runtime where
   codecSha256 : Ref .codec
   deriving DecidableEq, Repr, ToJson, FromJson
 
+private def validRuntimeLabel (s : String) : Bool :=
+  !s.isEmpty && s.length ≤ 128 && s.all (fun c => c.toNat > 32 && c.toNat < 127)
+
 private def Runtime.validate (p : Runtime) : Except String Unit := do
-  unless [p.leanToolchain, p.target, p.runtimeAbi, p.auditVersion].all
-      (fun s => !s.isEmpty && s.length ≤ 128 && s.all (fun c => c.toNat > 32 && c.toNat < 127)) do
+  unless [p.leanToolchain, p.target, p.runtimeAbi, p.auditVersion].all validRuntimeLabel do
     throw "invalid cell runtime profile"
+
+/-- A direct dependency of a named cell release. The dependency uses the
+parent's target and Lean toolchain and specifies its own wire and audit profile. -/
+structure Dependency where
+  /-- Name in the authorized project catalog. -/
+  name : ReleaseName
+  /-- Exact or compatible semantic version. -/
+  version : VersionRequirement
+  /-- Required public Lean contract. -/
+  contract : Ref .contract
+  /-- Approved effect policy. -/
+  policy : Ref .policy
+  /-- Required wire codecs. -/
+  codec : Ref .codec
+  /-- Required execution ABI. -/
+  runtimeAbi : String
+  /-- Required compiler audit version. -/
+  auditVersion : String
+  deriving DecidableEq, Repr, ToJson, FromJson
+
+private def checkDependencies (release : Option Release) (dependencies : List Dependency) :
+    Except String (List Dependency) := do
+  if dependencies.isEmpty then return []
+  let some release := release | throw "dependencies require a named cell release"
+  let ordered := dependencies.mergeSort (fun a b => a.name.value ≤ b.name.value)
+  let mut previous := none
+  for dependency in ordered do
+    if dependency.name == release.name then throw "a cell cannot depend on itself"
+    if previous == some dependency.name then throw s!"duplicate cell dependency {dependency.name}"
+    unless validRuntimeLabel dependency.runtimeAbi && validRuntimeLabel dependency.auditVersion do
+      throw s!"invalid runtime profile for dependency {dependency.name}"
+    previous := some dependency.name
+  return ordered
 
 /-- Digests of the actual compiler inputs. The builder resolves imports and
 lock files before computing these digests. -/
@@ -146,30 +182,51 @@ structure Manifest where
   artifactSha256 : Ref .artifact
   /-- Length of the executable bytes. -/
   artifactBytes : Nat
+  /-- Semantic release identity, when the compiler published this variant under a name and version. -/
+  release : Option Release
+  /-- Direct signed dependencies, in name order. -/
+  dependencies : List Dependency
   deriving DecidableEq, Repr
 
-/-- The full compiler-attested format begins at version 2. -/
+/-- The format of a compiler-attested single worker. -/
 def manifestVersion : Nat := 2
+
+/-- The format that requires dependency-aware admission. -/
+def dependencyManifestVersion : Nat := 3
 
 /-- Byte limit for one native worker executable. -/
 def maxArtifactBytes : Nat := 128 * 1024 * 1024
 
 private def Manifest.checked (revision : Revision) (buildKey : Ref .build)
-    (runtime : Runtime) (artifactSha256 : Ref .artifact) (artifactBytes : Nat) : Except String Manifest := do
+    (runtime : Runtime) (artifactSha256 : Ref .artifact) (artifactBytes : Nat)
+    (release : Option Release) (dependencies : List Dependency := []) : Except String Manifest := do
   runtime.validate
   unless 0 < artifactBytes && artifactBytes ≤ maxArtifactBytes do throw "invalid cell artifact size"
-  return ⟨revision, buildKey, runtime, artifactSha256, artifactBytes⟩
+  return ⟨revision, buildKey, runtime, artifactSha256, artifactBytes, release,
+    ← checkDependencies release dependencies⟩
 
-instance : ToJson Manifest := ⟨fun m => Json.mkObj [
-  ("version", toJson manifestVersion), ("revision", toJson m.revision), ("buildKey", toJson m.buildKey),
-  ("runtime", toJson m.runtime), ("artifactSha256", toJson m.artifactSha256),
-  ("artifactBytes", toJson m.artifactBytes)]⟩
+instance : ToJson Manifest := ⟨fun m => Json.mkObj ([
+    ("version", toJson (if m.dependencies.isEmpty then manifestVersion else dependencyManifestVersion)),
+    ("revision", toJson m.revision), ("buildKey", toJson m.buildKey),
+    ("runtime", toJson m.runtime), ("artifactSha256", toJson m.artifactSha256),
+    ("artifactBytes", toJson m.artifactBytes)] ++
+  (m.release.toList.map fun release => ("release", toJson release)) ++
+  (if m.dependencies.isEmpty then [] else [("dependencies", toJson m.dependencies)]))⟩
 
 instance : FromJson Manifest := ⟨fun j => do
-  unless (← j.getObjValAs? Nat "version") == manifestVersion do throw "unsupported cell manifest version"
+  let version ← j.getObjValAs? Nat "version"
+  let dependencies ← if version == dependencyManifestVersion then do
+    let dependencies ← j.getObjValAs? (List Dependency) "dependencies"
+    if dependencies.isEmpty then throw "dependency manifest must declare dependencies"
+    pure dependencies
+  else if version == manifestVersion then do
+    if (j.getObjVal? "dependencies").isOk then throw "dependencies require a version 3 manifest"
+    pure []
+  else throw "unsupported cell manifest version"
+  let release ← (j.getObjVal? "release").toOption.mapM fromJson?
   Manifest.checked (← j.getObjValAs? Revision "revision") (← j.getObjValAs? (Ref .build) "buildKey")
     (← j.getObjValAs? Runtime "runtime") (← j.getObjValAs? (Ref .artifact) "artifactSha256")
-    (← j.getObjValAs? Nat "artifactBytes")⟩
+    (← j.getObjValAs? Nat "artifactBytes") release dependencies⟩
 
 /-- Make a manifest for an already built and checked executable. Only the
 trusted compiler can attest that these are the outputs of those inputs. -/
@@ -179,7 +236,15 @@ def Manifest.make (revision : Revision) (inputs : BuildInputs) (runtime : Runtim
     throw (IO.userError "invalid cell artifact size")
   let key ← inputs.key runtime
   let digest ← Digest.ofBytes artifact
-  IO.ofExcept ((Manifest.checked revision key runtime ⟨digest⟩ artifact.size).mapError IO.userError)
+  IO.ofExcept ((Manifest.checked revision key runtime ⟨digest⟩ artifact.size none).mapError IO.userError)
+
+/-- Attach a semantic release before rendering and signing the manifest. Supply
+the direct dependencies together with the release. Neither changes the native
+build key. Any dependencies used during compilation belong in `BuildInputs`. -/
+def Manifest.withRelease (manifest : Manifest) (release : Release)
+    (dependencies : List Dependency := []) : Except String Manifest := do
+  let dependencies ← checkDependencies (some release) dependencies
+  return { manifest with release := some release, dependencies }
 
 /-- Return the exact UTF-8 text that a producer can sign with detached OpenPGP. -/
 def Manifest.render (m : Manifest) : String := (toJson m).compress
@@ -293,6 +358,199 @@ private def verifySignature (text : String) (signature : ByteArray) (keyring : F
       30000 (input := some text)
     unless result.ok do throw (IO.userError "cell compiler signature verification failed")
 
+/-- Authenticated manifest metadata and its source, before fetching a payload. -/
+structure Attested where
+  private mk ::
+  /-- Signed build record. -/
+  manifest : Manifest
+  /-- Digest of the exact verified manifest bytes. -/
+  pin : Ref .manifest
+  /-- Package location that supplied the manifest and signature. -/
+  location : Location
+
+private def attest (pin : Ref .manifest) (keyring : FilePath) (location : Location)
+    (expectedRuntime : Option Runtime) : IO Attested := do
+  let text ← requireUtf8 (← location.read "manifest.json" 65536)
+  unless (← manifestPin text) == pin do throw (IO.userError "cell manifest differs from the selected pin")
+  let manifest ← parseManifest text
+  if let some runtime := expectedRuntime then
+    unless manifest.runtime == runtime do throw (IO.userError "incompatible cell runtime or codecs")
+  verifySignature text (← location.read "manifest.asc" 65536) keyring
+  return ⟨manifest, pin, location⟩
+
+/-- Inspect an exact signed manifest using a project-authorized keyring.
+Use `openPackage` on the selected variant to verify its worker before execution. -/
+def inspectPackage (pin : Ref .manifest) (keyring : FilePath) (location : Location) : IO Attested :=
+  attest pin keyring location none
+
+private structure CatalogEntry where
+  release : Release
+  package : Attested
+
+/-- An immutable catalog of signed native cell variants for one authorized project. -/
+structure Catalog where
+  private mk ::
+  private entries : List CatalogEntry
+
+/-- Start a catalog for one project. Every entry must be authenticated with
+that project's trusted compiler keys. -/
+def Catalog.empty : Catalog := ⟨[]⟩
+
+/-- Register an authenticated release variant. One cell name and precedence
+bind one version and one revision across runtimes. Each full runtime profile
+has one manifest pin. Registering the same pin again is idempotent. -/
+def Catalog.insert (catalog : Catalog) (package : Attested) : Except String Catalog := do
+  let some release := package.manifest.release | throw "cell manifest has no semantic release"
+  for previous in catalog.entries do
+    if previous.release.name == release.name &&
+        previous.release.version.precedence release.version == .eq then
+      unless previous.release == release && previous.package.manifest.revision == package.manifest.revision &&
+          previous.package.manifest.dependencies == package.manifest.dependencies do
+        throw s!"cell release {release} conflicts with the published version, revision, or dependencies"
+      if previous.package.manifest.runtime == package.manifest.runtime then
+        unless previous.package.pin == package.pin do
+          throw s!"cell release {release} already has a different manifest for this runtime"
+        return catalog
+  return ⟨⟨release, package⟩ :: catalog.entries⟩
+
+/-- The release and compatibility evidence selected independently by the caller. -/
+structure ReleaseQuery where
+  /-- Cell name in the authorized project's catalog. -/
+  name : ReleaseName
+  /-- Exact or compatible version. -/
+  version : VersionRequirement
+  /-- Required target, toolchain, ABI, audit and codec profile. -/
+  runtime : Runtime
+  /-- The caller's required Lean contract. -/
+  contract : Ref .contract
+  /-- The approved platform policy. -/
+  policy : Ref .policy
+
+private def CatalogEntry.matches (entry : CatalogEntry) (query : ReleaseQuery) : Bool :=
+  let m := entry.package.manifest
+  entry.release.name == query.name && query.version.matches entry.release.version &&
+    m.runtime == query.runtime && m.revision.contractSha256 == query.contract &&
+    m.revision.constraintsSha256 == query.policy
+
+/-- Resolve the highest matching version with the exact runtime, contract,
+and policy. Use `Catalog.lock` to resolve its transitive dependencies. -/
+def Catalog.resolve (catalog : Catalog) (query : ReleaseQuery) : Option Attested :=
+  let best := catalog.entries.foldl (init := (none : Option CatalogEntry)) fun best entry =>
+    if entry.matches query &&
+        (best.all fun previous => previous.release.version.precedence entry.release.version == .lt)
+    then some entry else best
+  best.map (·.package)
+
+-- ── Dependency resolution ────────────────────────────────────────────────────
+
+private def CatalogEntry.requirements (entry : CatalogEntry) : List ReleaseQuery :=
+  let manifest := entry.package.manifest
+  manifest.dependencies.map fun d => {
+    name := d.name, version := d.version, contract := d.contract, policy := d.policy
+    runtime := { manifest.runtime with
+      codecSha256 := d.codec, runtimeAbi := d.runtimeAbi, auditVersion := d.auditVersion } }
+
+private def findEntry (entries : List CatalogEntry) (name : ReleaseName) : Option CatalogEntry :=
+  entries.find? (·.release.name == name)
+
+private theorem remainingDecreases {names : List ReleaseName} {name : ReleaseName}
+    (member : name ∈ names) : (names.erase name).length < names.length := by
+  rw [List.length_erase_of_mem member]
+  have := List.length_pos_of_mem member
+  omega
+
+private def visit (entries : List CatalogEntry) (remaining : List ReleaseName)
+    (name : ReleaseName) (done : List CatalogEntry) : Except String (List CatalogEntry) := do
+  if (findEntry done name).isSome then return done
+  if _member : name ∈ remaining then
+    let some entry := findEntry entries name | throw s!"cell dependency {name} is missing from the lock"
+    let done ← entry.requirements.foldlM (init := done) fun done dependency =>
+      visit entries (remaining.erase name) dependency.name done
+    return entry :: done
+  else
+    throw s!"cell dependency {name} is missing or forms a cycle"
+termination_by remaining.length
+decreasing_by exact remainingDecreases _member
+
+private def requirements (roots : List ReleaseQuery) (entries : List CatalogEntry) : List ReleaseQuery :=
+  roots ++ entries.flatMap CatalogEntry.requirements
+
+private def checkConstraint (query : ReleaseQuery) (entry : CatalogEntry) : Except String Unit := do
+  unless entry.matches query do
+    throw s!"{entry.release} does not satisfy {query.name}@{query.version} with its required runtime, contract, and policy"
+
+private def orderClosure (roots : List ReleaseQuery) (selected : List CatalogEntry) :
+    Except String (List CatalogEntry) := do
+  for query in requirements roots selected do
+    let some entry := findEntry selected query.name | throw s!"cell dependency {query.name} is missing"
+    checkConstraint query entry
+  let names := selected.map (·.release.name)
+  let done ← roots.foldlM (init := []) fun done root => visit selected names root.name done
+  unless done.length == selected.length do throw "cell lock contains packages outside the requested closure"
+  return done.reverse
+
+private def solve (candidates : List CatalogEntry) (roots : List ReleaseQuery) (remaining : List ReleaseName)
+    (selected : List CatalogEntry) : Except String (List CatalogEntry) := do
+  let queries := requirements roots selected
+  for query in queries do
+    if let some entry := findEntry selected query.name then checkConstraint query entry
+  let some next := queries.find? (fun query => (findEntry selected query.name).isNone)
+    | orderClosure roots selected
+  if _member : next.name ∈ remaining then
+    let constraints := queries.filter (·.name == next.name)
+    let mut error := s!"no variant of {next.name}@{next.version} satisfies the required runtime, contract, and policy"
+    for candidate in candidates do
+      if constraints.all candidate.matches then
+        match solve candidates roots (remaining.erase next.name) (candidate :: selected) with
+        | .ok result => return result
+        | .error conflict => error := conflict
+    throw error
+  else
+    throw s!"cell dependency {next.name} is missing from the catalog"
+termination_by remaining.length
+decreasing_by exact remainingDecreases _member
+
+/-- The exact signed package chosen for one release name in a dependency lock. -/
+structure LockedPackage where
+  /-- Human-readable release identity. -/
+  release : Release
+  /-- Content address of the complete signed manifest. -/
+  pin : Ref .manifest
+  deriving DecidableEq, Repr, ToJson, FromJson
+
+/-- A versioned lock for a complete transitive cell closure. The packages
+are stored in dependency-first order when written by the resolver. -/
+structure Lockfile where
+  private mk ::
+  /-- One exact manifest pin per release name. -/
+  packages : List LockedPackage
+  deriving DecidableEq, Repr
+
+instance : ToJson Lockfile := ⟨fun lock => Json.mkObj [
+  ("version", toJson (1 : Nat)), ("packages", toJson lock.packages)]⟩
+
+instance : FromJson Lockfile := ⟨fun j => do
+  unless (← j.getObjValAs? Nat "version") == 1 do throw "unsupported cell lock version"
+  let packages ← j.getObjValAs? (List LockedPackage) "packages"
+  let names := packages.map (·.release.name)
+  unless !names.isEmpty && names.eraseDups.length == names.length do
+    throw "a cell lock must contain at least one package and only one pin per release name"
+  return ⟨packages⟩⟩
+
+/-- The content address of the canonical lock JSON, for storing in a checked plan. -/
+def Lockfile.pin (lock : Lockfile) : IO (Ref .lock) :=
+  return ⟨← Digest.ofBytes (toJson lock).compress.toUTF8⟩
+
+/-- Plan a dependency closure for these authorized roots. Prefer the newest
+matching variants, backtrack on conflicts, and give each name one exact pin.
+Each dependency must match the platform and the full signed interface. -/
+def Catalog.lock (catalog : Catalog) (roots : List ReleaseQuery) : Except String Lockfile := do
+  if roots.isEmpty then throw "a cell lock requires at least one root"
+  let candidates := catalog.entries.mergeSort fun a b => a.release.version.precedence b.release.version != .lt
+  let names := (candidates.map (·.release.name)).eraseDups
+  let ordered ← solve candidates roots names []
+  return ⟨ordered.map fun entry => ⟨entry.release, entry.package.pin⟩⟩
+
 private def checkFiles (record artifact : FilePath) : IO String := do
   let text ← requireUtf8 (← readFile record 65536)
   let manifest ← parseManifest text
@@ -318,19 +576,66 @@ def Manifest.makeFromFile (revision : Revision) (inputs : BuildInputs) (runtime 
     (worker : FilePath) : IO Manifest := do
   Manifest.make revision inputs runtime (← readFile worker maxArtifactBytes)
 
-/-- Admit a package with fixed files `manifest.json`, `manifest.asc` and
-`worker`. Verify the exact signed text, runtime and payload before returning
-a handle. Local reads and HTTPS downloads have the same byte limits. -/
+private def loadWorker (signed : Attested) : IO Verified := do
+  let bytes ← signed.location.read "worker" signed.manifest.artifactBytes
+  checkArtifact signed.manifest bytes
+  return ⟨signed.manifest, signed.pin, bytes⟩
+
+/-- Admit a single worker with fixed files `manifest.json`, `manifest.asc` and
+`worker`. Packages with dependencies require an admitted lock. Local reads
+and HTTPS downloads have the same byte limits. -/
 def openPackage (admission : Admission) (location : Location) : IO Verified := do
-  let text ← requireUtf8 (← location.read "manifest.json" 65536)
-  let pin ← manifestPin text
-  unless pin == admission.pin do throw (IO.userError "cell manifest differs from the selected pin")
-  let manifest ← parseManifest text
-  unless manifest.runtime == admission.runtime do throw (IO.userError "incompatible cell runtime or codecs")
-  verifySignature text (← location.read "manifest.asc" 65536) admission.keyring
-  let bytes ← location.read "worker" manifest.artifactBytes
-  checkArtifact manifest bytes
-  return ⟨manifest, pin, bytes⟩
+  let signed ← attest admission.pin admission.keyring location (some admission.runtime)
+  unless signed.manifest.dependencies.isEmpty do throw (IO.userError "cell package requires a dependency lock")
+  loadWorker signed
+
+/-- A locked closure with all manifest signatures, dependency constraints,
+and worker bytes checked. -/
+structure AdmittedLock where
+  private mk ::
+  /-- Exact plan identity that was checked. -/
+  pin : Ref .lock
+  private workers : List (ReleaseName × Verified)
+
+/-- Replay a checked plan without resolving versions. Verify the complete
+closure before exposing workers. The caller supplies the exact lock pin, root
+requirements, project keyring and package locations. Identical worker bytes
+are shared within the closure and count once against `maxWorkerBytes`. -/
+def Lockfile.admit (lock : Lockfile) (pin : Ref .lock) (roots : List ReleaseQuery) (keyring : FilePath)
+    (locate : Ref .manifest → IO Location) (maxWorkerBytes : Nat := 512 * 1024 * 1024) :
+    IO AdmittedLock := do
+  if roots.isEmpty then throw (IO.userError "a cell lock requires at least one root")
+  unless (← lock.pin) == pin do throw (IO.userError "cell lock differs from the selected pin")
+  let entries ← lock.packages.mapM fun package => do
+    let attested ← inspectPackage package.pin keyring (← locate package.pin)
+    unless attested.manifest.release == some package.release do
+      throw (IO.userError s!"signed release does not match locked package {package.release}")
+    return { release := package.release, package := attested : CatalogEntry }
+  let ordered ← IO.ofExcept ((orderClosure roots entries).mapError IO.userError)
+  let mut workers := []
+  let mut artifacts : List (Ref .artifact × ByteArray) := []
+  let mut remaining := maxWorkerBytes
+  for entry in ordered do
+    let signed := entry.package
+    let manifest := signed.manifest
+    if let some bytes := artifacts.lookup manifest.artifactSha256 then
+      unless bytes.size == manifest.artifactBytes do
+        throw (IO.userError "cell manifests disagree about the size of the same worker")
+      workers := (entry.release.name, ⟨manifest, signed.pin, bytes⟩) :: workers
+    else
+      unless manifest.artifactBytes ≤ remaining do
+        throw (IO.userError "cell closure exceeds the worker byte limit")
+      let worker ← loadWorker signed
+      artifacts := (manifest.artifactSha256, worker.artifact) :: artifacts
+      remaining := remaining - manifest.artifactBytes
+      workers := (entry.release.name, worker) :: workers
+  return ⟨pin, workers⟩
+
+/-- Retrieve the verified worker for a name in an admitted closure. -/
+def AdmittedLock.openPackage (closure : AdmittedLock) (name : ReleaseName) : IO Verified := do
+  let some worker := closure.workers.lookup name
+    | throw (IO.userError s!"{name} is outside the admitted cell closure")
+  return worker
 
 /-- A Lean signature, including an input-indexed result and the permitted effect row. -/
 structure Signature where

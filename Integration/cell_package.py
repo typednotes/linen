@@ -40,6 +40,8 @@ def main():
 
             pin = run(binary, "publish", root, worker, fingerprint).stdout.decode().strip()
             run(binary, "verify", root, keyring)
+            run(binary, "catalog", root, keyring, pin, fingerprint)
+            run(binary, "dependencies", root, keyring, pin, fingerprint)
             run(binary, "local", root, keyring, pin)
 
             def reject_local(expected, selected_pin=pin):
@@ -61,6 +63,11 @@ def main():
 
             record = root / "manifest.json"
             original_record = record.read_bytes()
+            renamed = json.loads(original_record)
+            renamed["release"]["version"] = "9.0.0"
+            encoded = json.dumps(renamed).encode()
+            record.write_bytes(encoded)
+            reject_local(b"cell compiler signature verification failed", hashlib.sha256(encoded).hexdigest())
             record.write_bytes(original_record.rstrip(b"\n"))
             assert run(binary, "verify", root, keyring, check=False).returncode
             record.write_bytes(original_record)
@@ -120,7 +127,7 @@ def main():
                 finally:
                     server.shutdown()
                     thread.join()
-            print("PASS: one compiled addition cell, repeated local calls, HTTPS, and tamper rejection")
+            print("PASS: signed release selection, dependency lock replay, local calls, HTTPS, and tamper rejection")
         finally:
             run("gpgconf", "--kill", "gpg-agent", check=False)
 

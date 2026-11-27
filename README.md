@@ -23,7 +23,7 @@
          modules:  find Linen -name '*.lean' | wc -l
          theorems: grep -rhE '^theorem ' Linen LinenTest --include='*.lean' | wc -l
          guards:   grep -rhE '^#guard'    Linen LinenTest --include='*.lean' | wc -l -->
-  <strong>809 modules</strong> · <strong>512 compile-time theorems</strong> · <strong>11679 <code>#guard*</code> directives</strong>
+  <strong>810 modules</strong> · <strong>512 compile-time theorems</strong> · <strong>11701 <code>#guard*</code> directives</strong>
 </p>
 
 ## Overview
@@ -293,8 +293,8 @@ for the full per-module feature list and module table.
   killing its whole process group; **`System.LakeLog`** — `lake build`'s
   output as diagnostics; **`System.Git.Remote`** — branch names and
   repository URLs checked before they reach `git` or a hosting API.
-- **`System.Cell`** — signed precompiled Lean cells with input-indexed results,
-  explicit effect signatures, and typed local or HTTPS calls.
+- **`System.Cell`** — signed precompiled Lean cells with semantic releases,
+  dependency locks by target, input-indexed results, and typed local or HTTPS calls.
   See [Precompiled Lean cells](docs/cell-packages.md).
 - **`System.Worker`** — bounded, serialized persistent line-protocol processes,
   typed request framing, deadlines, UTF-8 validation and synchronized retirement.

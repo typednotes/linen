@@ -600,6 +600,7 @@ import LinenTest.Linen.Graphics.NetpbmTest
 import LinenTest.Linen.Graphics.GraphvizTest
 import LinenTest.Linen.System.ProcessTest
 import LinenTest.Linen.System.WorkerTest
+import LinenTest.Linen.System.Cell.VersionTest
 import LinenTest.Linen.System.CellTest
 import LinenTest.Linen.System.LakeLogTest
 import LinenTest.Linen.System.Git.RemoteTest

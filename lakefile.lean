@@ -507,7 +507,7 @@ set LINEN_ALLOW_UNSEALED_DUCKDB=1.\n\
   Background: docs/linking.md section 4, and leanprover/lean4#15112."
 
 package linen where
-  version := v!"4.1.0"
+  version := v!"5.0.0"
   -- `lake test` builds `LinenTest`, whose `#guard`s run as it elaborates.
   testDriver := "LinenTest"
 
@@ -783,7 +783,7 @@ lean_lib LinenCore where
     `Linen.System.FilePath.+, `Linen.System.Git.+, `Linen.System.GitFn.*,
     .one `Linen.System.IO, .one `Linen.System.LakeLog, `Linen.System.Log.+,
     `Linen.System.Posix.+, .one `Linen.System.Process, .one `Linen.System.TimeManager,
-    .one `Linen.System.Worker, .one `Linen.System.Cell, `Linen.Text.+, `Linen.Time.+, `Linen.Web.+]
+    .one `Linen.System.Worker, `Linen.System.Cell.*, `Linen.Text.+, `Linen.Time.+, `Linen.Web.+]
   needs := #[linenffi]
   -- Keep ordinary imports cheap; callers can opt into precompilation when
   -- they use `#eval` on imported FFI bindings.

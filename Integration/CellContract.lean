@@ -19,7 +19,7 @@ def hash (text : String) : IO Digest := Digest.ofBytes text.toUTF8
 def runtime : IO Runtime := do
   return {
     leanToolchain := "leanprover/lean4:v4.36.0"
-    target := if System.Platform.isOSX then "aarch64-apple-darwin" else "fixture-linux"
+    target := System.Platform.target
     runtimeAbi := "integration-cell-worker-v1"
     auditVersion := "integration-audit-v1"
     codecSha256 := ⟨← hash "two ordered Lean JSON naturals, one Lean JSON natural"⟩ }
