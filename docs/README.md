@@ -8,6 +8,7 @@ dependency. Import a specific module if you do not want everything in `import Li
 - [Byte strings and builders](byte-strings.md) — choose slices, chunks, or contiguous output.
 - [Scoped resource lifecycles](resource-lifecycles.md) — resource state at compile time and cleanup at scope exit.
 - [Indexed monads by example](indexed-monad-examples.md) — work through each scoped interpreter and its state transitions.
+- [Precompiled Lean cells](cell-packages.md) — signed native workers and typed calls.
 - [Native linking](linking.md) — which imports pull in a native library and why Linux DuckDB is sealed.
 - [Upstream imports](imports/index.md) — provenance and dependency order for ported code.
 - [Standards and RFCs](rfcs.md) — protocol reference material.

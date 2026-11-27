@@ -7,6 +7,14 @@ format. Entries follow [Keep a Changelog](https://keepachangelog.com):
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-11-27
+
+### Added
+
+- `System.Cell` packages precompiled Lean workers with signed build records,
+  runtime and codec pins, and typed local and HTTPS calls. Result codecs can
+  reconstruct an input-dependent Lean witness without recompiling the cell.
+
 ## [4.0.0] - 2026-11-26
 
 ### Changed

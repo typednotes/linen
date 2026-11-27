@@ -69,6 +69,13 @@ jobs:
       - name: Build the test suite (runs every #guard check)
         run: lake test --wfail
 
+      - name: Exercise signed precompiled cells
+        if: matrix.os == 'ubuntu-24.04'
+        timeout-minutes: 5
+        run: |
+          lake build --wfail cell-integration cell-worker-fixture
+          python3 Integration/cell_package.py .lake/build/bin/cell-integration
+
       - uses: ./.github/actions/check-http2
         timeout-minutes: 10
 
